@@ -235,6 +235,7 @@ fun LibraryContent(
 
     // Arguments for routes
     var selectedPlaylist by remember { mutableStateOf<PlaylistDisplayItem?>(null) }
+    var selectedPodcastFeed by remember { mutableStateOf<com.ivor.ivormusic.data.PodcastFeed?>(null) }
     var selectedArtistName by remember { mutableStateOf<String?>(null) }
     // The UC id behind the artist route when one resolved it (similar-artist
     // taps carry it); null means the screen resolves from the name itself.
@@ -397,6 +398,17 @@ fun LibraryContent(
                         onEnqueueSong = onEnqueueSong,
                         onAddSongsRequest = { currentRoute = LibraryRoute.ImportSongs },
                         onSearchSongsRequest = { currentRoute = LibraryRoute.AddSongs }
+                    )
+                }
+            }
+            LibraryRoute.PodcastDetail -> {
+                selectedPodcastFeed?.let { feed ->
+                    com.ivor.ivormusic.ui.podcast.PodcastDetailScreen(
+                        feed = feed,
+                        onBack = { back() },
+                        onPlayQueue = onPlayQueue,
+                        onShuffleQueue = onShuffleQueue,
+                        contentPadding = contentPadding,
                     )
                 }
             }
@@ -654,6 +666,8 @@ fun LibraryContent(
 
 enum class LibraryRoute {
     Main, Playlist, Album, Artist, Stats, History, ReadyOffline,
+    /** A podcast feed's detail page (episodes, like a playlist). */
+    PodcastDetail,
     /** The immersive local-playlist creation flow (PlaylistStudioScreen). */
     CreatePlaylist,
     /** "Add from your playlists" into the open local playlist (PlaylistImportScreen). */
@@ -1113,7 +1127,10 @@ fun LibraryMainScreen(
                     }
                     LibraryTab.Podcasts -> {
                         com.ivor.ivormusic.ui.podcast.PodcastsScreen(
-                            onPlayQueue = onPlayQueue,
+                            onFeedClick = { feed ->
+                                selectedPodcastFeed = feed
+                                currentRoute = LibraryRoute.PodcastDetail
+                            },
                             contentPadding = contentPadding,
                             listState = rememberLazyListState(),
                             showTitle = false,
