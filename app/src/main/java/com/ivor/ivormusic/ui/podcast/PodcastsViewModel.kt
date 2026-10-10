@@ -48,6 +48,9 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
     fun episodesFor(feedId: String): List<PodcastEpisode> =
         episodesByFeed.value[feedId].orEmpty()
 
+    fun episodeCount(feedId: String): Int =
+        episodesByFeed.value[feedId]?.size ?: 0
+
     /** Episodes of one feed as player-ready [Song]s, newest first. */
     fun episodeSongs(feedId: String): List<Song> {
         val feed = feeds.value.find { it.id == feedId }
