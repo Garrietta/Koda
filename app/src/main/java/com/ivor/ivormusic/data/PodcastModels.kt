@@ -55,7 +55,8 @@ data class ParsedPodcastFeed(
 data class ParsedPodcastEpisode(
     val guid: String?,
     val title: String,
-    val audioUrl: String?,
+    /** Always present: [PodcastRssParser] drops items without playable audio. */
+    val audioUrl: String,
     val artworkUrl: String?,
     val description: String?,
     val pubDate: Long,
