@@ -10,7 +10,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
@@ -71,13 +70,10 @@ import com.ivor.ivormusic.R
  */
 class VinylWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(
-            DpSize(250.dp, 110.dp),
-            DpSize(320.dp, 110.dp),
-            DpSize(320.dp, 180.dp),
-        )
-    )
+    // Exact (not Responsive): LocalSize is the true widget bounding box, so
+    // the layout scales dynamically to fill whatever space the launcher gives
+    // instead of snapping to 3 predefined buckets.
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         PlayerWidgetHost.ensureSeeded(context)
