@@ -147,13 +147,21 @@ internal fun MediaItem.toQueueSong(): Song? {
         ?.let { name -> SongSource.entries.firstOrNull { it.name == name } }
         ?: if (localUri != null) SongSource.LOCAL else SongSource.YOUTUBE
     val isLocal = source == SongSource.LOCAL
+    // A restored podcast episode keeps its stream URL: it is https, not a
+    // content/file URI, so the local-only takeIf above would drop it and the
+    // episode would not play after a process death.
+    val restoredUri = when {
+        isLocal -> localUri
+        source == SongSource.PODCAST -> localConfiguration?.uri
+        else -> null
+    }
     return Song(
         id = mediaId,
         title = metadata.title?.toString() ?: "Unknown",
         artist = metadata.artist?.toString() ?: "Unknown Artist",
         album = metadata.albumTitle?.toString() ?: "",
         duration = metadata.durationMs ?: 0L,
-        uri = if (isLocal) localUri else null,
+        uri = restoredUri,
         albumArtUri = if (isLocal) metadata.artworkUri else null,
         thumbnailUrl = if (isLocal) null else {
             extras?.getString(EXTRA_SONG_THUMBNAIL_URL) ?: metadata.artworkUri?.toString()
