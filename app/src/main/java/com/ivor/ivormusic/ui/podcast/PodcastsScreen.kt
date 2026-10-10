@@ -65,12 +65,11 @@ fun PodcastsScreen(
     showTitle: Boolean = true,
     viewModel: PodcastsViewModel = viewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val feeds by viewModel.feeds.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val addingState by viewModel.addingState.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var feedMenuFor by remember { mutableStateOf<String?>(null) }
-
-    val feeds = uiState.feeds
-    val isLoading = uiState.isLoading
 
     Box(
         modifier = Modifier
@@ -173,16 +172,16 @@ fun PodcastsScreen(
         )
     }
 
-    uiState.error?.let { error ->
+    (addingState as? PodcastsViewModel.AddFeedState.Error)?.let { errorState ->
         AlertDialog(
-            onDismissRequest = { viewModel.clearError() },
+            onDismissRequest = { viewModel.consumeAddFeedState() },
             confirmButton = {
-                TextButton(onClick = { viewModel.clearError() }) {
+                TextButton(onClick = { viewModel.consumeAddFeedState() }) {
                     Text(stringResource(android.R.string.ok))
                 }
             },
             title = { Text(stringResource(R.string.podcast_error_title)) },
-            text = { Text(error) },
+            text = { Text(errorState.message) },
         )
     }
 }
