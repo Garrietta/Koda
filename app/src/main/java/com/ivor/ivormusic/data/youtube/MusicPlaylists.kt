@@ -91,7 +91,9 @@ internal class MusicPlaylists(
                 
                 if (json.isEmpty()) break
                 
-                val songs = parseSongsFromInternalJson(json)
+                // listItemsOnly: the liked page's card shelves (recommendations,
+                // "more from artist") are not liked songs. Only the main list.
+                val songs = parseSongsFromInternalJson(json, listItemsOnly = true)
                 allSongs.addAll(songs)
                 
                 // Extract continuation token for next page
