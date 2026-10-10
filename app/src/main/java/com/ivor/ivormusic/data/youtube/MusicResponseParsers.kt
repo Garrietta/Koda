@@ -14,7 +14,8 @@ import org.json.JSONObject
 
 internal fun parseSongsFromInternalJson(
     json: String,
-    preserveDuplicates: Boolean = false
+    preserveDuplicates: Boolean = false,
+    listItemsOnly: Boolean = false,
 ): List<Song> {
     val songs = mutableListOf<Song>()
     try {
@@ -41,9 +42,13 @@ internal fun parseSongsFromInternalJson(
                     }
 
                     // Strategy 2: musicTwoRowItemRenderer (Title/Subtitle) - Cards/Shelves
-                    val twoRowItem = item.optJSONObject("musicTwoRowItemRenderer")
-                    if (twoRowItem != null) {
-                         parseTwoRowItem(twoRowItem)?.let { songs.add(it) }
+                    // Skipped when listItemsOnly: card shelves (recommendations,
+                    // "more from artist") are not part of the list itself.
+                    if (!listItemsOnly) {
+                        val twoRowItem = item.optJSONObject("musicTwoRowItemRenderer")
+                        if (twoRowItem != null) {
+                             parseTwoRowItem(twoRowItem)?.let { songs.add(it) }
+                        }
                     }
                 } catch (e: Exception) {
                     // Skip malformed item
