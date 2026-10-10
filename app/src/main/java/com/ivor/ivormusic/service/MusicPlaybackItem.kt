@@ -120,7 +120,9 @@ internal fun MusicQueueItem.toPlaybackMediaItem(): MediaItem {
     val builder = MediaItem.Builder()
         .setMediaId(song.id)
         .setMediaMetadata(metadata)
-    if (song.source == SongSource.LOCAL && song.uri != null) {
+    // Podcasts carry their stream URL directly, like local files: without it
+    // the item would be pushed through YouTube stream resolution and fail.
+    if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
         builder.setUri(song.uri)
     } else {
         builder.setUri("https://placeholder.ivormusic/${song.id}")
