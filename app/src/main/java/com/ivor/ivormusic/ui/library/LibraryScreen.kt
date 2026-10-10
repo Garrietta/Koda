@@ -359,6 +359,10 @@ fun LibraryContent(
                     selectedAlbumSongs = songs
                     currentRoute = LibraryRoute.Album
                 },
+                onNavigateToPodcast = { feed ->
+                    selectedPodcastFeed = feed
+                    currentRoute = LibraryRoute.PodcastDetail
+                },
                 onNavigateToStats = {
                     currentRoute = LibraryRoute.Stats
                 },
@@ -816,6 +820,7 @@ fun LibraryMainScreen(
     onNavigateToArtist: (String) -> Unit,
     onNavigateToFollowedArtist: (com.ivor.ivormusic.data.TasteArtist) -> Unit = {},
     onNavigateToAlbum: (String, List<Song>) -> Unit,
+    onNavigateToPodcast: (com.ivor.ivormusic.data.PodcastFeed) -> Unit = {},
     onNavigateToStats: () -> Unit,
     onNavigateToHistory: () -> Unit,
     /** Songs cached in full; the entry point hides itself when nothing is. */
@@ -1127,10 +1132,7 @@ fun LibraryMainScreen(
                     }
                     LibraryTab.Podcasts -> {
                         com.ivor.ivormusic.ui.podcast.PodcastsScreen(
-                            onFeedClick = { feed ->
-                                selectedPodcastFeed = feed
-                                currentRoute = LibraryRoute.PodcastDetail
-                            },
+                            onFeedClick = onNavigateToPodcast,
                             contentPadding = contentPadding,
                             listState = rememberLazyListState(),
                             showTitle = false,
