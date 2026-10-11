@@ -76,6 +76,7 @@ fun PodcastDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(contentPadding)
     ) {
         // Header: artwork with gradient, back button, title and stats.
