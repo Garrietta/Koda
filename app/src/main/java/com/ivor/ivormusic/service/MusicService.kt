@@ -2668,10 +2668,10 @@ class MusicService : MediaLibraryService() {
         // without one would be pushed through YouTube stream resolution and
         // fail. Downloads also resolve locally, but through the mediaId
         // lookup in performResolution instead.
-        if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
-    builder.setUri(song.uri)
-}
-return builder.build()
+                if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
+            builder.setUri(song.uri)
+        }
+        return builder.build()
     
     private fun findSongInCache(videoId: String): Song? {
         return (browseSongs.values() + localBrowseSongs.values()).asSequence()
