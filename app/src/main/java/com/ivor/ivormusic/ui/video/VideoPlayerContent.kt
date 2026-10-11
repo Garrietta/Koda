@@ -248,6 +248,18 @@ fun VideoPlayerContent(
     // always starts fitted rather than inheriting the last video's crop.
     var isZoomedToFill by remember(video?.videoId) { mutableStateOf(false) }
     var isFullscreen by remember { mutableStateOf(false) }
+    /**
+     * The fullscreen screen lock.
+     *
+     * Hoisted out of the fullscreen composable for two reasons: locking has to
+     * take the chrome with it (it would otherwise sit tappable until the
+     * controls' own auto-hide ran), and unlocking has to bring it back. The
+     * flag deliberately does not follow a new video - a lock is a way of
+     * watching this one - and leaving fullscreen clears it, so a pocket cannot
+     * hand a locked screen to the watch page.
+     */
+    var screenLocked by remember { mutableStateOf(false) }
+    LaunchedEffect(isFullscreen) { if (!isFullscreen) screenLocked = false }
     var showChaptersSheet by remember { mutableStateOf(false) }
     var showCaptionsSheet by remember { mutableStateOf(false) }
     // Keyed on the playlist, so the flag cannot outlive the queue it belongs to.
@@ -677,7 +689,15 @@ fun VideoPlayerContent(
                 exoPlayer = exoPlayer,
                 videoId = currentVideo.videoId,
                 showControls = showControls,
-                onToggleControls = { showControls = !showControls },
+                onToggleControls = { if (!screenLocked) showControls = !showControls },
+                screenLocked = screenLocked,
+                onScreenLockChange = { locked ->
+                    screenLocked = locked
+                    // Locking hides the chrome now, unlocking brings it back.
+                    // Both are one write: the auto-hide effect re-arms on the
+                    // way in, so unlocking behaves like any other reveal.
+                    showControls = !locked
+                },
                 hasError = playbackError != null,
                 errorMessage = playbackError?.message ?: "",
                 connectionAdvice = connectionAdvice,
