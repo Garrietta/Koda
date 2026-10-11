@@ -68,6 +68,13 @@ fun PodcastDetailScreen(
     val feedEpisodes = (episodes[feed.id].orEmpty()).sortedByDescending { it.pubDate }
     val songs = viewModel.episodeSongs(feed.id)
 
+    // Refresh on open: Patreon and other private feeds use signed URLs that
+    // expire. Refreshing ensures the episode audio URLs are fresh when the
+    // user taps play.
+    androidx.compose.runtime.LaunchedEffect(feed.id) {
+        viewModel.refreshFeed(feed.id)
+    }
+
     val totalDurationMs = feedEpisodes.sumOf { it.durationMs ?: 0L }
     val durationText = formatTotalDuration(totalDurationMs)
 
