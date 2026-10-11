@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +71,7 @@ fun PodcastDetailScreen(
     val episodes by viewModel.episodesByFeed.collectAsState()
     val feedEpisodes = (episodes[feed.id].orEmpty()).sortedByDescending { it.pubDate }
     val songs = viewModel.episodeSongs(feed.id)
+    val songsById = remember(songs) { songs.associateBy { it.id } }
 
     // Refresh on open: Patreon and other private feeds use signed URLs that
     // expire. Refreshing ensures the episode audio URLs are fresh when the
@@ -248,7 +250,7 @@ fun PodcastDetailScreen(
         }
 
         items(feedEpisodes, key = { "episode:${it.id}" }) { episode ->
-            val song = songs.find { it.id == episode.id }
+            val song = songsById["podcast:${episode.id}"]
             EpisodeDetailRow(
                 episode = episode,
                 onClick = {

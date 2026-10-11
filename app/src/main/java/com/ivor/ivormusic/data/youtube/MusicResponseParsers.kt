@@ -24,13 +24,27 @@ internal fun parseSongsFromInternalJson(
         // OPTIMIZED: Direct traversal instead of recursive search
         // Find the SectionListRenderer which contains the shelves
         val contentsArray = findRootContents(root) ?: return emptyList()
+        val isPlaylistContinuation = continuationItemsOrNull(root) != null ||
+            root.optJSONObject("continuationContents")?.has("musicPlaylistShelfContinuation") == true
 
         // Iterate over shelves (musicCarouselShelfRenderer, musicShelfRenderer, etc.)
         for (i in 0 until contentsArray.length()) {
             val shelfWrapper = contentsArray.optJSONObject(i) ?: continue
 
-            // Get the items array from the shelf
-            val items = parseItemsFromShelf(shelfWrapper)
+            // Liked music is parsed only from the playlist shelf or its
+            // continuation rows, never from recommendation shelves.
+            val items = if (listItemsOnly) {
+                shelfWrapper.optJSONObject("musicPlaylistShelfRenderer")
+                    ?.optJSONArray("contents")
+                    ?.toObjectList()
+                    ?: if (isPlaylistContinuation && shelfWrapper.has("musicResponsiveListItemRenderer")) {
+                        listOf(shelfWrapper)
+                    } else {
+                        emptyList()
+                    }
+            } else {
+                parseItemsFromShelf(shelfWrapper)
+            }
 
             // Process items
             items.forEach { item ->
@@ -42,13 +56,9 @@ internal fun parseSongsFromInternalJson(
                     }
 
                     // Strategy 2: musicTwoRowItemRenderer (Title/Subtitle) - Cards/Shelves
-                    // Skipped when listItemsOnly: card shelves (recommendations,
-                    // "more from artist") are not part of the list itself.
-                    if (!listItemsOnly) {
-                        val twoRowItem = item.optJSONObject("musicTwoRowItemRenderer")
-                        if (twoRowItem != null) {
-                             parseTwoRowItem(twoRowItem)?.let { songs.add(it) }
-                        }
+                    val twoRowItem = item.optJSONObject("musicTwoRowItemRenderer")
+                    if (!listItemsOnly && twoRowItem != null) {
+                        parseTwoRowItem(twoRowItem)?.let { songs.add(it) }
                     }
                 } catch (e: Exception) {
                     // Skip malformed item
@@ -60,6 +70,9 @@ internal fun parseSongsFromInternalJson(
     }
     return if (preserveDuplicates) songs else songs.distinctBy { it.id }
 }
+
+private fun JSONArray.toObjectList(): List<JSONObject> =
+    (0 until length()).mapNotNull { optJSONObject(it) }
 
 internal fun parsePlaylistsFromInternalJson(json: String): List<PlaylistDisplayItem> {
     val playlists = mutableListOf<PlaylistDisplayItem>()
