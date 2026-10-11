@@ -110,6 +110,9 @@ class ThemePreferences(context: Context) {
     private val _videoGestures = MutableStateFlow(readVideoGestures())
     val videoGestures: StateFlow<VideoGestureCustomization> = _videoGestures.asStateFlow()
 
+    private val _videoShaders = MutableStateFlow(readVideoShaders())
+    val videoShaders: StateFlow<VideoShaderCustomization> = _videoShaders.asStateFlow()
+
     private val _videoFeed = MutableStateFlow(readVideoFeed())
     val videoFeed: StateFlow<VideoFeedCustomization> = _videoFeed.asStateFlow()
 
@@ -418,6 +421,10 @@ class ThemePreferences(context: Context) {
             KEY_VIDEO_HOLD_SPEED, KEY_VIDEO_BRIGHTNESS_SWIPE, KEY_VIDEO_VOLUME_SWIPE,
             KEY_VIDEO_HOLD_SPEED_RATE, KEY_VIDEO_CONTROLS_HIDE_SECONDS ->
                 _videoGestures.value = readVideoGestures()
+            KEY_VIDEO_SHADERS_ENABLED, KEY_VIDEO_SHADER_PRESET, KEY_VIDEO_SHADERS_SHARPNESS,
+            KEY_VIDEO_SHADERS_CONTRAST, KEY_VIDEO_SHADERS_BRIGHTNESS,
+            KEY_VIDEO_SHADERS_SATURATION, KEY_VIDEO_SHADERS_CUSTOM_CODE ->
+                _videoShaders.value = readVideoShaders()
             KEY_VIDEO_FEED_POSTS, KEY_VIDEO_FEED_LIVE, KEY_VIDEO_FEED_HIDE_WATCHED_HOME ->
                 _videoFeed.value = readVideoFeed()
             KEY_START_TAB, KEY_START_MODE, KEY_NAV_TAB_LABELS, KEY_NAV_BAR_HIDES_ON_SCROLL,
@@ -721,6 +728,13 @@ class ThemePreferences(context: Context) {
         private const val KEY_VIDEO_QUALITY_WIFI = "video_quality_wifi"
         private const val KEY_VIDEO_QUALITY_MOBILE = "video_quality_mobile"
         private const val KEY_PREFER_HDR = "prefer_hdr_video"
+        private const val KEY_VIDEO_SHADERS_ENABLED = "video_shaders_enabled"
+        private const val KEY_VIDEO_SHADER_PRESET = "video_shader_preset"
+        private const val KEY_VIDEO_SHADERS_SHARPNESS = "video_shaders_sharpness"
+        private const val KEY_VIDEO_SHADERS_CONTRAST = "video_shaders_contrast"
+        private const val KEY_VIDEO_SHADERS_BRIGHTNESS = "video_shaders_brightness"
+        private const val KEY_VIDEO_SHADERS_SATURATION = "video_shaders_saturation"
+        private const val KEY_VIDEO_SHADERS_CUSTOM_CODE = "video_shaders_custom_code"
         private const val KEY_FRAME_INTERPOLATION = "video_frame_interpolation"
         private const val KEY_FRAME_INTERPOLATION_MAX_FPS = "video_frame_interpolation_max_fps"
         private const val KEY_FRAME_INTERPOLATION_PLAYER_ON = "video_frame_interpolation_player_on"
@@ -1455,6 +1469,39 @@ class ThemePreferences(context: Context) {
             .putInt(KEY_VIDEO_CONTROLS_HIDE_SECONDS, customization.controlsHideSeconds)
             .apply()
         _videoGestures.value = customization
+    }
+
+    /**
+     * The video shader stage: whether players are built with it, the look and
+     * the picture sliders. Written by the Video shaders page and the player's
+     * settings panel; the player reads it fresh when it is built.
+     */
+    fun readVideoShaders(): VideoShaderCustomization = VideoShaderCustomization(
+        masterEnabled = prefs.getBoolean(KEY_VIDEO_SHADERS_ENABLED, false),
+        activePreset = VideoShaderPreset.fromId(prefs.getString(KEY_VIDEO_SHADER_PRESET, null)),
+        sharpness = prefs.getFloat(KEY_VIDEO_SHADERS_SHARPNESS, VideoShaderCustomization.SHARPNESS_OFF)
+            .coerceIn(VideoShaderCustomization.SHARPNESS_RANGE),
+        contrast = prefs.getFloat(KEY_VIDEO_SHADERS_CONTRAST, VideoShaderCustomization.NEUTRAL_CONTRAST)
+            .coerceIn(VideoShaderCustomization.CONTRAST_RANGE),
+        brightness = prefs.getFloat(KEY_VIDEO_SHADERS_BRIGHTNESS, VideoShaderCustomization.NEUTRAL_BRIGHTNESS)
+            .coerceIn(VideoShaderCustomization.BRIGHTNESS_RANGE),
+        saturation = prefs.getFloat(KEY_VIDEO_SHADERS_SATURATION, VideoShaderCustomization.NEUTRAL_SATURATION)
+            .coerceIn(VideoShaderCustomization.SATURATION_RANGE),
+        customShaderSource = prefs.getString(KEY_VIDEO_SHADERS_CUSTOM_CODE, null)
+            ?: VideoShaderCustomization.DEFAULT_CUSTOM_SHADER
+    )
+
+    fun setVideoShaders(customization: VideoShaderCustomization) {
+        prefs.edit()
+            .putBoolean(KEY_VIDEO_SHADERS_ENABLED, customization.masterEnabled)
+            .putString(KEY_VIDEO_SHADER_PRESET, customization.activePreset.id)
+            .putFloat(KEY_VIDEO_SHADERS_SHARPNESS, customization.sharpness)
+            .putFloat(KEY_VIDEO_SHADERS_CONTRAST, customization.contrast)
+            .putFloat(KEY_VIDEO_SHADERS_BRIGHTNESS, customization.brightness)
+            .putFloat(KEY_VIDEO_SHADERS_SATURATION, customization.saturation)
+            .putString(KEY_VIDEO_SHADERS_CUSTOM_CODE, customization.customShaderSource)
+            .apply()
+        _videoShaders.value = customization
     }
 
     /** What the video feeds show. Read by the feeds, written by the Video feed page. */

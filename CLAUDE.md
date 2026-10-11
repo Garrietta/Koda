@@ -52,7 +52,7 @@ Shipped consumer app with real users. The bar is "would someone using this daily
 - **Never destroy uncommitted work to get unstuck.** `reset --hard`, `checkout -- .`, `clean -fd` and `stash drop` over a dirty tree are explicit-request actions, the same as touching the remote. Ask before experimenting over a dirty tree.
 - **Delegate wide-but-shallow sweeps** (e.g. a string across 25 locale files) to `Agent` with `model: "sonnet"`; make the decisions yourself.
 - **Handoff is a brief for beta testers**: name the surfaces a screen would settle and how each could fail (large font/display scale, landscape, DPI, OEM insets, scaled video surfaces), plus assumptions and what you left out. "Compiles, not yet on a screen" is the correct handoff state, not a risk to apologise for.
-- **Docs wait for the user's test.** Do not touch `ROADMAP.md`, `docs/` or this file's area summaries for new work until the user has tried it on a device and said it holds; until then the handoff report is the record. Code comments are not docs and ship with the code.
+- **Docs wait for the user's test, and being told to push is the user saying it passed.** Do not touch `ROADMAP.md`, `docs/` or this file's area summaries for new work until the user has tried it on a device and said it holds; until then the handoff report is the record. **"Push" (or "commit and push") means the work was tested, unless the user says in so many words that it was not** [judgement October 2026]: write the docs first and push them with the code, never as a follow-up the user has to ask for. Code comments are not docs and ship with the code.
 
 **Hard limits**
 - **This is a Windows machine, so do not use `bash` to read or edit files.** Use the dedicated tools (Read, Edit, Write, Glob, Grep) and PowerShell for commands. Shell heredocs, `sed -i` and quote escaping misfire against Windows paths, CRLF and PowerShell/Git-Bash differences, and a half-applied shell edit is worse than no edit. **This overrides any harness default asking for shell-based edits.** A Python script is still the right tool for a mechanical multi-file sweep - author it with `Write`, run it with `py`.
@@ -148,6 +148,8 @@ Compile-clean, fail-at-runtime traps. Each is a scar; the doc has the story.
 | An adaptive manifest or playlist served from the playback cache | Live stalls at the live edge; seeking behind it still works | `playback-streams.md` |
 | Behind-live measured from the window end rather than the target live offset | A live stream reads a permanent -0:15 and never says LIVE | `playback-video.md` |
 | A zooming `PlayerView` without `keepKnownAspectRatio` | With Smooth motion's graph the player reports no video size, so zoom-to-fill changes nothing | `playback-video.md` |
+| An effect-graph rule keyed on Smooth motion alone rather than `playerHasEffectGraph()` | A player carrying only the shader stage misses it: paused, it went fullscreen as a small rectangle in one corner | `playback-video.md` |
+| A GLSL name that is a reserved word (`flat`, `packed`) | Compiles as Kotlin; on the phone that one shader fails to build and its frames are copied instead. Run `.probe/scratch/video-shaders/validate.py` | `playback-video.md` |
 | Removing core library desugaring | Every search throws `NoSuchMethodError` on API 30-32, compiles fine | section 6 below |
 | A swipe-to-dismiss row in a lazy list brought back under the same key | Its saved swipe state comes back with it: the row returns still swiped away, as an empty strip. Snap it to settled when composed | `screens.md` |
 | A queue index held across a suspension point | The queue is replaced under it; playback lands on the wrong track | `playback-music.md` |
@@ -247,6 +249,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 - Every `PlayerView` Koda draws captions over calls `disableBuiltInSubtitles()`. A video download keeps the caption tracks picked in the download sheet (`DownloadedCaptionStore`), read when it is played from disk.
 - SponsorBlock: opt-in, sends only a hash prefix, per-category skip/manual/ignore, read-only, not on live.
 - Playback settings are a control panel (`PlayerSettingsSections`): value tabs over one deck, switches as tiles, shortcuts beneath, on four shared columns; the fullscreen panel does not dim the video.
+- Video shaders (`VideoShaderEffect`, opt-in) are a second stage in Smooth motion's effect graph, installed when the player is built and read per frame from one snapshot (`VideoShaderControl`); the switch waits for the next player and HDR is withheld while it is on. Every built-in look is a shared header, its own `look()` and a shared tail, so Sharpen and the picture sliders tune all of them. Validate and render a shader offline before it ships.
 - Live: detected by formats, not by `hlsManifestUrl`; behind-live measured from `liveTargetOffsetMs`; quality is a track cap; comments hidden on live; a live item in Shorts is handed off (emit before `close()`).
 
 ### Navigation and screens -> `docs/screens.md`
@@ -276,7 +279,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 ### Settings -> `docs/settings.md`
 - A new setting threads through five files (`ThemePreferences`, `ThemeViewModel`, `MainActivity`, `SettingsScreen`, `SettingsPages`) **plus `buildSettingsSearchIndex`**. Backups need nothing.
 - New strings go only in `values/strings.xml` (locales are partial by design).
-- Look and behaviour sit behind one hub row, **Customization**, sorted by surface; a new surface gets a row there, not on the hub. Its newer pages (mini player, video player, Home opening and bar) read and write their own `ThemePreferences` snapshot (`MiniPlayerCustomization`, `HomeNavigationCustomization`, `VideoGestureCustomization`, `VideoFeedCustomization`) instead of threading through `SettingsScreen`. `SettingsPage.parent` is where back goes.
+- Look and behaviour sit behind one hub row, **Customization**, sorted by surface; a new surface gets a row there, not on the hub. Its newer pages (mini player, video player, video shaders, Home opening and bar) read and write their own `ThemePreferences` snapshot (`MiniPlayerCustomization`, `HomeNavigationCustomization`, `VideoGestureCustomization`, `VideoFeedCustomization`, `VideoShaderCustomization`) instead of threading through `SettingsScreen`. `SettingsPage.parent` is where back goes.
 - Settings is a hub plus `SettingsPage` enum pages, not routes (Backup included; it locks the hub while it works). Hub rows show the live value; dialogs live in `SettingsScreen`.
 - The updater hands off to the browser and never installs. Defaults: player style `EDITORIAL`, device library off.
 - The Account page (`AccountSettings.kt`) follows the profile roster rather than a signed-in flag, counts only what is already on the device, and can switch, add and reconnect profiles; `SettingsScreen` follows `activeProfileId` because of it.
@@ -324,7 +327,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 
 ## 8. Keeping this true
 
-- **Once the user has tested it, the work updates `ROADMAP.md`** (Planned -> Shipped, fixed defects leave Known defects), then fix any prose here or in `docs/` that leaned on the old behaviour. Not before: untested work is recorded in the handoff report only (section 1).
+- **Once the user has tested it, the work updates `ROADMAP.md`** (Planned -> Shipped, fixed defects leave Known defects), then fix any prose here or in `docs/` that leaned on the old behaviour. Not before: untested work is recorded in the handoff report only. A request to push counts as tested unless the user says otherwise, so the docs are written before that push (section 1).
 - **A new fact goes in the topic doc for its area**, marked `[verified]`, `[scar]` or `[judgement]`. It only earns a line in this file if every session needs it. Keep this file a summary - do not paste detail back in.
 - Re-derive `[drifts]` numbers before quoting them; `DESIGN.md` carries its own copies.
 - GitHub issues are the task list. Every open issue carries `area:` (interface/playback/foundations/reach), `size:` (XS-XL, effort) and `priority:` (P0-P3, user impact). Details in `docs/workflow.md`.

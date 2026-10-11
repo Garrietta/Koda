@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material.icons.rounded.MoneyOff
@@ -240,6 +241,25 @@ internal fun buildSettingsSearchIndex(
         "video_controls_hide", stringResource(R.string.cz_video_controls_hide), stringResource(R.string.cz_video_player), Icons.Rounded.PlayCircle,
         listOf("controls", "auto hide", "hide delay", "timeout", "buttons disappear", "overlay")
     ) { onOpenPage(SettingsPage.VIDEO_PLAYER) }
+    entry(
+        "video_shaders", stringResource(R.string.sp_video_shaders), stringResource(R.string.settings_customization), Icons.Rounded.AutoAwesome,
+        listOf(
+            "shader", "shaders", "effects", "filter", "filters", "look", "preset", "presets",
+            "vivid", "clarity", "film", "cinematic", "noir", "black and white", "anime", "neon",
+            "dream", "vintage", "vhs", "crt", "retro", "pixel", "comic", "sketch", "night vision"
+        )
+    ) { onOpenPage(SettingsPage.VIDEO_SHADERS) }
+    entry(
+        "video_shaders_picture", stringResource(R.string.sp_video_shaders_picture), stringResource(R.string.sp_video_shaders), Icons.Rounded.Contrast,
+        listOf(
+            "sharpen", "sharpness", "upscale", "upscaling", "cas", "enhance", "detail",
+            "brightness", "contrast", "saturation", "colour", "color", "picture"
+        )
+    ) { onOpenPage(SettingsPage.VIDEO_SHADERS) }
+    entry(
+        "video_shaders_custom", stringResource(R.string.sp_video_shaders_custom), stringResource(R.string.sp_video_shaders), Icons.Rounded.Code,
+        listOf("custom shader", "glsl", "code", "fragment shader", "editor", "write", "programmable")
+    ) { onOpenPage(SettingsPage.VIDEO_SHADERS) }
     entry(
         "video_feed", stringResource(R.string.cz_video_feed), stringResource(R.string.settings_customization), Icons.Rounded.PlayCircle,
         listOf(

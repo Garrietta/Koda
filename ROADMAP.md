@@ -114,6 +114,7 @@ One line each; the reasoning is in `docs/`, and the full write-ups are in this f
 
 ### October 2026
 
+- Video shaders, off by default under Customization: fourteen presets (Vivid, Clarity, Film, Noir, Anime, Neon, Dream, Vintage, VHS, CRT, Pixel, Comic, Sketch, Night vision), Sharpen and picture sliders that tune any of them, and a custom GLSL shader that is compiled before it is applied; a Shaders tab in the player's settings changes them while watching (`service/VideoShaderEffect.kt`). HDR plays in standard range while it is on.
 - The notification inbox keeps its history: every page YouTube offers is read (up to three), what YouTube has dropped is remembered on the device for 60 days per profile, the list is split into New, Earlier and Kept on this device with filters by kind, and a swipe hides an item locally (`NotificationHistoryStore`). A notification about a community post opens the post over its comments.
 - Video feed options ([#317](https://github.com/Ivorisnoob/Koda/issues/317)): community posts, the Shorts shelf, live streams and hiding watched videos on Home, on a Video feed page under Customization (`VideoFeedCustomization`).
 - The Account page follows the profile roster: the active profile and its session state, counts of what the profile and the device hold, every profile with switching and adding, incognito, and the way to Backup, Last.fm and Subscriptions (`ui/settings/AccountSettings.kt`).
