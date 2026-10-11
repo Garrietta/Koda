@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,175 +80,179 @@ fun PodcastDetailScreen(
     val durationText = formatTotalDuration(totalDurationMs)
 
     val ground = MaterialTheme.colorScheme.background
+    val layoutDirection = LocalLayoutDirection.current
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(contentPadding)
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(
+            start = contentPadding.calculateStartPadding(layoutDirection),
+            top = contentPadding.calculateTopPadding(),
+            end = contentPadding.calculateEndPadding(layoutDirection),
+            bottom = contentPadding.calculateBottomPadding() + 24.dp,
+        ),
     ) {
         // Header: artwork with gradient, back button, title and stats.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(320.dp)
-        ) {
-            // Artwork (or gradient placeholder).
-            if (feed.artworkUrl != null) {
-                AsyncImage(
-                    model = feed.artworkUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.tertiaryContainer
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
-
-            // Bottom fade into the page background.
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to ground.copy(alpha = 0f),
-                            0.55f to ground.copy(alpha = 0f),
-                            0.85f to ground.copy(alpha = 0.9f),
-                            1f to ground
-                        )
-                    )
-            )
-
-            // Top fade for the back button.
+        item(key = "header") {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
-                    .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                ground.copy(alpha = 0.6f),
-                                ground.copy(alpha = 0f)
+                    .height(320.dp)
+            ) {
+                // Artwork (or gradient placeholder).
+                if (feed.artworkUrl != null) {
+                    AsyncImage(
+                        model = feed.artworkUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(80.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+
+                // Bottom fade into the page background.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to ground.copy(alpha = 0f),
+                                0.55f to ground.copy(alpha = 0f),
+                                0.85f to ground.copy(alpha = 0.9f),
+                                1f to ground
                             )
                         )
+                )
+
+                // Top fade for the back button.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    ground.copy(alpha = 0.6f),
+                                    ground.copy(alpha = 0f)
+                                )
+                            )
+                        )
+                )
+
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.action_back),
                     )
-            )
+                }
 
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.action_back),
-                )
-            }
-
-            // Title and stats, bottom of the header.
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-            ) {
-                Text(
-                    text = feed.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(
-                        R.string.podcast_detail_stats,
-                        feedEpisodes.size,
-                        durationText
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Title and stats, bottom of the header.
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        text = feed.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.podcast_detail_stats,
+                            feedEpisodes.size,
+                            durationText
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
         // Play all / Shuffle.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Button(
-                onClick = {
-                    if (songs.isNotEmpty()) onPlayQueue(songs, songs.first())
-                },
-                modifier = Modifier.weight(1f),
-                enabled = songs.isNotEmpty(),
+        item(key = "controls") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.action_play_all))
-            }
-            Button(
-                onClick = {
-                    if (songs.isNotEmpty()) onShuffleQueue(songs)
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
-                enabled = songs.isNotEmpty(),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Shuffle,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.action_shuffle))
+                Button(
+                    onClick = {
+                        if (songs.isNotEmpty()) onPlayQueue(songs, songs.first())
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = songs.isNotEmpty(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.action_play_all))
+                }
+                Button(
+                    onClick = {
+                        if (songs.isNotEmpty()) onShuffleQueue(songs)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    enabled = songs.isNotEmpty(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.action_shuffle))
+                }
             }
         }
 
-        // Episode list.
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
-            items(feedEpisodes, key = { it.id }) { episode ->
-                val song = songs.find { it.id == episode.id }
-                EpisodeDetailRow(
-                    episode = episode,
-                    onClick = {
-                        if (song != null) onPlayQueue(songs, song)
-                    },
-                )
-            }
+        items(feedEpisodes, key = { "episode:${it.id}" }) { episode ->
+            val song = songs.find { it.id == episode.id }
+            EpisodeDetailRow(
+                episode = episode,
+                onClick = {
+                    if (song != null) onPlayQueue(songs, song)
+                },
+            )
         }
     }
 }

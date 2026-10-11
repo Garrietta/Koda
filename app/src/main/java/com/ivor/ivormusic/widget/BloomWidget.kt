@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -47,12 +46,7 @@ import com.ivor.ivormusic.R
  */
 class BloomWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(
-            DpSize(140.dp, 140.dp),
-            DpSize(200.dp, 200.dp),
-        )
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         PlayerWidgetHost.ensureSeeded(context)
@@ -74,15 +68,9 @@ private fun BloomContent(ui: PlayerWidgetUi) {
 
     val size = LocalSize.current
     val cell = minOf(size.width, size.height)
-    // LocalSize reports the matched bucket rather than the real cell, so the
-    // lobes are given a couple of dp to breathe instead of being drawn to an
-    // edge that may not be where it says it is.
     val cover = cell - 8.dp
-    // Two buckets, two control sizes. At 140dp the pair has to stay inside the
-    // 28dp corner clip, and 48 + 6 + 44 does.
-    val large = cell >= 200.dp
-    val hero = if (large) 56.dp else 48.dp
-    val side = if (large) 48.dp else 44.dp
+    val hero = (cell * 0.28f).coerceIn(48.dp, 72.dp)
+    val side = (cell * 0.24f).coerceIn(44.dp, 64.dp)
 
     WidgetSurface(background = null) {
         Box(

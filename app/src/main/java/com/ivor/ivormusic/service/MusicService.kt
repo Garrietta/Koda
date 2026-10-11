@@ -2254,8 +2254,8 @@ class MusicService : MediaLibraryService() {
 
         /**
          * Give every incoming item a concrete shape the playback pipeline can
-         * carry: local URIs preserved, YouTube ids turned into placeholders
-         * that [performResolution] swaps for a real stream.
+         * carry: local and podcast URIs preserved, YouTube ids turned into
+         * placeholders that [performResolution] swaps for a real stream.
          */
         private fun preparePlaybackItem(item: MediaItem): MediaItem {
             val existingUri = item.localConfiguration?.uri
@@ -2291,12 +2291,21 @@ class MusicService : MediaLibraryService() {
                 meta = meta.buildUpon().setExtras(extras).build()
             }
 
+            val isPodcastUri = meta.extras?.getString(EXTRA_SONG_SOURCE) == SongSource.PODCAST.name &&
+                (existingUri?.scheme.equals("http", ignoreCase = true) ||
+                    existingUri?.scheme.equals("https", ignoreCase = true))
+
             return if (isLocalUri) {
                 // Local song: preserve the original content:// URI for direct playback
                 KLog.d(TAG, "onAddMediaItems: Preserving local URI for ${item.mediaId}: $existingUri")
                 MediaItem.Builder()
                     .setMediaId(item.mediaId)
                     .setUri(existingUri)
+                    .setMediaMetadata(meta)
+                    .build()
+            } else if (isPodcastUri) {
+                KLog.d(TAG, "onAddMediaItems: Preserving podcast stream URI for ${item.mediaId}")
+                item.buildUpon()
                     .setMediaMetadata(meta)
                     .build()
             } else {
@@ -2659,16 +2668,16 @@ class MusicService : MediaLibraryService() {
                 .setDurationMs(song.duration.takeIf { it > 0L })
                 .setArtworkUri(song.thumbnailUrl?.toArtworkUri()
                     ?: song.albumArtUri)
-                .setExtras(contentStyleExtras(LIST_ITEM, LIST_ITEM))
+                .setExtras(contentStyleExtras(LIST_ITEM, LIST_ITEM).apply {
+                    putString(EXTRA_SONG_SOURCE, song.source.name)
+                })
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .build())
-        // Device-local songs must arrive carrying their content:// URI:
-        // onAddMediaItems preserves it for direct playback, while an item
-        // without one would be pushed through YouTube stream resolution and
-        // fail. Downloads also resolve locally, but through the mediaId
-        // lookup in performResolution instead.
-                if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
+        // Local songs and podcasts carry their own playable URIs; without
+        // those, the item would be pushed through YouTube stream resolution.
+        // Downloads resolve locally through the mediaId lookup instead.
+        if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
             builder.setUri(song.uri)
         }
         return builder.build()

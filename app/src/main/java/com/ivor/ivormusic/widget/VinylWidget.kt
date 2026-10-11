@@ -97,20 +97,19 @@ private fun VinylContent(ui: PlayerWidgetUi) {
 
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
-    // Measured against the bucket, like every layout that can clip: the sleeve
+    // Measured against the actual cell, like every layout that can clip: the sleeve
     // takes the cell's height, the record shows half its width past it, the
     // arm stands a quarter of a record further out, and the transport gets
     // what is left.
     // The stage is about 1.75 sleeves wide, so the width caps the sleeve too:
-    // a tall bucket would otherwise push the buttons out of the cell.
+    // a tall cell would otherwise push the buttons out of the cell.
     val widthForStage = size.width - VINYL_PADDING * 2 - 10.dp - 56.dp
-    val sleeve = minOf(size.height - VINYL_PADDING * 2, (widthForStage + 4.dp) / 1.75f, 148.dp)
+    val sleeve = minOf(size.height - VINYL_PADDING * 2, (widthForStage + 4.dp) / 1.75f)
     val record = sleeve - 6.dp
     val armReach = record / 4
     val stage = sleeve + record / 2 + armReach
-    val roomy = sleeve >= 120.dp
-    val hero = if (roomy) 56.dp else 44.dp
-    val side = if (roomy) 48.dp else 36.dp
+    val hero = (sleeve * 0.42f).coerceIn(44.dp, 72.dp)
+    val side = (sleeve * 0.36f).coerceIn(36.dp, 64.dp)
 
     // No card, like Bloom: the sleeve, the record and the buttons are all
     // opaque and stand on the wallpaper by themselves. That is also why there
