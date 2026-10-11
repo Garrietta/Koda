@@ -2672,7 +2672,7 @@ class MusicService : MediaLibraryService() {
             builder.setUri(song.uri)
         }
         return builder.build()
-
+    }
     private fun findSongInCache(videoId: String): Song? {
         return (browseSongs.values() + localBrowseSongs.values()).asSequence()
             .flatten().firstOrNull { it.id == videoId }
