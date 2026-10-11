@@ -2669,8 +2669,9 @@ class MusicService : MediaLibraryService() {
         // fail. Downloads also resolve locally, but through the mediaId
         // lookup in performResolution instead.
         if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
-        return builder.build()
-    }
+    builder.setUri(song.uri)
+}
+return builder.build()
     
     private fun findSongInCache(videoId: String): Song? {
         return (browseSongs.values() + localBrowseSongs.values()).asSequence()
