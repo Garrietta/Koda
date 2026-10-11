@@ -179,7 +179,7 @@ class MusicService : MediaLibraryService() {
     // own buffering for the whole prefetch window.
     private val warmSemaphore = kotlinx.coroutines.sync.Semaphore(1)
     private val profileSemaphore = kotlinx.coroutines.sync.Semaphore(1)
-    
+
     // --- Configuration ---
     private var isCrossfadeEnabled = true
     private var isAutoMixEnabled = true
@@ -737,7 +737,7 @@ class MusicService : MediaLibraryService() {
         // SMART DATA SOURCE FACTORY
         // Logic: Use CacheDataSource for network (http/https), but use valid DefaultDataSource for local files (content/file).
         // This prevents the cache from trying to grasp local content which causes playback failures on some devices.
-        
+
         // Per-URL User-Agent — googlevideo URLs are tagged with their issuing
         // client (?c=IOS, ?c=TVHTML5_SIMPLY_EMBEDDED, ...) and YouTube answers
         // 403 if the playback UA doesn't match. CacheManager.createPerClientHttpFactory()
@@ -1423,7 +1423,7 @@ class MusicService : MediaLibraryService() {
                     try {
                         val deferred = getOrStartResolution(item)
                         val resolvedItem = bindResolutionToItem(item, deferred.await())
-                        
+
                         // Update player if item is still there
                         if (targetIndex < player.mediaItemCount &&
                             player.getMediaItemAt(targetIndex).isSameQueueItemAs(item) &&
@@ -1545,7 +1545,7 @@ class MusicService : MediaLibraryService() {
     private suspend fun performResolution(originalItem: MediaItem): MediaItem {
         val videoId = originalItem.mediaId
         KLog.d(TAG, "Resolution: Starting for $videoId")
-        
+
         // 1. Downloads
         val downloaded = downloadRepository.downloadedSongs.value.find { it.id == videoId }
         if (downloaded != null && downloaded.uri != null) {
@@ -1579,7 +1579,7 @@ class MusicService : MediaLibraryService() {
             val result = withTimeoutOrNull(RESOLVE_TIMEOUT_MS) {
                 youtubeRepository.getStreamUrl(videoId)
             }
-            
+
             val streamUrl = result?.getOrNull()
             if (!streamUrl.isNullOrEmpty()) {
                 uriCache[videoId] = CachedUri(streamUrl, streamUrlExpiryMs(streamUrl))
@@ -1610,7 +1610,7 @@ class MusicService : MediaLibraryService() {
         duration?.takeIf { it > 0L }?.let(metaBuilder::setDurationMs)
         if (original.mediaMetadata.title == null) {
              val cachedInfo = findSongInCache(original.mediaId)
-             
+
              if (cachedInfo != null) {
                  metaBuilder.setTitle(cachedInfo.title)
                      .setArtist(cachedInfo.artist)
@@ -1648,7 +1648,7 @@ class MusicService : MediaLibraryService() {
         val currentItem = player.currentMediaItem ?: return
         val videoId = currentItem.mediaId
         val uri = currentItem.localConfiguration?.uri
-        
+
         // Stream URLs carry short-lived signatures and local URIs may expose
         // device paths. The media id is sufficient for a user-shared report.
         KLog.w(TAG, "Handling playback error for $videoId")
@@ -1946,7 +1946,7 @@ class MusicService : MediaLibraryService() {
             startPositionMs,
         ) to saved?.playOrder?.takeIf { it.isNotEmpty() }?.toIntArray()
     }
-    
+
     private inner class LibrarySessionCallback : MediaLibrarySession.Callback {
         /**
          * Media3's stock gesture resolver treats a HEADSETHOOK triple as Next followed by a delayed
@@ -2008,7 +2008,7 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        
+
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                 .add(Player.COMMAND_SET_SHUFFLE_MODE)
@@ -2308,7 +2308,7 @@ class MusicService : MediaLibraryService() {
                     .build()
             }
         }
-        
+
         // --- Browsing Logic (Android Auto / Media Browser) ---
 
         override fun onGetLibraryRoot(
@@ -2672,7 +2672,7 @@ class MusicService : MediaLibraryService() {
             builder.setUri(song.uri)
         }
         return builder.build()
-    
+
     private fun findSongInCache(videoId: String): Song? {
         return (browseSongs.values() + localBrowseSongs.values()).asSequence()
             .flatten().firstOrNull { it.id == videoId }
@@ -3531,7 +3531,7 @@ class MusicService : MediaLibraryService() {
             }
         }
     }
-    
+
     /**
      * Snapshot the active player for the home screen widgets. Main thread only
      * - every caller is already a player callback or the progress loop, both of
