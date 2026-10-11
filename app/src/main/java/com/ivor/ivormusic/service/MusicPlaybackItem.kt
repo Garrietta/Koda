@@ -124,6 +124,12 @@ internal fun MusicQueueItem.toPlaybackMediaItem(): MediaItem {
     // the item would be pushed through YouTube stream resolution and fail.
     if ((song.source == SongSource.LOCAL || song.source == SongSource.PODCAST) && song.uri != null) {
         builder.setUri(song.uri)
+        // Explicit MIME type: podcast MP3s don't have a manifest, and
+        // auto-detection can fail on hosts that don't serve a clean
+        // Content-Type. Most podcast audio is MP3.
+        if (song.source == SongSource.PODCAST) {
+            builder.setMimeType(androidx.media3.common.MimeTypes.AUDIO_MPEG)
+        }
     } else {
         builder.setUri("https://placeholder.ivormusic/${song.id}")
     }
