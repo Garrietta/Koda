@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material.icons.rounded.Palette
@@ -128,6 +129,14 @@ internal fun CustomizationSettingsPage(
                         onClick = { onOpenPage(SettingsPage.MINI_PLAYER) },
                         iconShape = MaterialShapes.Pill.toShape(),
                         explanation = stringResource(R.string.cz_info_mini_player)
+                    )
+                    SettingsHubRow(
+                        icon = Icons.Rounded.Bedtime,
+                        title = stringResource(R.string.standby_title),
+                        value = standbySummary(),
+                        onClick = { onOpenPage(SettingsPage.STANDBY) },
+                        iconShape = MaterialShapes.Arch.toShape(),
+                        explanation = stringResource(R.string.cz_info_standby)
                     )
                     SettingsHubRow(
                         icon = Icons.Rounded.SmartDisplay,
