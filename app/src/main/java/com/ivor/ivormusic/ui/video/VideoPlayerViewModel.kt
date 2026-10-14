@@ -1835,7 +1835,9 @@ class VideoPlayerViewModel(application: android.app.Application) : AndroidViewMo
         sourceRecoveryJob?.cancel()
         sourceRecoveryJob = viewModelScope.launch {
             if (httpResponseCode(original) == 403) {
-                youtubeRepository.refreshVisitorDataAfterPlaybackFailure()
+                youtubeRepository.refreshVisitorDataAfterPlaybackFailure(
+                    com.ivor.ivormusic.data.httpFailureUrl(original),
+                )
             }
             if (!reresolveAndReload(video)) {
                 _playbackError.value = original
@@ -3504,10 +3506,19 @@ class VideoPlayerViewModel(application: android.app.Application) : AndroidViewMo
         return result.copy(qualities = qualities)
     }
 
-    /** One-shot HDR-to-SDR recovery shared by source and decoder failures. */
+    /**
+     * One-shot HDR-to-SDR recovery shared by source and decoder failures.
+     *
+     * Not for a 403. HDR and SDR come from one visionOS response, signed under
+     * one token, so a refused HDR URL means the SDR one beside it is refused
+     * too: reloading it only failed again and spent a second token replacement
+     * on the way. [recoverFromSourceError] re-resolves the whole ladder instead,
+     * and the fallback stays armed for a failure HDR itself causes.
+     */
     private fun fallbackFromHdr(error: PlaybackException): Boolean {
         val failed = _currentQuality.value ?: return false
         if (!failed.isHdr || hdrFallbackUsed) return false
+        if (httpResponseCode(error) == 403) return false
         val fallback = bestSdrFallback(localVideoQualityOptions(_availableQualities.value), failed)
             ?: return false
 
@@ -3518,11 +3529,6 @@ class VideoPlayerViewModel(application: android.app.Application) : AndroidViewMo
             "HDR ${failed.displayLabel} failed; falling back to ${fallback.displayLabel}",
             error,
         )
-        if (httpResponseCode(error) == 403) {
-            viewModelScope.launch {
-                youtubeRepository.refreshVisitorDataAfterPlaybackFailure()
-            }
-        }
         reloadPreservingPosition(fallback)
         return true
     }
