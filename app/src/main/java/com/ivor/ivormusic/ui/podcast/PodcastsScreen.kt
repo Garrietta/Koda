@@ -104,6 +104,17 @@ fun PodcastsScreen(
                     )
                 }
                 else -> {
+                    var sort by remember { mutableStateOf(PodcastSort.Name) }
+                    val sortedFeeds = remember(feeds, sort) {
+                        when (sort) {
+                            PodcastSort.Name -> feeds.sortedBy { it.title.lowercase() }
+                            PodcastSort.MostEpisodes -> feeds.sortedWith(
+                                compareByDescending<PodcastFeed> {
+                                    viewModel.episodeCount(it.id)
+                                }.thenBy { it.title.lowercase() }
+                            )
+                        }
+                    }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -111,7 +122,14 @@ fun PodcastsScreen(
                             bottom = contentPadding.calculateBottomPadding() + 16.dp
                         ),
                     ) {
-                        items(feeds, key = { it.id }) { feed ->
+                        item(key = "podcast_header") {
+                            PodcastSortHeader(
+                                feedCount = feeds.size,
+                                sort = sort,
+                                onSortChange = { sort = it },
+                            )
+                        }
+                        items(sortedFeeds, key = { it.id }) { feed ->
                             val count = viewModel.episodeCount(feed.id)
                             FeedRow(
                                 feed = feed,
@@ -330,4 +348,71 @@ private fun AddPodcastDialog(
             }
         },
     )
+}
+
+/** Sort orders for the Podcasts tab. */
+private enum class PodcastSort {
+    Name, MostEpisodes
+}
+
+/** The count and sort button above the podcast list, matching the Albums tab. */
+@Composable
+private fun PodcastSortHeader(
+    feedCount: Int,
+    sort: PodcastSort,
+    onSortChange: (PodcastSort) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$feedCount podcasts",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        androidx.compose.foundation.layout.Box {
+            androidx.compose.material3.FilledTonalIconButton(
+                onClick = { open = true },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.SwapVert,
+                    contentDescription = "Sort podcasts",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text("Name") },
+                    onClick = { onSortChange(PodcastSort.Name); open = false },
+                    leadingIcon = {
+                        if (sort == PodcastSort.Name) {
+                            Icon(
+                                androidx.compose.material.icons.Icons.Rounded.Check,
+                                contentDescription = null
+                            )
+                        }
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Most episodes") },
+                    onClick = { onSortChange(PodcastSort.MostEpisodes); open = false },
+                    leadingIcon = {
+                        if (sort == PodcastSort.MostEpisodes) {
+                            Icon(
+                                androidx.compose.material.icons.Icons.Rounded.Check,
+                                contentDescription = null
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
 }
