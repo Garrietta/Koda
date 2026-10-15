@@ -170,14 +170,12 @@ fun PodcastsScreen(
         }
 
         // Material 3 FAB, bottom-right, for adding feeds.
+        // Positioned above the bottom nav bar (which is ~80dp tall).
         FloatingActionButton(
             onClick = { showAddDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(
-                    end = 16.dp,
-                    bottom = contentPadding.calculateBottomPadding() + 16.dp
-                ),
+                .padding(end = 16.dp, bottom = 96.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
