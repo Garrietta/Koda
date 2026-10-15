@@ -1332,6 +1332,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeSubscriptionFeedWarmup()
         checkYouTubeConnection()
         observeProfileSwitches()
+        loadCachedLibrary()
+    }
+
+    private val libraryCache = com.ivor.ivormusic.data.LibraryCache(application)
+
+    /**
+     * Load cached library metadata immediately so the Library screen shows
+     * instantly on app open. The fresh YT Music data loads in the background
+     * and updates both the UI and the cache.
+     */
+    private fun loadCachedLibrary() {
+        viewModelScope.launch {
+            val cached = libraryCache.loadCachedLikedSongs()
+            if (cached.isNotEmpty()) {
+                _likedSongs.value = cached
+            }
+        }
     }
 
     /**
@@ -2909,7 +2926,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadLibraryData() {
         try {
-            _likedSongs.value = youtubeRepository.getLikedMusic()
+            val fresh = youtubeRepository.getLikedMusic()
+            _likedSongs.value = fresh
+            libraryCache.saveLikedSongs(fresh)
             _youtubePlaylists.value = youtubeRepository.getUserPlaylists()
             accountLoadedAtMs = System.currentTimeMillis()
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -3321,7 +3340,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     // Update library data
-                    _likedSongs.value = youtubeRepository.getLikedMusic()
+                    val freshLiked = youtubeRepository.getLikedMusic()
+                    _likedSongs.value = freshLiked
+                    libraryCache.saveLikedSongs(freshLiked)
                     _youtubePlaylists.value = youtubeRepository.getUserPlaylists()
                     accountLoadedAtMs = System.currentTimeMillis()
                 } else if (_youtubeSongs.value.isNotEmpty()) {

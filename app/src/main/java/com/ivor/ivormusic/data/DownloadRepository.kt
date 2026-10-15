@@ -694,6 +694,25 @@ class DownloadRepository private constructor(private val context: Context) {
     }
 
     /**
+     * Queue a podcast episode for download. The episode's audio URL is used
+     * directly (no YouTube stream resolution needed).
+     */
+    suspend fun downloadPodcastEpisode(episode: PodcastEpisode, feed: PodcastFeed?) {
+        val song = Song(
+            id = "podcast:${episode.id}",
+            title = episode.title,
+            artist = feed?.title ?: "Podcast",
+            album = feed?.title ?: "Podcast",
+            duration = episode.durationMs,
+            uri = android.net.Uri.parse(episode.audioUrl),
+            thumbnailUrl = episode.artworkUrl,
+            source = SongSource.PODCAST,
+            dateAdded = episode.pubDate.takeIf { it > 0L },
+        )
+        enqueue(listOf(song.toRequest()))
+    }
+
+    /**
      * Queue a whole playlist. Songs already downloaded or already queued are
      * skipped, so re-running this over a partially downloaded playlist only
      * fetches what is missing. Device-local originals are already offline and
