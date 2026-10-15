@@ -1327,6 +1327,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var videoFeedLoadedAtMs = 0L
     private var shortsFeedLoadedAtMs = 0L
 
+    private val libraryCache = com.ivor.ivormusic.data.LibraryCache(application)
+
     init {
         observeLocalVideoHistory()
         observeSubscriptionFeedWarmup()
@@ -1334,8 +1336,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeProfileSwitches()
         loadCachedLibrary()
     }
-
-    private val libraryCache = com.ivor.ivormusic.data.LibraryCache(application)
 
     /**
      * Load cached library metadata immediately so the Library screen shows
