@@ -72,11 +72,13 @@ fun PodcastsScreen(
     var feedMenuFor by remember { mutableStateOf<String?>(null) }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = contentPadding.calculateTopPadding())
+        ) {
             if (showTitle) {
                 Text(
                     text = stringResource(R.string.podcasts_title),
@@ -105,7 +107,9 @@ fun PodcastsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 16.dp),
+                        contentPadding = PaddingValues(
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp
+                        ),
                     ) {
                         items(feeds, key = { it.id }) { feed ->
                             val count = viewModel.episodeCount(feed.id)
@@ -153,7 +157,10 @@ fun PodcastsScreen(
             onClick = { showAddDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 16.dp),
+                .padding(
+                    end = 16.dp,
+                    bottom = contentPadding.calculateBottomPadding() + 16.dp
+                ),
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
