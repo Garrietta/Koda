@@ -75,9 +75,7 @@ fun PodcastsScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = contentPadding.calculateTopPadding())
+            modifier = Modifier.fillMaxSize()
         ) {
             if (showTitle) {
                 Text(
@@ -119,6 +117,7 @@ fun PodcastsScreen(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
+                            top = 8.dp,
                             bottom = contentPadding.calculateBottomPadding() + 16.dp
                         ),
                     ) {
