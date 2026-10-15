@@ -65,6 +65,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val localRepository = SongRepository(application)
     private val youtubeRepository = YouTubeRepository(application)
     private val playlistRepository = com.ivor.ivormusic.data.PlaylistRepository(application)
+    private val podcastRepository = com.ivor.ivormusic.data.PodcastRepository(application)
     private val sessionManager = SessionManager(application)
     private val searchHistoryRepository = com.ivor.ivormusic.data.SearchHistoryRepository(application)
     private val recommendationEngine = com.ivor.ivormusic.data.RecommendationEngine(application, youtubeRepository)
@@ -807,18 +808,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val recents = mutableListOf<Song>()
             for (entry in history) {
                 if (!seen.add(entry.songId)) continue
-                val song = if (entry.source == com.ivor.ivormusic.data.SongSource.LOCAL) {
-                    // Local files need a playable URI — resolve from the scanned library
-                    localSongs.find { it.id == entry.songId }
-                } else {
-                    Song.fromYouTube(
-                        videoId = entry.songId,
-                        title = entry.title,
-                        artist = entry.artist,
-                        album = entry.album,
-                        duration = entry.duration,
-                        thumbnailUrl = entry.thumbnailUrl
-                    )
+                val song = when (entry.source) {
+                    com.ivor.ivormusic.data.SongSource.LOCAL -> {
+                        // Local files need a playable URI — resolve from the scanned library
+                        localSongs.find { it.id == entry.songId }
+                    }
+                    com.ivor.ivormusic.data.SongSource.PODCAST -> {
+                        // Podcasts need their RSS audio URL — resolve from the feed
+                        val episodeId = entry.songId.removePrefix("podcast:")
+                        val allEpisodes = podcastRepository.episodesByFeed.value.values.flatten()
+                        val episode = allEpisodes.find { it.id == episodeId }
+                        val feed = episode?.let { ep ->
+                            podcastRepository.feeds.value.find { it.id == ep.feedId }
+                        }
+                        episode?.let { podcastRepository.episodeToSong(it, feed) }
+                    }
+                    else -> {
+                        Song.fromYouTube(
+                            videoId = entry.songId,
+                            title = entry.title,
+                            artist = entry.artist,
+                            album = entry.album,
+                            duration = entry.duration,
+                            thumbnailUrl = entry.thumbnailUrl
+                        )
+                    }
                 }
                 if (song != null) recents.add(song)
                 if (recents.size >= limit) break
