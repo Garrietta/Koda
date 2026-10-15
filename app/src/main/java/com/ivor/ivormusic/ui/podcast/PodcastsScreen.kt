@@ -105,7 +105,7 @@ fun PodcastsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp),
                     ) {
                         items(feeds, key = { it.id }) { feed ->
                             val count = viewModel.episodeCount(feed.id)
