@@ -48,6 +48,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.lazy.grid.items
+import GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import LazyVerticalGrid
+import GridCells
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.SwapVert
 import coil.compose.AsyncImage
 import com.ivor.ivormusic.R
 import com.ivor.ivormusic.data.PodcastFeed
@@ -113,8 +123,8 @@ fun PodcastsScreen(
                             )
                         }
                     }
-                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 160.dp),
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 160.dp),
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
@@ -128,7 +138,7 @@ fun PodcastsScreen(
                     ) {
                         item(
                             key = "podcast_header",
-                            span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
+                            span = { GridItemSpan(maxLineSpan) }
                         ) {
                             PodcastSortHeader(
                                 feedCount = feeds.size,
@@ -379,7 +389,7 @@ private fun PodcastSortHeader(
                 modifier = Modifier.size(40.dp),
             ) {
                 Icon(
-                    androidx.compose.material.icons.Icons.Rounded.Add,
+                    Icons.Rounded.Add,
                     contentDescription = stringResource(R.string.podcast_add),
                     modifier = Modifier.size(20.dp)
                 )
@@ -390,7 +400,7 @@ private fun PodcastSortHeader(
                 modifier = Modifier.size(40.dp),
             ) {
                 Icon(
-                    androidx.compose.material.icons.Icons.Rounded.SwapVert,
+                    Icons.Rounded.SwapVert,
                     contentDescription = "Sort podcasts",
                     modifier = Modifier.size(20.dp)
                 )
@@ -402,7 +412,7 @@ private fun PodcastSortHeader(
                     leadingIcon = {
                         if (sort == PodcastSort.Name) {
                             Icon(
-                                androidx.compose.material.icons.Icons.Rounded.Check,
+                                Icons.Rounded.Check,
                                 contentDescription = null
                             )
                         }
@@ -414,7 +424,7 @@ private fun PodcastSortHeader(
                     leadingIcon = {
                         if (sort == PodcastSort.MostEpisodes) {
                             Icon(
-                                androidx.compose.material.icons.Icons.Rounded.Check,
+                                Icons.Rounded.Check,
                                 contentDescription = null
                             )
                         }
