@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 class PodcastsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PodcastRepository(application)
+    private val downloadRepository = com.ivor.ivormusic.data.DownloadRepository.getInstance(application)
 
     val feeds: StateFlow<List<PodcastFeed>> = repository.feeds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -81,6 +82,10 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
 
     fun removeFeed(feedId: String) {
         viewModelScope.launch { repository.removeFeed(feedId) }
+    }
+
+    fun downloadEpisode(episode: com.ivor.ivormusic.data.PodcastEpisode, feed: com.ivor.ivormusic.data.PodcastFeed?) {
+        viewModelScope.launch { downloadRepository.downloadPodcastEpisode(episode, feed) }
     }
 
     sealed interface AddFeedState {
