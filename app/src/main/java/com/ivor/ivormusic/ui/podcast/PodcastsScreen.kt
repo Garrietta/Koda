@@ -126,6 +126,7 @@ fun PodcastsScreen(
                                 feedCount = feeds.size,
                                 sort = sort,
                                 onSortChange = { sort = it },
+                                onAddClick = { showAddDialog = true },
                             )
                         }
                         items(sortedFeeds, key = { it.id }) { feed ->
@@ -169,19 +170,6 @@ fun PodcastsScreen(
             }
         }
 
-        // Material 3 FAB, bottom-right, for adding feeds.
-        // Positioned above the bottom nav bar (which is ~80dp tall).
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 96.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = stringResource(R.string.podcast_add),
-            )
-        }
     }
 
     if (showAddDialog) {
@@ -358,6 +346,7 @@ private fun PodcastSortHeader(
     feedCount: Int,
     sort: PodcastSort,
     onSortChange: (PodcastSort) -> Unit,
+    onAddClick: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.Row(
@@ -373,7 +362,21 @@ private fun PodcastSortHeader(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
-        androidx.compose.foundation.layout.Box {
+        androidx.compose.foundation.layout.Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.FilledTonalIconButton(
+                onClick = onAddClick,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.Add,
+                    contentDescription = stringResource(R.string.podcast_add),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            androidx.compose.foundation.layout.Box {
             androidx.compose.material3.FilledTonalIconButton(
                 onClick = { open = true },
                 modifier = Modifier.size(40.dp),
@@ -409,6 +412,7 @@ private fun PodcastSortHeader(
                         }
                     }
                 )
+            }
             }
         }
     }
