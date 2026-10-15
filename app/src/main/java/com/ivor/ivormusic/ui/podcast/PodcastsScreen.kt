@@ -49,12 +49,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.lazy.grid.items
-import GridItemSpan
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import LazyVerticalGrid
-import GridCells
-import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.SwapVert
@@ -71,7 +70,7 @@ import com.ivor.ivormusic.data.PodcastFeed
 fun PodcastsScreen(
     onFeedClick: (PodcastFeed) -> Unit,
     contentPadding: PaddingValues,
-    listState: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+    listState: LazyGridState = rememberLazyGridState(),
     showTitle: Boolean = true,
     viewModel: PodcastsViewModel = viewModel(),
 ) {
@@ -389,7 +388,7 @@ private fun PodcastSortHeader(
                 modifier = Modifier.size(40.dp),
             ) {
                 Icon(
-                    Icons.Rounded.Add,
+                    Add,
                     contentDescription = stringResource(R.string.podcast_add),
                     modifier = Modifier.size(20.dp)
                 )
@@ -400,7 +399,7 @@ private fun PodcastSortHeader(
                 modifier = Modifier.size(40.dp),
             ) {
                 Icon(
-                    Icons.Rounded.SwapVert,
+                    SwapVert,
                     contentDescription = "Sort podcasts",
                     modifier = Modifier.size(20.dp)
                 )
@@ -412,7 +411,7 @@ private fun PodcastSortHeader(
                     leadingIcon = {
                         if (sort == PodcastSort.Name) {
                             Icon(
-                                Icons.Rounded.Check,
+                                Check,
                                 contentDescription = null
                             )
                         }
@@ -424,7 +423,7 @@ private fun PodcastSortHeader(
                     leadingIcon = {
                         if (sort == PodcastSort.MostEpisodes) {
                             Icon(
-                                Icons.Rounded.Check,
+                                Check,
                                 contentDescription = null
                             )
                         }
