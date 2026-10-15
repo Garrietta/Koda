@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -256,6 +257,7 @@ fun PodcastDetailScreen(
                 onClick = {
                     if (song != null) onPlayQueue(songs, song)
                 },
+                onDownloadClick = { viewModel.downloadEpisode(episode, feed) },
             )
         }
     }
@@ -265,6 +267,7 @@ fun PodcastDetailScreen(
 private fun EpisodeDetailRow(
     episode: PodcastEpisode,
     onClick: () -> Unit,
+    onDownloadClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -322,6 +325,13 @@ private fun EpisodeDetailRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        androidx.compose.material3.IconButton(onClick = onDownloadClick) {
+            Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = stringResource(R.string.cd_downloads),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
