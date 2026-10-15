@@ -61,7 +61,7 @@ import com.ivor.ivormusic.data.PodcastFeed
 fun PodcastsScreen(
     onFeedClick: (PodcastFeed) -> Unit,
     contentPadding: PaddingValues,
-    listState: LazyListState,
+    listState: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
     showTitle: Boolean = true,
     viewModel: PodcastsViewModel = viewModel(),
 ) {
@@ -113,15 +113,23 @@ fun PodcastsScreen(
                             )
                         }
                     }
-                    LazyColumn(
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 160.dp),
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             top = 8.dp,
-                            bottom = contentPadding.calculateBottomPadding() + 16.dp
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                            start = 16.dp,
+                            end = 16.dp
                         ),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
                     ) {
-                        item(key = "podcast_header") {
+                        item(
+                            key = "podcast_header",
+                            span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
+                        ) {
                             PodcastSortHeader(
                                 feedCount = feeds.size,
                                 sort = sort,
@@ -131,7 +139,7 @@ fun PodcastsScreen(
                         }
                         items(sortedFeeds, key = { it.id }) { feed ->
                             val count = viewModel.episodeCount(feed.id)
-                            FeedRow(
+                            PodcastGridCard(
                                 feed = feed,
                                 episodeCount = count,
                                 onClick = { onFeedClick(feed) },
@@ -415,5 +423,67 @@ private fun PodcastSortHeader(
             }
             }
         }
+    }
+}
+
+/**
+ * A podcast in the grid, styled like an album card: square artwork,
+ * podcast name below (like album title), episode count below that
+ * (like artist name).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PodcastGridCard(
+    feed: PodcastFeed,
+    episodeCount: Int,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+    ) {
+        if (feed.artworkUrl != null) {
+            AsyncImage(
+                model = feed.artworkUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(24.dp)),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = feed.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = "$episodeCount episodes",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

@@ -1134,7 +1134,6 @@ fun LibraryMainScreen(
                         com.ivor.ivormusic.ui.podcast.PodcastsScreen(
                             onFeedClick = onNavigateToPodcast,
                             contentPadding = contentPadding,
-                            listState = rememberLazyListState(),
                             showTitle = false,
                         )
                     }
