@@ -435,9 +435,11 @@ fun ExpandablePlayer(
                         )
                     }
                 }
-                .pointerInput(isExpanded) {
-                    if (isExpanded) {
-                        // Expanded: Only handle vertical drag for collapse
+                .pointerInput(isExpanded, nowPlayingOptionsOpen.value) {
+                    if (isExpanded && !nowPlayingOptionsOpen.value) {
+                        // Expanded: Only handle vertical drag for collapse.
+                        // Disabled while the options sheet is open so its
+                        // swipe-to-dismiss doesn't fight the player.
                         detectVerticalDragGestures(
                             onDragStart = { verticalDragOffset = 0f },
                             onDragEnd = {
