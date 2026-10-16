@@ -126,7 +126,7 @@ private fun PixelContent(ui: PlayerWidgetUi) {
                         if (playing) R.string.widget_action_pause else R.string.widget_action_play
                     )
                 }
-                .clickable(widgetTransportAction(WidgetActionActivity.ACTION_TOGGLE)),
+                .clickable(widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_TOGGLE)),
             contentAlignment = Alignment.Center,
         ) {
             PixelLayer(R.drawable.px_deck, colors.surfaceVariant)
@@ -178,13 +178,13 @@ private fun PixelContent(ui: PlayerWidgetUi) {
                         width = unit * 11,
                         height = unit * 9,
                         description = widgetString(R.string.widget_action_previous),
-                        action = widgetTransportAction(WidgetActionActivity.ACTION_PREVIOUS),
+                        action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_PREVIOUS),
                     )
                     PixelTapTarget(
                         width = unit * 10,
                         height = unit * 9,
                         description = widgetString(R.string.widget_action_next),
-                        action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
+                        action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_NEXT),
                     )
                 }
             }

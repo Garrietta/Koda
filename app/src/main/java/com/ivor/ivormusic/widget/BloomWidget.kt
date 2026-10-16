@@ -6,21 +6,37 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
+import androidx.glance.LocalContext
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalContext
 import androidx.glance.GlanceTheme
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.LocalContext
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.LocalContext
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.LocalContext
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.LocalContext
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.LocalContext
 import androidx.glance.appwidget.provideContent
+import androidx.glance.LocalContext
 import androidx.glance.layout.Alignment
+import androidx.glance.LocalContext
 import androidx.glance.layout.Box
+import androidx.glance.LocalContext
 import androidx.glance.layout.Row
+import androidx.glance.LocalContext
 import androidx.glance.layout.Spacer
+import androidx.glance.LocalContext
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.LocalContext
 import androidx.glance.layout.padding
+import androidx.glance.LocalContext
 import androidx.glance.layout.width
+import androidx.glance.LocalContext
 import com.ivor.ivormusic.R
 
 /**
@@ -93,7 +109,7 @@ private fun BloomContent(ui: PlayerWidgetUi) {
                 WidgetSquareButton(
                     iconRes = R.drawable.ic_media_next,
                     description = widgetString(R.string.widget_action_next),
-                    action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
+                    action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_NEXT),
                     size = side,
                 )
             }

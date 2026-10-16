@@ -162,7 +162,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                 WidgetSquareButton(
                     iconRes = R.drawable.ic_media_next,
                     description = widgetString(R.string.widget_action_next),
-                    action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
+                    action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_NEXT),
                     size = side,
                 )
             }
@@ -221,7 +221,7 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
                     if (playing) R.string.widget_action_pause else R.string.widget_action_play
                 )
             }
-            .clickable(widgetTransportAction(WidgetActionActivity.ACTION_TOGGLE)),
+            .clickable(widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_TOGGLE)),
         contentAlignment = Alignment.Center,
     ) {
         VinylLayer(R.drawable.vinyl_disc, recordColor())
