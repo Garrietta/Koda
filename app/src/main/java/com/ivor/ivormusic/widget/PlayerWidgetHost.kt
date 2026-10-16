@@ -79,7 +79,8 @@ internal object PlayerWidgetHost {
             val snapshot = stored ?: withController(context) { it.toSnapshot() }
             if (snapshot != null) {
                 if (stored == null) PlayerWidgetStore.write(context, snapshot)
-                _state.value = PlayerWidgetUi(snapshot, loadArtwork(context, snapshot))
+                val art = loadArtwork(context, snapshot)
+                _state.value = PlayerWidgetUi(snapshot, art, extractAccent(art))
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
