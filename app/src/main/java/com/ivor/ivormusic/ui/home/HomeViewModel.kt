@@ -840,6 +840,106 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _recentlyPlayed.value = recents
         }
 
+    /**
+     * The last [limit] played songs, newest first, excluding podcasts. Used
+     * as the AI DJ's instant-mix seed: what the listener has actually been
+     * reaching for lately.
+     */
+    // --- Explore tab discovery ---
+    /** Recent tracks from the listener's most-liked artists. */
+    private val _exploreNewFromLiked = MutableStateFlow<List<Song>>(emptyList())
+    val exploreNewFromLiked: StateFlow<List<Song>> = _exploreNewFromLiked.asStateFlow()
+
+    /** Subgenre shelves ("Because you like Conscious Rap"). */
+    private val _exploreSubgenreShelves = MutableStateFlow<List<SubgenreShelf>>(emptyList())
+    val exploreSubgenreShelves: StateFlow<List<SubgenreShelf>> = _exploreSubgenreShelves.asStateFlow()
+
+    private var exploreDiscoveryLoaded = false
+
+    /**
+     * Load Explore discovery content: new tracks by liked artists, plus
+     * subgenre shelves with similar artists. Runs once per process; the
+     * AI-powered shelves need a Google AI key and fail silently without one.
+     */
+    fun loadExploreDiscovery() {
+        if (exploreDiscoveryLoaded) return
+        exploreDiscoveryLoaded = true
+        viewModelScope.launch {
+            val likedArtists = likedSongs.value
+                .groupingBy { it.artist }
+                .eachCount()
+                .toList()
+                .sortedByDescending { it.second }
+                .take(8)
+                .map { it.first }
+                .filter { it.isNotBlank() }
+            if (likedArtists.isEmpty()) return@launch
+
+            // New tracks by liked artists.
+            val fresh = mutableListOf<Song>()
+            for (artist in likedArtists.take(5)) {
+                try {
+                    val match = youtubeRepository.searchArtists(artist).firstOrNull()
+                        ?: continue
+                    val page = youtubeRepository.getArtistPage(match.id)
+                    fresh += page?.songs.orEmpty().take(4)
+                } catch (_: Exception) { }
+            }
+            _exploreNewFromLiked.value = fresh.distinctBy { it.id }.take(20)
+
+            // Subgenre shelves via the DJ's AI.
+            val aiDj = com.ivor.ivormusic.data.AiDjRepository(getApplication())
+            aiDj.suggestSubgenres(likedArtists).fold(
+                onSuccess = { suggestions ->
+                    val shelves = mutableListOf<SubgenreShelf>()
+                    for (suggestion in suggestions.take(3)) {
+                        val songs = mutableListOf<Song>()
+                        for (artist in suggestion.artists.take(3)) {
+                            try {
+                                songs += youtubeRepository.search(artist).take(3)
+                            } catch (_: Exception) { }
+                        }
+                        if (songs.isNotEmpty()) {
+                            shelves += SubgenreShelf(
+                                subgenre = suggestion.subgenre,
+                                basedOn = suggestion.basedOn,
+                                songs = songs.distinctBy { it.id }.take(9),
+                            )
+                        }
+                    }
+                    _exploreSubgenreShelves.value = shelves
+                },
+                onFailure = { /* No key or AI error: shelves stay empty. */ },
+            )
+        }
+    }
+
+    suspend fun getLastPlayedSongs(limit: Int = 30): List<Song> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val localSongs = _songs.value
+            val seen = mutableSetOf<String>()
+            val recents = mutableListOf<Song>()
+            for (entry in statsRepository.loadHistory()) {
+                if (entry.source == com.ivor.ivormusic.data.SongSource.PODCAST) continue
+                if (!seen.add(entry.songId)) continue
+                val song = when (entry.source) {
+                    com.ivor.ivormusic.data.SongSource.LOCAL ->
+                        localSongs.find { it.id == entry.songId }
+                    else -> Song.fromYouTube(
+                        videoId = entry.songId,
+                        title = entry.title,
+                        artist = entry.artist,
+                        album = entry.album,
+                        duration = entry.duration,
+                        thumbnailUrl = entry.thumbnailUrl
+                    )
+                }
+                if (song != null) recents.add(song)
+                if (recents.size >= limit) break
+            }
+            recents
+        }
+
     // Video Mode State
     /**
      * Raw feed as fetched. Everything user-facing reads [trendingVideos]

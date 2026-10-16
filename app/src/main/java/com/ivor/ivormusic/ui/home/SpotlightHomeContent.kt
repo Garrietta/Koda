@@ -39,6 +39,7 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -114,8 +115,10 @@ fun SpotlightHomeContent(
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onOpenLiked: () -> Unit = {},
     onShowAllInLibrary: () -> Unit = {},
-    /** Open the AI DJ, from the DJ card at the top of Home. */
-    onOpenAiDj: () -> Unit = {},
+    /** One press starts the DJ's instant mix; no generation page. */
+    onInstantDj: () -> Unit = {},
+    /** True while the instant mix is being generated. */
+    djLoading: Boolean = false,
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
     onProfileClick: () -> Unit,
@@ -215,9 +218,12 @@ fun SpotlightHomeContent(
                 SpotlightFilterChips(selected = filter, onSelect = { filter = it })
             }
 
-            // The AI DJ sits at the top of Home: one tap to a generated mix.
+            // The AI DJ sits at the top of Home: one tap starts the mix.
             item(key = "ai_dj_card") {
-                AiDjHomeCard(onClick = onOpenAiDj)
+                AiDjHomeCard(
+                    onClick = onInstantDj,
+                    loading = djLoading,
+                )
             }
 
             // The shortcut grid only makes sense unfiltered - a two-column grid
@@ -1158,14 +1164,20 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
 }
 
 /**
- * The AI DJ card at the top of Home: a single tap opens the DJ screen.
+ * The AI DJ card at the top of Home: one tap starts the instant mix.
+ * Same width as the rest of the page, with the DJ's abstract logo.
  */
 @Composable
-private fun AiDjHomeCard(onClick: () -> Unit) {
+private fun AiDjHomeCard(
+    onClick: () -> Unit,
+    loading: Boolean,
+) {
     Card(
         onClick = onClick,
+        enabled = !loading,
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 20.dp)
             .padding(top = 4.dp),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
@@ -1176,11 +1188,13 @@ private fun AiDjHomeCard(onClick: () -> Unit) {
             modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Rounded.AutoAwesome,
+            AsyncImage(
+                model = R.drawable.dj_logo,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop,
             )
             Spacer(Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1191,16 +1205,25 @@ private fun AiDjHomeCard(onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
                 Text(
-                    stringResource(R.string.aidj_home_card_sub),
+                    if (loading) stringResource(R.string.aidj_home_card_loading)
+                    else stringResource(R.string.aidj_home_card_sub),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
                 )
             }
-            Icon(
-                Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-            )
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    strokeWidth = 3.dp,
+                )
+            } else {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
         }
     }
 }

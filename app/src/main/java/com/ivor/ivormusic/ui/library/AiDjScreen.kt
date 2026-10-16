@@ -121,9 +121,8 @@ fun AiDjScreen(
     }
 
     /**
-     * Build the playback queue for [mix]: with DJ voice on, each song is
-     * preceded by its synthesized spoken intro. Falls back to songs-only if
-     * synthesis fails.
+     * Build the playback queue for [mix]: with DJ voice on, tracks carrying
+     * a transition line are preceded by its synthesized spoken intro.
      */
     fun playMix(mix: AiDjMix) {
         if (preparingVoice) return
@@ -136,32 +135,8 @@ fun AiDjScreen(
         error = null
         scope.launch {
             try {
-                val voiceDir = File(context.cacheDir, "dj_voice").apply { mkdirs() }
-                val mixKey = mix.title.hashCode().toString(36) + mix.tracks.size
-                val queue = mutableListOf<Song>()
-                mix.tracks.forEachIndexed { index, track ->
-                    val line = track.djLine?.takeIf { it.isNotBlank() }
-                        ?: "Up next: ${track.song.title} by ${track.song.artist}."
-                    val file = File(voiceDir, "intro_${mixKey}_$index.mp3")
-                    val synthesized = if (file.exists() && file.length() > 0) {
-                        true
-                    } else {
-                        voiceRepository.synthesize(line, file)
-                    }
-                    if (synthesized) {
-                        queue += Song(
-                            id = "${StatsRepository.DJ_INTRO_ID_PREFIX}${mixKey}_$index",
-                            title = context.getString(R.string.aidj_voice_intro_title),
-                            artist = line,
-                            album = mix.title,
-                            duration = 0L,
-                            uri = Uri.fromFile(file),
-                            source = SongSource.LOCAL,
-                            filePath = file.absolutePath,
-                        )
-                    }
-                    queue += track.song
-                    voiceProgress = (index + 1).toFloat() / mix.tracks.size
+                val queue = voiceRepository.buildQueueWithIntros(mix) { progress ->
+                    voiceProgress = progress
                 }
                 onPlayQueue(queue, queue.firstOrNull())
             } finally {

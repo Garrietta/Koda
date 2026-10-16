@@ -208,6 +208,16 @@ private val MINI_BUBBLE_EXPAND_SCROLL = 200.dp
 private data class HomeTabKey(val tab: Int, val videoMode: Boolean)
 
 /**
+ * Music-mode tab indices. Explore sits left of Search; Library is last.
+ * Video mode has its own numbering (VideoHomeDestination.tabId) sharing the
+ * same Int space — the mode-switch guard below maps between them.
+ */
+private const val TAB_HOME = 0
+private const val TAB_EXPLORE = 1
+private const val TAB_SEARCH = 2
+private const val TAB_LIBRARY = 3
+
+/**
  * The widest the collapsed music pill grows beside a rail. Past this it stops
  * reading as a pill and starts reading as a banner, so on a tablet it centres
  * over the page instead of spanning it.
@@ -439,7 +449,7 @@ fun HomeScreen(
     val visualTabOrder = if (videoMode) {
         videoHomeConfiguration.destinationOrder.map(VideoHomeDestination::tabId)
     } else {
-        listOf(0, 1, 2, 3)
+        listOf(TAB_HOME, TAB_EXPLORE, TAB_SEARCH, TAB_LIBRARY)
     }
 
     // A destination can be hidden while it is selected (including from the
@@ -525,11 +535,11 @@ fun HomeScreen(
 
     // Which of the above the visible tab is currently driving.
     val currentTabScrollState = when (selectedTab) {
-        0 -> if (videoMode) videoHomeScrollState else musicHomeScrollState
-        1 -> if (videoMode) videoSearchScrollState else musicSearchScrollState
-        2 -> if (videoMode) subscriptionsScrollState else musicLibraryScrollState
-        3 -> if (videoMode) videoLibraryScrollState else exploreScrollState
-        else -> videoLibraryScrollState
+        TAB_HOME -> if (videoMode) videoHomeScrollState else musicHomeScrollState
+        TAB_EXPLORE -> if (videoMode) videoSearchScrollState else exploreScrollState
+        TAB_SEARCH -> if (videoMode) videoSearchScrollState else musicSearchScrollState
+        TAB_LIBRARY -> if (videoMode) subscriptionsScrollState else musicLibraryScrollState
+        else -> if (videoMode) videoLibraryScrollState else musicLibraryScrollState
     }
 
     // Lives outside the mode-swapped content so the thumb keeps animating
@@ -561,16 +571,30 @@ fun HomeScreen(
         selectedTab = rootTab
     }
 
-    // Tab 3 means different things per mode: Explore in music, Library in
-    // video. The Subscriptions tab (2) only exists in video mode.
+    // Load Explore discovery content the first time the tab opens.
+    LaunchedEffect(selectedTab, videoMode) {
+        if (!videoMode && selectedTab == TAB_EXPLORE) {
+            viewModel.loadExploreDiscovery()
+        }
+    }
+
+    // The tab indices mean different things per mode (music: 0 Home, 1 Explore,
+    // 2 Search, 3 Library; video: 0 Home, 1 Search, 2 Subscriptions, 3 Library).
     LaunchedEffect(videoMode) {
         if (videoMode) {
-            // Was music: Explore has no video equivalent.
-            if (selectedTab == 3) selectedTab = videoRootTab
+            // Was music: Search -> video Search, Explore -> Home (no equivalent).
+            selectedTab = when (selectedTab) {
+                TAB_SEARCH -> VideoHomeDestination.SEARCH.tabId
+                TAB_EXPLORE -> videoRootTab
+                else -> selectedTab
+            }
         } else {
-            // Was video: Library (3) -> music Library (2), Subscriptions (2) -> Home.
-            if (selectedTab == 3) selectedTab = 2
-            else if (selectedTab == 2) selectedTab = 0
+            // Was video: Search -> music Search, Subscriptions -> Home.
+            selectedTab = when (selectedTab) {
+                VideoHomeDestination.SEARCH.tabId -> TAB_SEARCH
+                VideoHomeDestination.SUBSCRIPTIONS.tabId -> TAB_HOME
+                else -> selectedTab
+            }
         }
     }
 
@@ -636,7 +660,7 @@ fun HomeScreen(
             // Asking for it is therefore asking to be in music mode.
             noteLibraryReturn()
             viewedArtistFromPlayer = artist
-            goToTab(2)
+            goToTab(TAB_LIBRARY)
             viewModel.consumeArtistPageRequest()
         }
     }
@@ -654,6 +678,48 @@ fun HomeScreen(
     // LibraryContent on arrival like the playlist hand-off above.
     var openAiDjFromHome by remember { mutableStateOf(false) }
 
+    // The one-press DJ: tap the Home card and a 60-song mix starts playing,
+    // with spoken transitions only at notable mood shifts. Failures fall back
+    // to the DJ screen, which explains what went wrong.
+    var djInstantLoading by remember { mutableStateOf(false) }
+    val djContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    fun startInstantDj() {
+        if (djInstantLoading) return
+        djInstantLoading = true
+        scope.launch {
+            try {
+                val repository = com.ivor.ivormusic.data.AiDjRepository(djContext)
+                val voiceRepository = com.ivor.ivormusic.data.DjVoiceRepository(djContext)
+                val recent = viewModel.getLastPlayedSongs(30)
+                val liked = viewModel.likedSongs.value
+                repository.generateInstantMix(recent, liked).fold(
+                    onSuccess = { mix ->
+                        val queue = if (repository.djVoiceEnabled.value) {
+                            voiceRepository.buildQueueWithIntros(mix)
+                        } else {
+                            mix.tracks.map { it.song }
+                        }
+                        if (queue.isNotEmpty()) {
+                            playerViewModel.playQueue(queue, queue.first())
+                            showPlayerSheet = true
+                        } else {
+                            noteLibraryReturn()
+                            openAiDjFromHome = true
+                            goToTab(3)
+                        }
+                    },
+                    onFailure = {
+                        noteLibraryReturn()
+                        openAiDjFromHome = true
+                        goToTab(3)
+                    },
+                )
+            } finally {
+                djInstantLoading = false
+            }
+        }
+    }
+
     // A playlist link shared or opened into the app, which lands at
     // MainActivity and cannot reach the tab state from there. Same hand-off as
     // pendingArtistPage, and it sets the mode for the same reason: the Library
@@ -665,7 +731,7 @@ fun HomeScreen(
         pendingPlaylistPage?.let { playlist ->
             noteLibraryReturn()
             viewedPlaylistFromHome = playlist
-            goToTab(2)
+            goToTab(TAB_LIBRARY)
             viewModel.consumePlaylistPageRequest()
         }
     }
@@ -673,7 +739,7 @@ fun HomeScreen(
     // consumes the request, so all this has to do is get to the music Library.
     val pendingSpotifyImport by viewModel.pendingSpotifyImport.collectAsState()
     LaunchedEffect(pendingSpotifyImport) {
-        if (pendingSpotifyImport != null) goToTab(2)
+        if (pendingSpotifyImport != null) goToTab(TAB_LIBRARY)
     }
     val pendingVideoPlaylistPage by viewModel.pendingVideoPlaylistPage.collectAsState()
     LaunchedEffect(pendingVideoPlaylistPage) {
@@ -980,7 +1046,7 @@ fun HomeScreen(
     val gestureTabIds = if (videoMode) {
         videoHomeConfiguration.orderedVisibleDestinations.map { it.tabId }
     } else {
-        listOf(0, 1, 2, 3)
+        listOf(TAB_HOME, TAB_EXPLORE, TAB_SEARCH, TAB_LIBRARY)
     }
     val flickToTab: (towardNext: Boolean) -> Unit = { towardNext ->
         val index = gestureTabIds.indexOf(selectedTab)
@@ -1133,6 +1199,17 @@ fun HomeScreen(
                 }
             ) { tabKey ->
                 val targetTab = tabKey.tab
+                // The bottom bar was reordered to Home, Explore, Search, Library,
+                // but the content branches below predate that and use the original
+                // order (0 Home, 1 Search, 2 Library, 3 Explore). Translate the
+                // music-mode index here rather than churning the branches; video
+                // mode has its own numbering and passes through untouched.
+                val contentTab = if (tabKey.videoMode) targetTab else when (targetTab) {
+                    TAB_EXPLORE -> 3
+                    TAB_SEARCH -> 1
+                    TAB_LIBRARY -> 2
+                    else -> targetTab
+                }
                 // Each page draws the mode it was keyed on, never the live one.
                 // A mode switch keeps the page being left composed until its
                 // fade ends; reading the live mode there made it rebuild itself
@@ -1145,7 +1222,7 @@ fun HomeScreen(
                 // [scar October 2026, read out of a heap dump of a stuck Home]
                 @Suppress("NAME_SHADOWING")
                 val videoMode = tabKey.videoMode
-                when (targetTab) {
+                when (contentTab) {
                     0 -> {
                         videoMode.let { videoModeContent ->
                             // Video Mode: Show video content
@@ -1252,15 +1329,12 @@ fun HomeScreen(
                                                 onPlaylistClick = { playlist ->
                                                     noteLibraryReturn()
                                                     viewedPlaylistFromHome = playlist
-                                                    selectedTab = 2
+                                                    selectedTab = TAB_LIBRARY
                                                 },
-                                                onOpenLiked = { selectedTab = 2 },
-                                                onShowAllInLibrary = { selectedTab = 2 },
-                                                onOpenAiDj = {
-                                                    noteLibraryReturn()
-                                                    openAiDjFromHome = true
-                                                    goToTab(2)
-                                                },
+                                                onOpenLiked = { selectedTab = TAB_LIBRARY },
+                                                onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
+                                                onInstantDj = { startInstantDj() },
+                                                djLoading = djInstantLoading,
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
@@ -1311,7 +1385,7 @@ fun HomeScreen(
                                                     viewedPlaylistFromHome = com.ivor.ivormusic.data.PlaylistDisplayItem(
                                                         context.getString(R.string.liked_songs), "LM", "You", classicLiked.size, null
                                                     )
-                                                    selectedTab = 2
+                                                    selectedTab = TAB_LIBRARY
                                                 },
                                                 topArtists = classicTopArtists,
                                                 artistPhotos = classicArtistPhotos,
@@ -1329,7 +1403,7 @@ fun HomeScreen(
                                                     if (album.source == com.ivor.ivormusic.data.SongSource.LOCAL) {
                                                         noteLibraryReturn()
                                                         viewedAlbumFromPlayer = album.title
-                                                        selectedTab = 2
+                                                        selectedTab = TAB_LIBRARY
                                                         return@YourMixContent
                                                     }
                                                     scope.launch {
@@ -1341,7 +1415,7 @@ fun HomeScreen(
                                                         if (page != null) {
                                                             noteLibraryReturn()
                                                             viewedPlaylistFromHome = page
-                                                            selectedTab = 2
+                                                            selectedTab = TAB_LIBRARY
                                                         } else {
                                                             val queue = viewModel.recentAlbumQueue(album)
                                                             if (queue.isNotEmpty()) {
@@ -1359,7 +1433,7 @@ fun HomeScreen(
                                                 onPlaylistClick = { playlist ->
                                                     noteLibraryReturn()
                                                     viewedPlaylistFromHome = playlist
-                                                    selectedTab = 2
+                                                    selectedTab = TAB_LIBRARY
                                                 },
                                                 onRecentClick = { song ->
                                                     // Resume from the history rail: the
@@ -1367,7 +1441,7 @@ fun HomeScreen(
                                                     playerViewModel.playQueue(recentlyPlayed, song)
                                                     showPlayerSheet = true
                                                 },
-                                                onShowAllInLibrary = { selectedTab = 2 },
+                                                onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
                                                 onSpinClick = {
                                                     spinSource = SpinSource.Mix
                                                     spinOpen = true
@@ -1555,6 +1629,8 @@ fun HomeScreen(
                             recentlyPlayed = exploreRecent,
                             topArtists = exploreTopArtists,
                             artistPhotos = exploreArtistPhotos,
+                            newFromLiked = viewModel.exploreNewFromLiked.collectAsState().value,
+                            subgenreShelves = viewModel.exploreSubgenreShelves.collectAsState().value,
                             onPlaySongs = { queue, start ->
                                 playerViewModel.playQueue(queue, start)
                                 showPlayerSheet = true
@@ -1563,7 +1639,7 @@ fun HomeScreen(
                             onArtistClick = { artist ->
                                 noteLibraryReturn()
                                 viewedArtistFromPlayer = artist
-                                goToTab(2)
+                                goToTab(TAB_LIBRARY)
                             },
                             onArtistRadio = { artist ->
                                 val artistSongs = (songs + exploreLiked).distinctBy { it.id }
@@ -1769,10 +1845,10 @@ fun HomeScreen(
                 }
             }
         } else listOf(
-            Triple(0, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
-            Triple(1, stringResource(R.string.tab_search), Pair(Icons.Filled.Search, Icons.Outlined.Search)),
-            Triple(2, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic)),
-            Triple(3, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore))
+            Triple(TAB_HOME, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
+            Triple(TAB_EXPLORE, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore)),
+            Triple(TAB_SEARCH, stringResource(R.string.tab_search), Pair(Icons.Filled.Search, Icons.Outlined.Search)),
+            Triple(TAB_LIBRARY, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic))
         )
         val selectNavTab: (Int) -> Unit = { index ->
             if (selectedTab == index) {
@@ -2008,13 +2084,13 @@ fun HomeScreen(
                 noteLibraryReturn()
                 showPlayerSheet = false
                 viewedArtistFromPlayer = artistName
-                goToTab(2) // Music Library tab
+                goToTab(TAB_LIBRARY) // Music Library tab
             },
             onAlbumClick = { albumName ->
                 noteLibraryReturn()
                 showPlayerSheet = false
                 viewedAlbumFromPlayer = albumName
-                goToTab(2)
+                goToTab(TAB_LIBRARY)
             },
             onOpenAlbum = { albumItem ->
                 // A stream's album opens the playlist detail the same way a
@@ -2022,7 +2098,7 @@ fun HomeScreen(
                 noteLibraryReturn()
                 showPlayerSheet = false
                 viewedPlaylistFromHome = albumItem
-                goToTab(2)
+                goToTab(TAB_LIBRARY)
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -2120,12 +2196,12 @@ fun HomeScreen(
             onArtistClick = { artist ->
                 noteLibraryReturn()
                 viewedArtistFromPlayer = artist
-                goToTab(2)
+                goToTab(TAB_LIBRARY)
             },
             onOpenAlbum = { albumItem ->
                 noteLibraryReturn()
                 viewedPlaylistFromHome = albumItem
-                goToTab(2)
+                goToTab(TAB_LIBRARY)
             },
             // Only for songs a feed could have recommended. A file on this
             // device was not recommended by anything, so "stop recommending

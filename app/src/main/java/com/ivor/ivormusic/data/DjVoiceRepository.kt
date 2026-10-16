@@ -102,6 +102,47 @@ class DjVoiceRepository(context: Context) {
             }
         }
 
+    /**
+     * Build the playback queue for [mix]: each track preceded by its spoken
+     * intro where the mix carries one (mood-shift transitions). Tracks
+     * without a line play straight through. Reports progress 0..1 via
+     * [onProgress].
+     */
+    suspend fun buildQueueWithIntros(
+        mix: AiDjMix,
+        onProgress: (Float) -> Unit = {},
+    ): List<Song> = withContext(Dispatchers.IO) {
+        val voiceDir = java.io.File(appContext.cacheDir, "dj_voice").apply { mkdirs() }
+        val mixKey = (mix.title.hashCode().toString(36) + mix.tracks.size)
+        val queue = mutableListOf<Song>()
+        mix.tracks.forEachIndexed { index, track ->
+            val line = track.djLine?.takeIf { it.isNotBlank() }
+            if (line != null) {
+                val file = java.io.File(voiceDir, "intro_${mixKey}_$index.mp3")
+                val synthesized = if (file.exists() && file.length() > 0) {
+                    true
+                } else {
+                    synthesize(line, file)
+                }
+                if (synthesized) {
+                    queue += Song(
+                        id = "${StatsRepository.DJ_INTRO_ID_PREFIX}${mixKey}_$index",
+                        title = "AI DJ",
+                        artist = line,
+                        album = mix.title,
+                        duration = 0L,
+                        uri = android.net.Uri.fromFile(file),
+                        source = SongSource.LOCAL,
+                        filePath = file.absolutePath,
+                    )
+                }
+            }
+            queue += track.song
+            onProgress((index + 1).toFloat() / mix.tracks.size)
+        }
+        queue
+    }
+
     fun shutdown() {
         try {
             tts?.shutdown()

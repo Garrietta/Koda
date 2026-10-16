@@ -109,6 +109,9 @@
     <string name="explore_artist_spotlight">Artist Spotlight</string>
     <string name="explore_top_track">Top track: %1$s</string>
     <string name="explore_artist_radio">Artist radio</string>
+    <string name="explore_new_from_liked">New from artists you love</string>
+    <string name="explore_subgenre_title">Because you like %1$s</string>
+    <string name="explore_subgenre_sub">For fans of %1$s</string>
     <string name="explore_view_artist">View artist</string>
     <string name="explore_empty">Play something and it will show up here.</string>
 

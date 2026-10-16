@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ivor.ivormusic.R
 import com.ivor.ivormusic.data.Song
+import com.ivor.ivormusic.data.SubgenreShelf
 
 private enum class ExploreFilter {
     All, Liked, Downloads, Recent
@@ -65,6 +66,8 @@ fun ExploreContent(
     recentlyPlayed: List<Song>,
     topArtists: List<TopArtist>,
     artistPhotos: Map<String, String>,
+    newFromLiked: List<Song> = emptyList(),
+    subgenreShelves: List<SubgenreShelf> = emptyList(),
     onPlaySongs: (List<Song>, Song?) -> Unit,
     onSongLongPress: ((Song) -> Unit)? = null,
     onArtistClick: (String) -> Unit,
@@ -243,6 +246,67 @@ fun ExploreContent(
                             ) {
                                 Text(stringResource(R.string.explore_view_artist))
                             }
+                        }
+                    }
+                }
+            }
+
+            // New tracks by the listener's most-liked artists.
+            if (newFromLiked.isNotEmpty()) {
+                item(key = "explore_new_header") {
+                    Text(
+                        stringResource(R.string.explore_new_from_liked),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp),
+                    )
+                }
+                item(key = "explore_new_rail") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(newFromLiked, key = { "new_${it.id}" }) { song ->
+                            ExplorePickCard(
+                                song = song,
+                                onClick = { onPlaySongs(newFromLiked, song) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Subgenre shelves: popular songs from similar artists.
+            subgenreShelves.forEachIndexed { index, shelf ->
+                item(key = "explore_subgenre_header_$index") {
+                    Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp)) {
+                        Text(
+                            stringResource(R.string.explore_subgenre_title, shelf.subgenre),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (shelf.basedOn.isNotEmpty()) {
+                            Text(
+                                stringResource(
+                                    R.string.explore_subgenre_sub,
+                                    shelf.basedOn.take(2).joinToString(", "),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                item(key = "explore_subgenre_rail_$index") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(shelf.songs, key = { "sub_${index}_${it.id}" }) { song ->
+                            ExplorePickCard(
+                                song = song,
+                                onClick = { onPlaySongs(shelf.songs, song) },
+                            )
                         }
                     }
                 }

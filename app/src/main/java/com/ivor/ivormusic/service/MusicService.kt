@@ -40,9 +40,12 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.ivor.ivormusic.MainActivity
 import android.media.audiofx.AudioEffect
+import com.ivor.ivormusic.data.AiDjRepository
 import com.ivor.ivormusic.data.CacheManager
+import com.ivor.ivormusic.data.DjVoiceRepository
 import com.ivor.ivormusic.data.DownloadRepository
 import com.ivor.ivormusic.data.EpisodeProgressRepository
+import com.ivor.ivormusic.data.PodcastRepository
 import com.ivor.ivormusic.data.NotificationArtworkLoader
 import com.ivor.ivormusic.data.AudioProfileStore
 import com.ivor.ivormusic.data.AudioProfiler
@@ -129,6 +132,7 @@ class MusicService : MediaLibraryService() {
     private val likedSongsRepository by lazy { LikedSongsRepository(this) }
     private val statsRepository by lazy { StatsRepository(this) }
     private val songRepository by lazy { SongRepository(this) }
+    private val podcastRepository by lazy { PodcastRepository(this) }
     private val transitionFilters = ConcurrentHashMap<ExoPlayer, TransitionFilterAudioProcessor>()
 
     // --- Scopes ---
@@ -2199,6 +2203,24 @@ class MusicService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
+            // The Android Auto "AI DJ" root item: tapping it generates the
+            // one-press instant mix (last plays + liked, transitions at mood
+            // shifts) and plays it. Generation runs async; the car waits.
+            if (mediaItems.any { it.mediaId == "AIDJ" }) {
+                return serviceScope.future {
+                    val queue = buildAutoDjQueue()
+                    val prepared = queue.mapTo(mutableListOf()) { song ->
+                        preparePlaybackItem(mapSongToMediaItem(song))
+                    }
+                    if (prepared.isEmpty()) {
+                        // Fall back to liked songs rather than playing nothing.
+                        likedSongsRepository.likedSongs.value
+                            .mapTo(mutableListOf()) { song ->
+                                preparePlaybackItem(mapSongToMediaItem(song))
+                            }
+                    } else prepared
+                }
+            }
             // A voice request ("Hey Google, play X on Koda") arrives as an
             // item carrying only a search query - no media id, no uri. Those
             // need a bounded search before becoming playable. Legacy browsers
@@ -2364,6 +2386,16 @@ class MusicService : MediaLibraryService() {
                 (getRootItems() + getLibraryItems()).firstOrNull { it.mediaId == mediaId }?.let {
                     return@browseResult LibraryResult.ofItem(it, null)
                 }
+                if (mediaId.startsWith("PODCAST_FEED_")) {
+                    val feedId = mediaId.removePrefix("PODCAST_FEED_")
+                    val feed = podcastRepository.feeds.value.find { it.id == feedId }
+                    if (feed != null) {
+                        return@browseResult LibraryResult.ofItem(
+                            browsableCategoryItem(mediaId, feed.title, feed.description?.take(80)),
+                            null,
+                        )
+                    }
+                }
                 if (mediaId.startsWith("PLAYLIST_")) {
                     val playlistId = mediaId.removePrefix("PLAYLIST_")
                     val playlist = playlistsForBrowse()
@@ -2502,8 +2534,31 @@ class MusicService : MediaLibraryService() {
         items.add(browsableCategoryItem("LIBRARY", "Library"))
         items.add(browsableCategoryItem("RECOMMENDED", "Recommended"))
         items.add(browsableCategoryItem("PLAYLISTS", "Playlists"))
+        items.add(browsableCategoryItem("PODCASTS", "Podcasts"))
+        items.add(playableActionItem("AIDJ", "AI DJ", "A 60-song mix from your recent plays"))
         return ImmutableList.copyOf(items)
     }
+
+    /**
+     * A tappable action at the root of the browse tree (Android Auto): plays
+     * immediately rather than opening a child list.
+     */
+    private fun playableActionItem(
+        mediaId: String,
+        title: String,
+        subtitle: String? = null,
+    ): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(MediaMetadata.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setArtworkUri(AutoArtwork.categoryKey(mediaId)?.let { AutoArtwork.uriFor(this, it) })
+                .setExtras(contentStyleExtras(LIST_ITEM, LIST_ITEM))
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .build())
+            .build()
 
     private fun getLibraryItems(): ImmutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
@@ -2541,11 +2596,26 @@ class MusicService : MediaLibraryService() {
             youtubeRepository.getRecommendations()
         }.map(::mapSongToMediaItem)
         "PLAYLISTS" -> playlistsForBrowse().map(::playlistEntry)
+        "PODCASTS" -> podcastRepository.feeds.value.map { feed ->
+            browsableCategoryItem(
+                "PODCAST_FEED_${feed.id}",
+                feed.title,
+                feed.description?.take(80),
+            )
+        }
         "DOWNLOADS" -> downloadRepository.downloadedSongs.value.map(::mapSongToMediaItem)
         "LIKED" -> likedSongsRepository.likedSongs.value.map(::mapSongToMediaItem)
         "RECENT" -> localBrowseSongs.get(parentId) { recentlyPlayedSongs() }.map(::mapSongToMediaItem)
         "LOCAL_SONGS" -> localBrowseSongs.get(parentId) { localDeviceSongs() }.map(::mapSongToMediaItem)
         else -> {
+            if (parentId.startsWith("PODCAST_FEED_")) {
+                val feedId = parentId.removePrefix("PODCAST_FEED_")
+                val feed = podcastRepository.feeds.value.find { it.id == feedId }
+                val episodes = podcastRepository.episodesByFeed.value[feedId].orEmpty()
+                return episodes.map { episode ->
+                    mapSongToMediaItem(podcastRepository.episodeToSong(episode, feed))
+                }
+            }
             require(parentId.startsWith("PLAYLIST_")) { "Unknown browse parent" }
             browseSongs.get(parentId) {
                 youtubeRepository.getPlaylist(parentId.removePrefix("PLAYLIST_"))
@@ -2653,12 +2723,60 @@ class MusicService : MediaLibraryService() {
     }
 
     /** A single playable id looked up across every store the tree serves. */
+    /**
+     * Build the Android Auto one-press DJ queue: the last 30 played songs
+     * (never podcasts) plus liked songs as taste context, handed to the DJ's
+     * instant-mix generation with spoken transitions at mood shifts.
+     */
+    private suspend fun buildAutoDjQueue(): List<Song> {
+        return try {
+            val seen = mutableSetOf<String>()
+            val recent = mutableListOf<Song>()
+            for (entry in statsRepository.loadHistory()) {
+                if (entry.source == SongSource.PODCAST) continue
+                if (!seen.add(entry.songId)) continue
+                recent.add(
+                    Song.fromYouTube(
+                        videoId = entry.songId,
+                        title = entry.title,
+                        artist = entry.artist,
+                        album = entry.album,
+                        duration = entry.duration,
+                        thumbnailUrl = entry.thumbnailUrl,
+                    )
+                )
+                if (recent.size >= 30) break
+            }
+            val liked = likedSongsRepository.likedSongs.value
+            val repository = AiDjRepository(this)
+            val mix = repository.generateInstantMix(recent, liked).getOrNull()
+                ?: return emptyList()
+            if (repository.djVoiceEnabled.value) {
+                DjVoiceRepository(this).buildQueueWithIntros(mix)
+            } else {
+                mix.tracks.map { it.song }
+            }
+        } catch (e: Exception) {
+            KLog.w(TAG, "Auto DJ mix failed", e)
+            emptyList()
+        }
+    }
+
     private suspend fun findSongForBrowseId(mediaId: String): Song? {
         findSongInCache(mediaId)?.let { return it }
         downloadRepository.downloadedSongs.value.firstOrNull { it.id == mediaId }
             ?.let { return it }
         likedSongsRepository.likedSongs.value.firstOrNull { it.id == mediaId }
             ?.let { return it }
+        if (mediaId.startsWith(EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX)) {
+            val episodeId = mediaId.removePrefix(EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX)
+            val episode = podcastRepository.episodesByFeed.value.values.flatten()
+                .firstOrNull { it.id == episodeId }
+            if (episode != null) {
+                val feed = podcastRepository.feeds.value.find { it.id == episode.feedId }
+                return podcastRepository.episodeToSong(episode, feed)
+            }
+        }
         localBrowseSongs.get("RECENT") { recentlyPlayedSongs() }
             .firstOrNull { it.id == mediaId }?.let { return it }
         return localBrowseSongs.get("LOCAL_SONGS") { localDeviceSongs() }

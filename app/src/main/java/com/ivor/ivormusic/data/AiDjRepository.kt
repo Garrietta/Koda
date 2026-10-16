@@ -38,6 +38,15 @@ data class AiDjTokenUsage(
     val outputTokens: Long,
 )
 
+/** A subgenre the listener seems to love, with similar artists to explore. */
+data class SubgenreSuggestion(
+    val subgenre: String,
+    /** Artists the listener already likes, grounding this subgenre. */
+    val basedOn: List<String>,
+    /** Similar artists to discover, most relevant first. */
+    val artists: List<String>,
+)
+
 /**
  * The AI DJ: crafts a playlist from the user's library via the Google AI
  * (Gemini) API, guided by a custom prompt the user writes in Settings.
@@ -224,6 +233,178 @@ class AiDjRepository(context: Context) {
         }
     }
 
+    /**
+     * The one-press DJ: builds a long (60-track) set from the [recent] plays
+     * with [liked] as taste context. Spoken transition lines are attached
+     * only at notable theme or mood shifts, not between every song —
+     * Spotify DJ style.
+     */
+    suspend fun generateInstantMix(
+        recent: List<Song>,
+        liked: List<Song>,
+    ): Result<AiDjMix> = withContext(Dispatchers.IO) {
+        val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
+        if (apiKey.isEmpty()) {
+            return@withContext Result.failure(IllegalStateException("No Google AI API key set"))
+        }
+        val recentPool = recent.distinctBy { it.id }.take(INSTANT_MIX_RECENT)
+        val likedPool = liked.distinctBy { it.id }
+            .filter { liked -> recentPool.none { it.id == liked.id } }
+            .take(INSTANT_MIX_LIKED)
+        if (recentPool.isEmpty() && likedPool.isEmpty()) {
+            return@withContext Result.failure(IllegalStateException("Nothing to build a mix from yet"))
+        }
+        // One numbered pool; the model sees which list each track came from.
+        val pool = recentPool + likedPool
+        val numbered = buildString {
+            appendLine("Recently played:")
+            recentPool.forEachIndexed { i, song ->
+                appendLine("${i + 1}. ${song.title} — ${song.artist}")
+            }
+            if (likedPool.isNotEmpty()) {
+                appendLine("Liked favorites (taste context):")
+                likedPool.forEachIndexed { i, song ->
+                    appendLine("${recentPool.size + i + 1}. ${song.title} — ${song.artist}")
+                }
+            }
+        }
+
+        val userText = buildString {
+            appendLine(_prompt.value.trim().ifEmpty { DEFAULT_PROMPT })
+            appendLine()
+            appendLine(numbered)
+            appendLine()
+            append("Build a $INSTANT_MIX_TRACKS-song DJ set from the lists above, in play order, ")
+            append("flowing from what they have been playing lately through their liked favorites. ")
+            append("You may only pick from the numbered lists. ")
+            append("Attach a spoken transition \"line\" ONLY at notable theme or mood shifts ")
+            append("(a new energy, a genre turn, a moment worth announcing) — most tracks get no line. ")
+            append("Respond with ONLY this JSON object and no other text: ")
+            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 12, \"line\": \"spoken transition\"}]}")
+        }
+
+        val body = JSONObject()
+            .put("system_instruction", JSONObject().put("parts", JSONArray().put(
+                JSONObject().put("text", SYSTEM_INSTRUCTION)
+            )))
+            .put("contents", JSONArray().put(
+                JSONObject().put("parts", JSONArray().put(
+                    JSONObject().put("text", userText)
+                ))
+            ))
+            .put("generationConfig", JSONObject()
+                .put("temperature", 0.9)
+                .put("response_mime_type", "application/json")
+                .put("maxOutputTokens", 8192)
+            )
+            .toString()
+
+        try {
+            val request = Request.Builder()
+                .url("$GENERATE_URL_BASE/${_model.value}:generateContent")
+                .header("x-goog-api-key", apiKey)
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val message = runCatching {
+                        JSONObject(responseBody).optString("message")
+                            .ifEmpty { JSONObject(responseBody).getJSONObject("error").optString("message") }
+                    }.getOrNull().orEmpty()
+                    KLog.w(TAG, "Gemini instant mix failed: HTTP ${response.code} $message")
+                    return@withContext Result.failure(
+                        IllegalStateException(
+                            if (message.isNotBlank()) "Google AI: $message"
+                            else "Google AI request failed (HTTP ${response.code})"
+                        )
+                    )
+                }
+                return@withContext parseMix(responseBody, pool)
+            }
+        } catch (e: Exception) {
+            KLog.w(TAG, "AI DJ instant mix failed", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Map the listener's favorite artists to subgenres (e.g. "Conscious Rap")
+     * with similar artists worth discovering. Used by the Explore tab.
+     */
+    suspend fun suggestSubgenres(
+        artists: List<String>,
+    ): Result<List<SubgenreSuggestion>> = withContext(Dispatchers.IO) {
+        val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
+        if (apiKey.isEmpty() || artists.isEmpty()) {
+            return@withContext Result.failure(IllegalStateException("No API key or artists"))
+        }
+        val userText = buildString {
+            append("These are a listener's favorite artists: ")
+            append(artists.joinToString(", "))
+            append(". Group them into 2-3 subgenres (be specific: \"Conscious Rap\" not just \"Hip-Hop\", ")
+            append("\"Neo-Soul\" not just \"R&B\"). For each subgenre, name 4 similar artists they would ")
+            append("probably love but who are NOT in the list above. Respond with ONLY this JSON array ")
+            append("and no other text: [{\"subgenre\": \"...\", \"based_on\": [\"...\"], \"artists\": [\"...\", \"...\"]}]")
+        }
+        val body = JSONObject()
+            .put("contents", JSONArray().put(
+                JSONObject().put("parts", JSONArray().put(
+                    JSONObject().put("text", userText)
+                ))
+            ))
+            .put("generationConfig", JSONObject()
+                .put("temperature", 0.7)
+                .put("response_mime_type", "application/json")
+                .put("maxOutputTokens", 1024)
+            )
+            .toString()
+        try {
+            val request = Request.Builder()
+                .url("$GENERATE_URL_BASE/${_model.value}:generateContent")
+                .header("x-goog-api-key", apiKey)
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        IllegalStateException("Google AI request failed (HTTP ${response.code})")
+                    )
+                }
+                return@withContext parseSubgenres(responseBody)
+            }
+        } catch (e: Exception) {
+            KLog.w(TAG, "Subgenre suggestions failed", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    private fun parseSubgenres(responseBody: String): Result<List<SubgenreSuggestion>> {
+        return runCatching {
+            val root = JSONObject(responseBody)
+            val text = root.getJSONArray("candidates")
+                .getJSONObject(0)
+                .getJSONObject("content")
+                .getJSONArray("parts")
+                .getJSONObject(0)
+                .getString("text")
+            val array = JSONArray(text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+            List(array.length()) { i ->
+                val obj = array.getJSONObject(i)
+                SubgenreSuggestion(
+                    subgenre = obj.optString("subgenre"),
+                    basedOn = obj.optJSONArray("based_on")?.let { arr ->
+                        List(arr.length()) { j -> arr.optString(j) }
+                    }.orEmpty(),
+                    artists = obj.optJSONArray("artists")?.let { arr ->
+                        List(arr.length()) { j -> arr.optString(j) }
+                    }.orEmpty(),
+                )
+            }.filter { it.subgenre.isNotBlank() && it.artists.isNotEmpty() }
+        }
+    }
+
     private fun parseMix(responseBody: String, pool: List<Song>): Result<AiDjMix> {
         return try {
             val root = JSONObject(responseBody)
@@ -284,6 +465,10 @@ class AiDjRepository(context: Context) {
         private const val MAX_LIBRARY_SONGS = 600
         private const val MAX_LIBRARY_SONGS_SAFE = 120
         private const val DEFAULT_TRACK_COUNT = 15
+        /** The one-press DJ set length. */
+        const val INSTANT_MIX_TRACKS = 60
+        private const val INSTANT_MIX_RECENT = 30
+        private const val INSTANT_MIX_LIKED = 200
         val TRACK_COUNT_OPTIONS = listOf(10, 15, 20, 25)
 
         /** The default; the API reports older models as retired, so this stays current. */
