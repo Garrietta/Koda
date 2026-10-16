@@ -210,7 +210,9 @@ fun AiDjScreen(
                 val currentMix = mix
                 val currentError = error
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
                     contentPadding = PaddingValues(
                         start = 20.dp,
                         end = 20.dp,
