@@ -279,6 +279,7 @@ internal fun Player.toWidgetSnapshot(): PlayerWidgetSnapshot {
         upNext = upcoming,
         mediaId = currentMediaItem?.mediaId?.takeIf { it.isNotBlank() },
         album = mediaMetadata.albumTitle?.toString()?.takeIf { it.isNotBlank() },
+        artworkColor = null, // Enriched by PlayerWidgets.publish() via Palette
     )
 }
 
