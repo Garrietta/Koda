@@ -182,7 +182,7 @@ object PlayerWidgets {
             return snapshot
         }
         return try {
-            val bitmap = PlayerWidgetStore.loadArtwork(
+            val bitmap = PlayerWidgetReader.loadArtwork(
                 context,
                 snapshot.artworkUri,
                 128 // Small size is enough for color extraction
@@ -197,7 +197,7 @@ object PlayerWidgets {
                 if (dominant != 0) snapshot.copy(artworkColor = dominant) else snapshot
             }
         } catch (e: Exception) {
-            KLog.w(TAG, "Artwork color extraction failed: ${e.message}")
+            KLog.w("PlayerWidgets", "Artwork color extraction failed: ${e.message}")
             snapshot
         }
     }
