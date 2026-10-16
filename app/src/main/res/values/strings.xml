@@ -19,6 +19,8 @@
     <string name="notification_repeat_off">Repeat off</string>
     <string name="notification_repeat_all">Repeat all</string>
     <string name="notification_repeat_one">Repeat one</string>
+    <string name="notification_shuffle_on">Shuffle on</string>
+    <string name="notification_shuffle_off">Shuffle off</string>
     <string name="notification_like">Like</string>
     <string name="notification_unlike">Remove like</string>
 

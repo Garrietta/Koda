@@ -454,6 +454,9 @@ class MusicService : MediaLibraryService() {
         /** The media notification's heart: like or unlike the playing song. */
         const val CMD_TOGGLE_LIKE = "com.ivor.ivormusic.TOGGLE_LIKE"
 
+        /** The media notification's shuffle button: toggle shuffle mode. */
+        const val CMD_TOGGLE_SHUFFLE = "com.ivor.ivormusic.TOGGLE_SHUFFLE"
+
         /**
          * Ask YouTube for the playing song's stream again and swap it in where
          * it was. Answers RESULT_ERROR_IO when no new stream arrived in time,
@@ -906,7 +909,7 @@ class MusicService : MediaLibraryService() {
     }
 
     /** What the extra buttons last showed, so an unchanged state posts nothing. */
-    private var mediaButtonsState: Pair<Int, Boolean>? = null
+    private var mediaButtonsState: Triple<Int, Boolean, Boolean>? = null
 
     /**
      * Repeat and like, in the two slots the system media controls keep after
@@ -919,10 +922,22 @@ class MusicService : MediaLibraryService() {
         val player = session.player
         val songId = player.currentMediaItem?.mediaId
         val liked = songId != null && likedSongsRepository.isLiked(songId)
-        val state = player.repeatMode to liked
+        val shuffleOn = player.shuffleModeEnabled
+        val state = Triple(player.repeatMode, liked, shuffleOn)
         if (state == mediaButtonsState) return
         mediaButtonsState = state
 
+        val shuffle = CommandButton.Builder(
+            if (shuffleOn) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF
+        )
+            .setDisplayName(
+                getString(
+                    if (shuffleOn) R.string.notification_shuffle_on
+                    else R.string.notification_shuffle_off
+                )
+            )
+            .setSessionCommand(SessionCommand(CMD_TOGGLE_SHUFFLE, Bundle.EMPTY))
+            .build()
         val repeat = CommandButton.Builder(
             when (player.repeatMode) {
                 Player.REPEAT_MODE_ONE -> CommandButton.ICON_REPEAT_ONE
@@ -950,7 +965,7 @@ class MusicService : MediaLibraryService() {
             .setSessionCommand(SessionCommand(CMD_TOGGLE_LIKE, Bundle.EMPTY))
             .setEnabled(songId != null)
             .build()
-        session.setMediaButtonPreferences(ImmutableList.of(repeat, like))
+        session.setMediaButtonPreferences(ImmutableList.of(shuffle, repeat, like))
     }
 
     private fun cycleRepeatMode(player: Player) {
@@ -1160,6 +1175,7 @@ class MusicService : MediaLibraryService() {
             // would send the outgoing one.
             publishSessionState()
             scheduleSessionCheckpoint()
+            refreshMediaButtons()
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -2152,6 +2168,10 @@ class MusicService : MediaLibraryService() {
                 toggleCurrentSongLike(session.player)
                 Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
+            CMD_TOGGLE_SHUFFLE -> {
+                session.player.shuffleModeEnabled = !session.player.shuffleModeEnabled
+                Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
             CMD_REFRESH_STREAM -> refreshCurrentStream()
             CMD_SET_PLAYBACK_SPEED -> {
                 applyPlaybackSpeed(
@@ -2545,8 +2565,8 @@ class MusicService : MediaLibraryService() {
      */
     private fun getRootItems(): ImmutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
+        items.add(browsableCategoryItem("HOME", "Home"))
         items.add(browsableCategoryItem("LIBRARY", "Library"))
-        items.add(browsableCategoryItem("RECOMMENDED", "Recommended"))
         items.add(browsableCategoryItem("PLAYLISTS", "Playlists"))
         items.add(browsableCategoryItem("PODCASTS", "Podcasts"))
         items.add(playableActionItem("AIDJ", "AI DJ", "A 60-song mix from your recent plays"))
@@ -2573,6 +2593,31 @@ class MusicService : MediaLibraryService() {
                 .setIsPlayable(true)
                 .build())
             .build()
+
+    /**
+     * The Home tab: Speed-dial style quick access, like YouTube Music's Home.
+     * Curated shortcuts to the most-used content: one tap to play or browse.
+     */
+    private suspend fun getHomeItems(): List<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        // AI DJ one-tap mix (playable, same handler as root AIDJ).
+        items.add(playableActionItem("AIDJ", "AI DJ Mix", "A 60-song mix from your recent plays"))
+        // Continue listening (recent).
+        items.add(browsableCategoryItem("RECENT", "Continue Listening", "Pick up where you left off"))
+        // New podcast episodes.
+        podcastRepository.ensureLoaded()
+        val newEpisodes = podcastRepository.allEpisodes().take(10)
+        if (newEpisodes.isNotEmpty()) {
+            items.add(browsableCategoryItem("HOME_EPISODES", "New Episodes", "${newEpisodes.size} new"))
+        }
+        // Liked songs.
+        items.add(browsableCategoryItem("LIKED", "Liked Songs", "Your favorites"))
+        // Recommendations (suggestions).
+        items.add(browsableCategoryItem("RECOMMENDED", "Recommended for You", "Suggestions based on your taste"))
+        // Downloads.
+        items.add(browsableCategoryItem("DOWNLOADS", "Downloaded", "Offline"))
+        return items
+    }
 
     private fun getLibraryItems(): ImmutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
@@ -2605,25 +2650,48 @@ class MusicService : MediaLibraryService() {
             .build()
 
     private suspend fun fetchChildrenForId(parentId: String): List<MediaItem> = when (parentId) {
+        "HOME" -> getHomeItems()
         "LIBRARY" -> getLibraryItems()
         "RECOMMENDED" -> browseSongs.get(parentId) {
             youtubeRepository.getRecommendations()
         }.map(::mapSongToMediaItem)
         "PLAYLISTS" -> playlistsForBrowse().map(::playlistEntry)
-        "PODCASTS" -> podcastRepository.feeds.value.map { feed ->
-            browsableCategoryItem(
-                "PODCAST_FEED_${feed.id}",
-                feed.title,
-                feed.description?.take(80),
-            )
+        "PODCASTS" -> {
+            // The service can start without the app UI ever opening (e.g. car
+            // head unit binding directly). Feeds live in a process-wide store
+            // that must be loaded first, or Auto shows "No items".
+            podcastRepository.ensureLoaded()
+            podcastRepository.feeds.value.map { feed ->
+                val feedArtwork = feed.artworkUrl?.toArtworkUri()
+                    ?: AutoArtwork.categoryKey("PODCASTS")?.let { AutoArtwork.uriFor(this, it) }
+                MediaItem.Builder()
+                    .setMediaId("PODCAST_FEED_${feed.id}")
+                    .setMediaMetadata(MediaMetadata.Builder()
+                        .setTitle(feed.title)
+                        .setSubtitle(feed.description?.take(80))
+                        .setArtworkUri(feedArtwork)
+                        .setExtras(contentStyleExtras(GRID_ITEM, LIST_ITEM))
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .build())
+                    .build()
+            }
         }
         "DOWNLOADS" -> downloadRepository.downloadedSongs.value.map(::mapSongToMediaItem)
         "LIKED" -> likedSongsRepository.likedSongs.value.map(::mapSongToMediaItem)
         "RECENT" -> localBrowseSongs.get(parentId) { recentlyPlayedSongs() }.map(::mapSongToMediaItem)
         "LOCAL_SONGS" -> localBrowseSongs.get(parentId) { localDeviceSongs() }.map(::mapSongToMediaItem)
+        "HOME_EPISODES" -> {
+            podcastRepository.ensureLoaded()
+            podcastRepository.allEpisodes().take(20).map { episode ->
+                val feed = podcastRepository.feeds.value.find { it.id == episode.feedId }
+                mapSongToMediaItem(podcastRepository.episodeToSong(episode, feed))
+            }
+        }
         else -> {
             if (parentId.startsWith("PODCAST_FEED_")) {
                 val feedId = parentId.removePrefix("PODCAST_FEED_")
+                podcastRepository.ensureLoaded()
                 val feed = podcastRepository.feeds.value.find { it.id == feedId }
                 val episodes = podcastRepository.episodesByFeed.value[feedId].orEmpty()
                 return episodes.map { episode ->
@@ -2642,12 +2710,17 @@ class MusicService : MediaLibraryService() {
 
     private fun playlistEntry(playlist: PlaylistDisplayItem): MediaItem {
         val playlistId = playlist.url.substringAfter("list=")
+        // Playlists without a thumbnail (e.g. "Your Likes") render as a broken-
+        // image warning triangle on head units. Fall back to a deterministic
+        // AutoArtwork tile so every row carries iconography.
+        val artworkUri = playlist.thumbnailUrl.toArtworkUri()
+            ?: AutoArtwork.uriFor(this, "playlists")
         return MediaItem.Builder()
             .setMediaId("PLAYLIST_$playlistId")
             .setMediaMetadata(MediaMetadata.Builder()
                 .setTitle(playlist.name)
                 .setSubtitle(playlist.uploaderName)
-                .setArtworkUri(playlist.thumbnailUrl.toArtworkUri())
+                .setArtworkUri(artworkUri)
                 .setExtras(contentStyleExtras(LIST_ITEM, LIST_ITEM))
                 .setIsBrowsable(true)
                 .setIsPlayable(false)
