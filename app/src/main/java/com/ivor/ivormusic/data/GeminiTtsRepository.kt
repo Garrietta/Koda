@@ -79,36 +79,42 @@ class GeminiTtsRepository(context: Context) {
                     )
                 )
                 .toString()
-            try {
-                val request = Request.Builder()
-                    .url("$TTS_URL_BASE/$TTS_MODEL:generateContent")
-                    .header("x-goog-api-key", apiKey)
-                    .post(body.toRequestBody("application/json".toMediaType()))
-                    .build()
-                httpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        KLog.w(TAG, "Gemini TTS failed: HTTP ${response.code}")
-                        return@withContext false
+            // Try TTS models in order; the 2.5 preview may be retired.
+            for (model in TTS_MODELS) {
+                try {
+                    val request = Request.Builder()
+                        .url("$TTS_URL_BASE/$model:generateContent")
+                        .header("x-goog-api-key", apiKey)
+                        .post(body.toRequestBody("application/json".toMediaType()))
+                        .build()
+                    httpClient.newCall(request).execute().use { response ->
+                        val responseBody = response.body?.string().orEmpty()
+                        if (!response.isSuccessful) {
+                            KLog.w(TAG, "Gemini TTS ($model) failed: HTTP ${response.code}")
+                            // 404 = model not found, try the next one.
+                            if (response.code == 404) continue
+                            return@withContext false
+                        }
+                        val pcmBase64 = runCatching {
+                            JSONObject(responseBody)
+                                .getJSONArray("candidates")
+                                .getJSONObject(0)
+                                .getJSONObject("content")
+                                .getJSONArray("parts")
+                                .getJSONObject(0)
+                                .getJSONObject("inlineData")
+                                .getString("data")
+                        }.getOrNull() ?: continue
+                        val pcm = Base64.decode(pcmBase64, Base64.DEFAULT)
+                        writeWav(outputFile, pcm)
+                        return@withContext true
                     }
-                    val pcmBase64 = runCatching {
-                        JSONObject(responseBody)
-                            .getJSONArray("candidates")
-                            .getJSONObject(0)
-                            .getJSONObject("content")
-                            .getJSONArray("parts")
-                            .getJSONObject(0)
-                            .getJSONObject("inlineData")
-                            .getString("data")
-                    }.getOrNull() ?: return@withContext false
-                    val pcm = Base64.decode(pcmBase64, Base64.DEFAULT)
-                    writeWav(outputFile, pcm)
-                    return@withContext true
+                } catch (e: Exception) {
+                    KLog.w(TAG, "Gemini TTS ($model) failed", e)
+                    continue
                 }
-            } catch (e: Exception) {
-                KLog.w(TAG, "Gemini TTS failed", e)
-                return@withContext false
             }
+            return@withContext false
         }
 
     /**
@@ -163,7 +169,11 @@ class GeminiTtsRepository(context: Context) {
         private const val KEY_API_KEY = "api_key"
         private const val KEY_VOICE = "tts_voice"
         private const val TTS_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-        private const val TTS_MODEL = "gemini-2.5-flash-preview-tts"
+        /** TTS models to try in order; the 2.5 preview is the fallback. */
+        private val TTS_MODELS = listOf(
+            "gemini-3.1-flash-tts-preview",
+            "gemini-2.5-flash-preview-tts",
+        )
         const val DEFAULT_VOICE = "Kore"
 
         /** Curated voices that suit a DJ. */
