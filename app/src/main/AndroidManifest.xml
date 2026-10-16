@@ -171,7 +171,9 @@
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
-            android:noHistory="true" />
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance" />
 
         <!-- Launcher activity aliases for dynamic app icon switching -->
         <activity-alias
