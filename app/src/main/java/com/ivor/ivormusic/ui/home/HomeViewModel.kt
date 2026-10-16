@@ -2941,8 +2941,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadLibraryData() {
         try {
             val fresh = youtubeRepository.getLikedMusic()
-            _likedSongs.value = fresh
-            libraryCache.saveLikedSongs(fresh)
+            // getLikedMusic() swallows its own errors and returns an empty
+            // list on failure. An empty fetch means the network failed, not
+            // that the user unliked everything: keep the cached list on
+            // screen instead of wiping it (the "sometimes Liked Songs is
+            // missing on the All tab" race).
+            if (fresh.isNotEmpty()) {
+                _likedSongs.value = fresh
+                libraryCache.saveLikedSongs(fresh)
+            }
             _youtubePlaylists.value = youtubeRepository.getUserPlaylists()
             accountLoadedAtMs = System.currentTimeMillis()
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -3353,10 +3360,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         recommendationsLoadedAtMs = System.currentTimeMillis()
                     }
 
-                    // Update library data
+                    // Update library data. Same guard as loadLibraryData:
+                    // an empty fetch is a failed fetch, not an emptied
+                    // library, so never let it wipe the cached list.
                     val freshLiked = youtubeRepository.getLikedMusic()
-                    _likedSongs.value = freshLiked
-                    libraryCache.saveLikedSongs(freshLiked)
+                    if (freshLiked.isNotEmpty()) {
+                        _likedSongs.value = freshLiked
+                        libraryCache.saveLikedSongs(freshLiked)
+                    }
                     _youtubePlaylists.value = youtubeRepository.getUserPlaylists()
                     accountLoadedAtMs = System.currentTimeMillis()
                 } else if (_youtubeSongs.value.isNotEmpty()) {

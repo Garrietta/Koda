@@ -70,6 +70,7 @@ fun PodcastDetailScreen(
     viewModel: PodcastsViewModel = viewModel(),
 ) {
     val episodes by viewModel.episodesByFeed.collectAsState()
+    val progressByEpisode by viewModel.episodeProgress.collectAsState()
     val feedEpisodes = (episodes[feed.id].orEmpty()).sortedByDescending { it.pubDate }
     val songs = viewModel.episodeSongs(feed.id)
     val songsById = remember(songs) { songs.associateBy { it.id } }
@@ -254,6 +255,7 @@ fun PodcastDetailScreen(
             val song = songsById["podcast:${episode.id}"]
             EpisodeDetailRow(
                 episode = episode,
+                progress = progressByEpisode[episode.id],
                 onClick = {
                     if (song != null) onPlayQueue(songs, song)
                 },
@@ -266,6 +268,7 @@ fun PodcastDetailScreen(
 @Composable
 private fun EpisodeDetailRow(
     episode: PodcastEpisode,
+    progress: com.ivor.ivormusic.data.EpisodeProgress?,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit = {},
 ) {
@@ -326,6 +329,31 @@ private fun EpisodeDetailRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Playback progress bar under the subtitle.
+            val showBar = progress != null && !progress.completed &&
+                progress.durationMs > 0 && progress.positionMs > 0
+            if (showBar) {
+                Spacer(modifier = Modifier.height(6.dp))
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = {
+                        (progress!!.positionMs.toFloat() / progress.durationMs)
+                            .coerceIn(0f, 1f)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                )
+            }
+        }
+        if (progress?.completed == true) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = stringResource(R.string.podcast_episode_played_cd),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(4.dp))
         }
         androidx.compose.material3.IconButton(onClick = onDownloadClick) {
             Icon(

@@ -2702,6 +2702,7 @@ class MusicService : MediaLibraryService() {
     // ([toMusicQueueItem]), so it needs nothing from the UI.
 
     private val sessionRepository by lazy { PlaybackSessionRepository(this) }
+    private val episodeProgressRepository by lazy { EpisodeProgressRepository(this) }
 
     private sealed interface SessionWrite {
         /** Main-thread order; the writer never applies an older snapshot over a newer one. */
@@ -2823,6 +2824,32 @@ class MusicService : MediaLibraryService() {
             snapshotSession()?.let { sessionWrites.trySend(it) }
         } catch (e: Exception) {
             KLog.w(TAG, "Session checkpoint failed: ${e.message}")
+        }
+        // checkpointSession is the funnel for pause, track change, and the
+        // periodic tick, so per-episode progress rides along for free.
+        saveEpisodeProgress()
+    }
+
+    /**
+     * Persist playback progress for the current podcast episode, so episode
+     * rows can show a progress bar / played indicator and playback can
+     * resume where it left off. Music tracks are untouched.
+     */
+    private fun saveEpisodeProgress() {
+        try {
+            if (!::engine.isInitialized) return
+            val current = player
+            val item = current.currentMediaItem ?: return
+            if (item.mediaMetadata.extras?.getString(EXTRA_SONG_SOURCE) != SongSource.PODCAST.name) {
+                return
+            }
+            val episodeId = item.mediaId.removePrefix(EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX)
+            if (episodeId.isBlank()) return
+            val durationMs = current.duration.takeIf { it > 0 } ?: return
+            val positionMs = current.currentPosition.coerceAtLeast(0L)
+            episodeProgressRepository.saveProgress(episodeId, positionMs, durationMs)
+        } catch (e: Exception) {
+            KLog.w(TAG, "Episode progress save failed: ${e.message}")
         }
     }
 

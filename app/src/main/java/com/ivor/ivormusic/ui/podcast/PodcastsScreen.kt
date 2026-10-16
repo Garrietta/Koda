@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,10 +38,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.ivor.ivormusic.data.EpisodeProgress
+import com.ivor.ivormusic.data.PodcastEpisode
+import com.ivor.ivormusic.data.Song
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,16 +80,34 @@ import com.ivor.ivormusic.data.PodcastFeed
 @Composable
 fun PodcastsScreen(
     onFeedClick: (PodcastFeed) -> Unit,
+    onPlayEpisode: (Song) -> Unit = {},
     contentPadding: PaddingValues,
     listState: LazyGridState = rememberLazyGridState(),
     showTitle: Boolean = true,
     viewModel: PodcastsViewModel = viewModel(),
 ) {
     val feeds by viewModel.feeds.collectAsState()
+    // Collected as state (not one-shot reads): episodes arrive from disk
+    // slightly after the ViewModel is created, and a plain
+    // episodesByFeed.value read during composition would freeze a
+    // momentary empty map into "0 episodes" forever.
+    val episodesByFeed by viewModel.episodesByFeed.collectAsState()
+    val progressByEpisode by viewModel.episodeProgress.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val addingState by viewModel.addingState.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var feedMenuFor by remember { mutableStateOf<String?>(null) }
+
+    // New episodes rail: anything published in the last 7 days, newest first.
+    val newEpisodes = remember(episodesByFeed) {
+        val now = System.currentTimeMillis()
+        val cutoff = now - NEW_EPISODE_WINDOW_MS
+        episodesByFeed.values.flatten()
+            .filter { it.pubDate in cutoff..now }
+            .sortedByDescending { it.pubDate }
+            .take(MAX_NEW_EPISODES)
+    }
+    val feedTitleById = remember(feeds) { feeds.associate { it.id to it.title } }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -116,12 +141,12 @@ fun PodcastsScreen(
                 }
                 else -> {
                     var sort by remember { mutableStateOf(PodcastSort.Name) }
-                    val sortedFeeds = remember(feeds, sort) {
+                    val sortedFeeds = remember(feeds, episodesByFeed, sort) {
                         when (sort) {
                             PodcastSort.Name -> feeds.sortedBy { it.title.lowercase() }
                             PodcastSort.MostEpisodes -> feeds.sortedWith(
                                 compareByDescending<PodcastFeed> {
-                                    viewModel.episodeCount(it.id)
+                                    episodesByFeed[it.id]?.size ?: 0
                                 }.thenBy { it.title.lowercase() }
                             )
                         }
@@ -139,6 +164,41 @@ fun PodcastsScreen(
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
                         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
                     ) {
+                        // New episodes rail, mirroring the Recently played rail
+                        // on the All tab: horizontal cards for anything
+                        // published in the last 7 days.
+                        if (newEpisodes.isNotEmpty()) {
+                            item(
+                                key = "new_episodes_header",
+                                span = { GridItemSpan(maxLineSpan) }
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.podcast_new_episodes),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                                )
+                            }
+                            item(
+                                key = "new_episodes_rail",
+                                span = { GridItemSpan(maxLineSpan) }
+                            ) {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(vertical = 4.dp),
+                                ) {
+                                    items(newEpisodes, key = { "new_${it.id}" }) { episode ->
+                                        NewEpisodeCard(
+                                            episode = episode,
+                                            feedTitle = feedTitleById[episode.feedId].orEmpty(),
+                                            progress = progressByEpisode[episode.id],
+                                            onClick = { onPlayEpisode(viewModel.songForEpisode(episode)) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         item(
                             key = "podcast_header",
                             span = { GridItemSpan(maxLineSpan) }
@@ -151,7 +211,7 @@ fun PodcastsScreen(
                             )
                         }
                         items(sortedFeeds, key = { it.id }) { feed ->
-                            val count = viewModel.episodeCount(feed.id)
+                            val count = episodesByFeed[feed.id]?.size ?: 0
                             PodcastGridCard(
                                 feed = feed,
                                 episodeCount = count,
@@ -361,6 +421,10 @@ private enum class PodcastSort {
     Name, MostEpisodes
 }
 
+/** Window for the "New episodes" rail: episodes published in the last 7 days. */
+private const val NEW_EPISODE_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
+private const val MAX_NEW_EPISODES = 20
+
 /** The count and sort button above the podcast list, matching the Albums tab. */
 @Composable
 private fun PodcastSortHeader(
@@ -492,11 +556,105 @@ private fun PodcastGridCard(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "$episodeCount episodes",
+            text = stringResource(R.string.podcast_episode_count, episodeCount),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/**
+ * A new-episode card for the rail at the top of the Podcasts tab, mirroring
+ * the Recently played cards on the All tab: square artwork, episode title,
+ * show name, and a thin progress bar when playback is in progress.
+ */
+@Composable
+private fun NewEpisodeCard(
+    episode: PodcastEpisode,
+    feedTitle: String,
+    progress: EpisodeProgress?,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(112.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.size(112.dp)
+        ) {
+            Box {
+                if (episode.artworkUrl != null) {
+                    AsyncImage(
+                        model = episode.artworkUrl,
+                        contentDescription = episode.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (progress?.completed == true) {
+                    Icon(
+                        imageVector = CheckCircle,
+                        contentDescription = stringResource(R.string.podcast_episode_played_cd),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(22.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                RoundedCornerShape(11.dp)
+                            )
+                            .padding(2.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            episode.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Text(
+            feedTitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
+        )
+        val showBar = progress != null && !progress.completed &&
+            progress.durationMs > 0 && progress.positionMs > 0
+        if (showBar) {
+            LinearProgressIndicator(
+                progress = {
+                    (progress!!.positionMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp)),
+            )
+            Spacer(Modifier.height(4.dp))
+        }
     }
 }

@@ -21,9 +21,11 @@ import com.ivor.ivormusic.data.arrangedBy
 import com.ivor.ivormusic.data.playOrderQueuingUpNext
 import com.ivor.ivormusic.data.queueIndexForPlayOrder
 import com.ivor.ivormusic.data.queueStartIndex
+import com.ivor.ivormusic.data.EpisodeProgressRepository
 import com.ivor.ivormusic.data.LikedSongsRepository
 import com.ivor.ivormusic.data.LyricsRepository
 import com.ivor.ivormusic.data.LyricsResult
+import com.ivor.ivormusic.data.SongSource
 import com.ivor.ivormusic.service.MusicService
 import com.ivor.ivormusic.service.EXTRA_QUEUE_ITEM_ID
 import com.ivor.ivormusic.service.toPlaybackMediaItem
@@ -213,6 +215,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
 
     // Playback session snapshots for resume-on-reopen
     private val playbackSessionRepository = com.ivor.ivormusic.data.PlaybackSessionRepository(context)
+
+    // Per-episode progress for podcast resume
+    private val episodeProgressRepository = com.ivor.ivormusic.data.EpisodeProgressRepository(context)
 
     private val _lyricsResult = MutableStateFlow<LyricsResult>(LyricsResult.Loading)
     val lyricsResult: StateFlow<LyricsResult> = _lyricsResult.asStateFlow()
@@ -881,7 +886,21 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     }
 
     fun playQueue(songs: List<Song>, startSong: Song? = null) {
-        playQueueAtPosition(songs, startSong, 0L)
+        playQueueAtPosition(songs, startSong, resumePositionFor(startSong))
+    }
+
+    /**
+     * Where a podcast episode should start: its saved progress, unless the
+     * episode is played through or barely started, in which case 0. Music is
+     * untouched — this only applies to [SongSource.PODCAST].
+     */
+    private fun resumePositionFor(song: Song?): Long {
+        if (song?.source != SongSource.PODCAST) return 0L
+        val episodeId = song.id.removePrefix(EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX)
+        val progress = episodeProgressRepository.getProgress(episodeId) ?: return 0L
+        if (progress.completed) return 0L
+        if (progress.positionMs < EpisodeProgressRepository.RESUME_THRESHOLD_MS) return 0L
+        return progress.positionMs
     }
 
     /**

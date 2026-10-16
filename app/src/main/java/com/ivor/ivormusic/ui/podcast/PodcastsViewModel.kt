@@ -3,6 +3,7 @@ package com.ivor.ivormusic.ui.podcast
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.ivor.ivormusic.data.EpisodeProgressRepository
 import com.ivor.ivormusic.data.PodcastEpisode
 import com.ivor.ivormusic.data.PodcastFeed
 import com.ivor.ivormusic.data.PodcastRepository
@@ -23,6 +24,11 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = PodcastRepository(application)
     private val downloadRepository = com.ivor.ivormusic.data.DownloadRepository.getInstance(application)
+    private val progressRepository = EpisodeProgressRepository(application)
+
+    /** Per-episode playback progress, for progress bars and resume. */
+    val episodeProgress: StateFlow<Map<String, com.ivor.ivormusic.data.EpisodeProgress>> =
+        progressRepository.progress
 
     val feeds: StateFlow<List<PodcastFeed>> = repository.feeds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -58,6 +64,12 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
         return episodesFor(feedId)
             .sortedByDescending { it.pubDate }
             .map { repository.episodeToSong(it, feed) }
+    }
+
+    /** One episode as a player-ready [Song], for the new-episodes rail. */
+    fun songForEpisode(episode: PodcastEpisode): Song {
+        val feed = feeds.value.find { it.id == episode.feedId }
+        return repository.episodeToSong(episode, feed)
     }
 
     fun addFeed(url: String) {

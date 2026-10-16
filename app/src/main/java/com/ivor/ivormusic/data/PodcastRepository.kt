@@ -195,7 +195,7 @@ class PodcastRepository(context: Context) {
      */
     fun episodeToSong(episode: PodcastEpisode, feed: PodcastFeed?): Song {
         return Song(
-            id = "podcast:${episode.id}",
+            id = "${EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX}${episode.id}",
             title = episode.title,
             artist = feed?.title ?: "Podcast",
             album = feed?.title ?: "Podcast",

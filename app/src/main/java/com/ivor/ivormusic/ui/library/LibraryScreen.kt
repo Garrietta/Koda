@@ -1133,6 +1133,7 @@ fun LibraryMainScreen(
                     LibraryTab.Podcasts -> {
                         com.ivor.ivormusic.ui.podcast.PodcastsScreen(
                             onFeedClick = onNavigateToPodcast,
+                            onPlayEpisode = { song -> onPlayQueue(listOf(song), song) },
                             contentPadding = contentPadding,
                             showTitle = false,
                         )
