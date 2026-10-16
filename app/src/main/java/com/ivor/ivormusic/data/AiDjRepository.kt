@@ -104,6 +104,9 @@ class AiDjRepository(context: Context) {
     private val _djVoiceEnabled = MutableStateFlow(prefs.getBoolean(KEY_DJ_VOICE, true))
     val djVoiceEnabled: StateFlow<Boolean> = _djVoiceEnabled.asStateFlow()
 
+    private val _autoRefresh = MutableStateFlow(prefs.getBoolean(KEY_AUTO_REFRESH, true))
+    val autoRefresh: StateFlow<Boolean> = _autoRefresh.asStateFlow()
+
     private val _tokenUsage = MutableStateFlow(loadTokenUsage())
     val tokenUsage: StateFlow<AiDjTokenUsage> = _tokenUsage.asStateFlow()
 
@@ -126,11 +129,27 @@ class AiDjRepository(context: Context) {
             prefs.edit()
                 .putString(KEY_CACHED_MIX_TITLE, mix.title)
                 .putString(KEY_CACHED_MIX_TRACKS, json)
+                .putLong(KEY_CACHED_MIX_TIME, System.currentTimeMillis())
                 .apply()
         } catch (e: Exception) {
             KLog.w(TAG, "Failed to cache DJ mix", e)
         }
     }
+
+    /**
+     * True when there is no cached mix or it is older than [maxAgeMs].
+     * Daily refresh = 24h: one generation per day keeps token usage minimal
+     * while keeping the playlist fresh.
+     */
+    fun isCacheStale(maxAgeMs: Long = 24 * 60 * 60 * 1000L): Boolean {
+        if (_cachedMix.value == null) return true
+        val cachedAt = prefs.getLong(KEY_CACHED_MIX_TIME, 0L)
+        if (cachedAt <= 0L) return true
+        return System.currentTimeMillis() - cachedAt > maxAgeMs
+    }
+
+    /** When the cached mix was generated, or 0 if none. */
+    fun cachedMixTime(): Long = prefs.getLong(KEY_CACHED_MIX_TIME, 0L)
 
     private fun loadCachedMix(): AiDjMix? {
         return try {
@@ -183,6 +202,11 @@ class AiDjRepository(context: Context) {
     fun setDjVoiceEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DJ_VOICE, enabled).apply()
         _djVoiceEnabled.value = enabled
+    }
+
+    fun setAutoRefresh(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_REFRESH, enabled).apply()
+        _autoRefresh.value = enabled
     }
 
     private fun loadTokenUsage(): AiDjTokenUsage = AiDjTokenUsage(
@@ -258,7 +282,7 @@ class AiDjRepository(context: Context) {
             .put("generationConfig", JSONObject()
                 .put("temperature", 0.9)
                 .put("response_mime_type", "application/json")
-                .put("maxOutputTokens", 4096)
+                .put("maxOutputTokens", 8192)
             )
             .toString()
 
@@ -435,13 +459,23 @@ class AiDjRepository(context: Context) {
                     outputTokens = usage.optLong("candidatesTokenCount", 0L),
                 )
             }
-            val text = root.getJSONArray("candidates")
-                .getJSONObject(0)
+            val candidates = root.optJSONArray("candidates")
+            if (candidates == null || candidates.length() == 0) {
+                KLog.w(TAG, "AI DJ instant mix: no candidates: ${responseBody.take(300)}")
+                return@withContext Result.failure(IllegalStateException("The DJ came back empty-handed"))
+            }
+            val text = candidates.getJSONObject(0)
                 .getJSONObject("content")
                 .getJSONArray("parts")
                 .getJSONObject(0)
                 .getString("text")
-            val jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+            val start = text.indexOf('{')
+            val end = text.lastIndexOf('}')
+            if (start < 0 || end <= start) {
+                KLog.w(TAG, "AI DJ instant mix: no JSON in text: ${text.take(300)}")
+                return@withContext Result.failure(IllegalStateException("Couldn't understand the DJ's reply"))
+            }
+            val jsonText = text.substring(start, end + 1)
             val mix = JSONObject(jsonText)
             val mixTitle = mix.optString("title").ifBlank { "AI DJ Mix" }
             val tracksJson = mix.getJSONArray("tracks")
@@ -610,15 +644,30 @@ class AiDjRepository(context: Context) {
                     outputTokens = usage.optLong("candidatesTokenCount", 0L),
                 )
             }
-            val text = root.getJSONArray("candidates")
-                .getJSONObject(0)
+            // Surface safety blocks explicitly instead of a generic parse error.
+            root.optJSONObject("promptFeedback")?.optString("blockReason")?.takeIf { it.isNotBlank() }?.let { reason ->
+                KLog.w(TAG, "AI DJ prompt blocked: $reason")
+                return Result.failure(IllegalStateException("The DJ's request was blocked ($reason)"))
+            }
+            val candidates = root.optJSONArray("candidates")
+            if (candidates == null || candidates.length() == 0) {
+                KLog.w(TAG, "AI DJ: no candidates in response: ${responseBody.take(300)}")
+                return Result.failure(IllegalStateException("The DJ came back empty-handed"))
+            }
+            val text = candidates.getJSONObject(0)
                 .getJSONObject("content")
                 .getJSONArray("parts")
                 .getJSONObject(0)
                 .getString("text")
             // The model is told to answer with pure JSON, but be lenient:
             // slice from the first { to the last }.
-            val jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+            val start = text.indexOf('{')
+            val end = text.lastIndexOf('}')
+            if (start < 0 || end <= start) {
+                KLog.w(TAG, "AI DJ: no JSON object in response text: ${text.take(300)}")
+                return Result.failure(IllegalStateException("Couldn't understand the DJ's reply"))
+            }
+            val jsonText = text.substring(start, end + 1)
             val mix = JSONObject(jsonText)
             val title = mix.optString("title").ifBlank { "AI DJ Mix" }
             val tracksJson = mix.getJSONArray("tracks")
@@ -652,10 +701,12 @@ class AiDjRepository(context: Context) {
         private const val KEY_MODEL = "ai_model"
         private const val KEY_SAFE_TOKEN_MODE = "safe_token_mode"
         private const val KEY_DJ_VOICE = "dj_voice_enabled"
+        private const val KEY_AUTO_REFRESH = "dj_auto_refresh"
         private const val KEY_TOKENS_PROMPT = "tokens_prompt"
         private const val KEY_TOKENS_OUTPUT = "tokens_output"
         private const val KEY_CACHED_MIX_TITLE = "cached_mix_title"
         private const val KEY_CACHED_MIX_TRACKS = "cached_mix_tracks"
+        private const val KEY_CACHED_MIX_TIME = "cached_mix_time"
 
         private const val GENERATE_URL_BASE =
             "https://generativelanguage.googleapis.com/v1beta/models"

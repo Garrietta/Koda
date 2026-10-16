@@ -72,6 +72,7 @@ class AiDjSettingsViewModel(application: Application) : AndroidViewModel(applica
     val model = repository.model
     val safeTokenMode = repository.safeTokenMode
     val djVoiceEnabled = repository.djVoiceEnabled
+    val autoRefresh = repository.autoRefresh
     val tokenUsage = repository.tokenUsage
     var ttsVoice by mutableStateOf(ttsRepository.voice)
         private set
@@ -115,6 +116,7 @@ internal fun AiDjSettingsPage(
     val aiModel by model.model.collectAsState()
     val safeTokenMode by model.safeTokenMode.collectAsState()
     val djVoiceEnabled by model.djVoiceEnabled.collectAsState()
+    val autoRefresh by model.autoRefresh.collectAsState()
     val tokenUsage by model.tokenUsage.collectAsState()
 
     // Credentials never enter saved-instance-state or navigation arguments.
@@ -198,6 +200,13 @@ internal fun AiDjSettingsPage(
                     subtitle = stringResource(R.string.aidj_dj_voice_sub),
                     checked = djVoiceEnabled,
                     onCheckedChange = { repository.setDjVoiceEnabled(it) },
+                )
+                Spacer(Modifier.height(12.dp))
+                AiDjToggleRow(
+                    title = stringResource(R.string.aidj_auto_refresh_title),
+                    subtitle = stringResource(R.string.aidj_auto_refresh_sub),
+                    checked = autoRefresh,
+                    onCheckedChange = { repository.setAutoRefresh(it) },
                 )
                 if (djVoiceEnabled) {
                     Spacer(Modifier.height(12.dp))

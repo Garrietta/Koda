@@ -108,6 +108,22 @@ fun AiDjScreen(
     LaunchedEffect(cachedMix) {
         if (mix == null) mix = cachedMix
     }
+    // Daily auto-refresh: if the cached mix is older than 24h, quietly build
+    // a fresh one in the background. The cached mix stays visible meanwhile.
+    val autoRefresh by repository.autoRefresh.collectAsState()
+    LaunchedEffect(autoRefresh, library) {
+        if (autoRefresh && hasKey && repository.isCacheStale() && !generating) {
+            generating = true
+            repository.generateMix(library).fold(
+                onSuccess = {
+                    repository.cacheMix(it)
+                    mix = it
+                },
+                onFailure = { /* keep the stale cache; user can retry */ },
+            )
+            generating = false
+        }
+    }
     var saving by remember { mutableStateOf(false) }
     var preparingVoice by remember { mutableStateOf(false) }
     var voiceProgress by remember { mutableFloatStateOf(0f) }

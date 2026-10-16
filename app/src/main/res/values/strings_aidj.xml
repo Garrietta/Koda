@@ -31,6 +31,8 @@
     <string name="aidj_safe_token_sub">On — fast &amp; cheap. Sends minimal library data (~1K tokens) to AI.</string>
     <string name="aidj_dj_voice_title">DJ voice intros</string>
     <string name="aidj_dj_voice_sub">The DJ speaks a short intro before each song, Spotify DJ style.</string>
+    <string name="aidj_auto_refresh_title">Daily auto-refresh</string>
+    <string name="aidj_auto_refresh_sub">Build a fresh mix automatically once a day (one AI request per day).</string>
     <string name="aidj_section_credentials">Credentials</string>
     <string name="aidj_api_key_where">Get from Google AI Studio (aistudio.google.com)</string>
     <string name="aidj_section_model">Model Selection</string>

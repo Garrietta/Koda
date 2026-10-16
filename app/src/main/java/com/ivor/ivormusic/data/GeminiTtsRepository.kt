@@ -90,10 +90,10 @@ class GeminiTtsRepository(context: Context) {
                     httpClient.newCall(request).execute().use { response ->
                         val responseBody = response.body?.string().orEmpty()
                         if (!response.isSuccessful) {
-                            KLog.w(TAG, "Gemini TTS ($model) failed: HTTP ${response.code}")
-                            // 404 = model not found, try the next one.
-                            if (response.code == 404) continue
-                            return@withContext false
+                            KLog.w(TAG, "Gemini TTS ($model) failed: HTTP ${response.code} ${responseBody.take(200)}")
+                            // Try the next model on any failure, not just 404:
+                            // a 400 on one model shouldn't kill the fallback chain.
+                            continue
                         }
                         val pcmBase64 = runCatching {
                             JSONObject(responseBody)
