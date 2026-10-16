@@ -32,6 +32,12 @@ data class AiDjMix(
     val tracks: List<AiDjTrack>,
 )
 
+/** Token consumption, accumulated across generations. */
+data class AiDjTokenUsage(
+    val promptTokens: Long,
+    val outputTokens: Long,
+)
+
 /**
  * The AI DJ: crafts a playlist from the user's library via the Google AI
  * (Gemini) API, guided by a custom prompt the user writes in Settings.
@@ -65,6 +71,18 @@ class AiDjRepository(context: Context) {
     private val _trackCount = MutableStateFlow(prefs.getInt(KEY_TRACK_COUNT, DEFAULT_TRACK_COUNT))
     val trackCount: StateFlow<Int> = _trackCount.asStateFlow()
 
+    private val _model = MutableStateFlow(prefs.getString(KEY_MODEL, null) ?: DEFAULT_MODEL)
+    val model: StateFlow<String> = _model.asStateFlow()
+
+    private val _safeTokenMode = MutableStateFlow(prefs.getBoolean(KEY_SAFE_TOKEN_MODE, true))
+    val safeTokenMode: StateFlow<Boolean> = _safeTokenMode.asStateFlow()
+
+    private val _djVoiceEnabled = MutableStateFlow(prefs.getBoolean(KEY_DJ_VOICE, true))
+    val djVoiceEnabled: StateFlow<Boolean> = _djVoiceEnabled.asStateFlow()
+
+    private val _tokenUsage = MutableStateFlow(loadTokenUsage())
+    val tokenUsage: StateFlow<AiDjTokenUsage> = _tokenUsage.asStateFlow()
+
     fun setApiKey(key: String) {
         prefs.edit().putString(KEY_API_KEY, key.trim()).apply()
         _hasApiKey.value = key.isNotBlank()
@@ -88,6 +106,46 @@ class AiDjRepository(context: Context) {
         _trackCount.value = clamped
     }
 
+    fun setModel(model: String) {
+        prefs.edit().putString(KEY_MODEL, model).apply()
+        _model.value = model
+    }
+
+    fun setSafeTokenMode(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SAFE_TOKEN_MODE, enabled).apply()
+        _safeTokenMode.value = enabled
+    }
+
+    fun setDjVoiceEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DJ_VOICE, enabled).apply()
+        _djVoiceEnabled.value = enabled
+    }
+
+    private fun loadTokenUsage(): AiDjTokenUsage = AiDjTokenUsage(
+        promptTokens = prefs.getLong(KEY_TOKENS_PROMPT, 0L),
+        outputTokens = prefs.getLong(KEY_TOKENS_OUTPUT, 0L),
+    )
+
+    fun clearTokenUsage() {
+        prefs.edit()
+            .remove(KEY_TOKENS_PROMPT)
+            .remove(KEY_TOKENS_OUTPUT)
+            .apply()
+        _tokenUsage.value = AiDjTokenUsage(0L, 0L)
+    }
+
+    private fun recordTokenUsage(promptTokens: Long, outputTokens: Long) {
+        val updated = AiDjTokenUsage(
+            promptTokens = _tokenUsage.value.promptTokens + promptTokens,
+            outputTokens = _tokenUsage.value.outputTokens + outputTokens,
+        )
+        prefs.edit()
+            .putLong(KEY_TOKENS_PROMPT, updated.promptTokens)
+            .putLong(KEY_TOKENS_OUTPUT, updated.outputTokens)
+            .apply()
+        _tokenUsage.value = updated
+    }
+
     /**
      * Ask Gemini to craft a mix from [library]. Returns the mix with each
      * pick resolved to its [Song], in play order.
@@ -97,7 +155,9 @@ class AiDjRepository(context: Context) {
         if (apiKey.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("No Google AI API key set"))
         }
-        val pool = library.distinctBy { it.id }.take(MAX_LIBRARY_SONGS)
+        val pool = library.distinctBy { it.id }.take(
+            if (_safeTokenMode.value) MAX_LIBRARY_SONGS_SAFE else MAX_LIBRARY_SONGS
+        )
         if (pool.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("Library is empty"))
         }
@@ -116,7 +176,7 @@ class AiDjRepository(context: Context) {
             append("Pick exactly $count tracks by their 1-based numbers, in play order, ")
             append("for a flowing DJ set. You may only pick from the list above. ")
             append("Respond with ONLY this JSON object and no other text: ")
-            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3, \"line\": \"short DJ intro line\"}]}")
+            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3, \"line\": \"short spoken DJ intro line for this track\"}]}")
         }
 
         val body = JSONObject()
@@ -137,7 +197,7 @@ class AiDjRepository(context: Context) {
 
         try {
             val request = Request.Builder()
-                .url(GENERATE_URL)
+                .url("$GENERATE_URL_BASE/${_model.value}:generateContent")
                 .header("x-goog-api-key", apiKey)
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .build()
@@ -167,6 +227,12 @@ class AiDjRepository(context: Context) {
     private fun parseMix(responseBody: String, pool: List<Song>): Result<AiDjMix> {
         return try {
             val root = JSONObject(responseBody)
+            root.optJSONObject("usageMetadata")?.let { usage ->
+                recordTokenUsage(
+                    promptTokens = usage.optLong("promptTokenCount", 0L),
+                    outputTokens = usage.optLong("candidatesTokenCount", 0L),
+                )
+            }
             val text = root.getJSONArray("candidates")
                 .getJSONObject(0)
                 .getJSONObject("content")
@@ -206,21 +272,53 @@ class AiDjRepository(context: Context) {
         private const val KEY_API_KEY = "google_ai_api_key"
         private const val KEY_PROMPT = "dj_prompt"
         private const val KEY_TRACK_COUNT = "track_count"
+        private const val KEY_MODEL = "ai_model"
+        private const val KEY_SAFE_TOKEN_MODE = "safe_token_mode"
+        private const val KEY_DJ_VOICE = "dj_voice_enabled"
+        private const val KEY_TOKENS_PROMPT = "tokens_prompt"
+        private const val KEY_TOKENS_OUTPUT = "tokens_output"
 
-        private const val GENERATE_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        private const val GENERATE_URL_BASE =
+            "https://generativelanguage.googleapis.com/v1beta/models"
 
         private const val MAX_LIBRARY_SONGS = 600
+        private const val MAX_LIBRARY_SONGS_SAFE = 120
         private const val DEFAULT_TRACK_COUNT = 15
         val TRACK_COUNT_OPTIONS = listOf(10, 15, 20, 25)
+
+        /** The default; the API reports older models as retired, so this stays current. */
+        const val DEFAULT_MODEL = "gemini-3.8-flash"
+
+        /** Selectable models, newest first. */
+        val AI_MODELS = listOf(
+            "gemini-3.8-flash",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-pro-latest",
+        )
 
         private const val SYSTEM_INSTRUCTION =
             "You are Koda DJ, a charismatic radio DJ with impeccable taste. " +
                 "You craft mixes with a real arc: open strong, build energy, " +
-                "and land the ending. Every reply is exactly the JSON object requested, nothing else."
+                "and land the ending. Your intro lines are spoken aloud between songs, " +
+                "so keep each to one vivid sentence. Every reply is exactly the JSON object requested, nothing else."
 
         const val DEFAULT_PROMPT =
             "You are a late-night radio DJ with great taste. Read the room, " +
                 "build energy across the set, and make every transition feel inevitable."
+
+        /** One-tap prompt presets, like a starting personality for the DJ. */
+        val PROMPT_PRESETS = listOf(
+            "Professional Curator" to
+                "You are 'Vibe-Engine', a professional music curator. Analyze the " +
+                    "listener's library to provide perfect music recommendations. " +
+                    "Always prioritize flow, emotional resonance, and discovery.",
+            "Creative Maverick" to
+                "You are a fearless college-radio DJ who lives for the unexpected " +
+                    "left turn. Take big swings between genres, but make every " +
+                    "transition feel intentional. Surprise the listener.",
+        )
     }
 }

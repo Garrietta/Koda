@@ -437,7 +437,7 @@ fun HomeScreen(
     val visualTabOrder = if (videoMode) {
         videoHomeConfiguration.destinationOrder.map(VideoHomeDestination::tabId)
     } else {
-        listOf(0, 1, 2)
+        listOf(0, 1, 2, 3)
     }
 
     // A destination can be hidden while it is selected (including from the
@@ -519,12 +519,14 @@ fun HomeScreen(
     val subscriptionsScrollState = rememberLazyListState()
     val musicLibraryScrollState = rememberLazyListState()
     val videoLibraryScrollState = rememberLazyListState()
+    val exploreScrollState = rememberLazyListState()
 
     // Which of the above the visible tab is currently driving.
     val currentTabScrollState = when (selectedTab) {
         0 -> if (videoMode) videoHomeScrollState else musicHomeScrollState
         1 -> if (videoMode) videoSearchScrollState else musicSearchScrollState
         2 -> if (videoMode) subscriptionsScrollState else musicLibraryScrollState
+        3 -> if (videoMode) videoLibraryScrollState else exploreScrollState
         else -> videoLibraryScrollState
     }
 
@@ -557,9 +559,17 @@ fun HomeScreen(
         selectedTab = rootTab
     }
 
-    // The Subscriptions/History tabs (2/3) only exist in video mode
+    // Tab 3 means different things per mode: Explore in music, Library in
+    // video. The Subscriptions tab (2) only exists in video mode.
     LaunchedEffect(videoMode) {
-        if (!videoMode && selectedTab > 2) selectedTab = 0
+        if (videoMode) {
+            // Was music: Explore has no video equivalent.
+            if (selectedTab == 3) selectedTab = videoRootTab
+        } else {
+            // Was video: Library (3) -> music Library (2), Subscriptions (2) -> Home.
+            if (selectedTab == 3) selectedTab = 2
+            else if (selectedTab == 2) selectedTab = 0
+        }
     }
 
     // Re-read the history when Home becomes the active tab. Playback writes an
@@ -638,6 +648,9 @@ fun HomeScreen(
     var viewedVideoPlaylistFromHome by remember {
         mutableStateOf<com.ivor.ivormusic.data.VideoPlaylist?>(null)
     }
+    // The Home tab's DJ card: opens the Library's AI DJ route, consumed by
+    // LibraryContent on arrival like the playlist hand-off above.
+    var openAiDjFromHome by remember { mutableStateOf(false) }
 
     // A playlist link shared or opened into the app, which lands at
     // MainActivity and cannot reach the tab state from there. Same hand-off as
@@ -965,7 +978,7 @@ fun HomeScreen(
     val gestureTabIds = if (videoMode) {
         videoHomeConfiguration.orderedVisibleDestinations.map { it.tabId }
     } else {
-        listOf(0, 1, 2)
+        listOf(0, 1, 2, 3)
     }
     val flickToTab: (towardNext: Boolean) -> Unit = { towardNext ->
         val index = gestureTabIds.indexOf(selectedTab)
@@ -1241,6 +1254,11 @@ fun HomeScreen(
                                                 },
                                                 onOpenLiked = { selectedTab = 2 },
                                                 onShowAllInLibrary = { selectedTab = 2 },
+                                                onOpenAiDj = {
+                                                    noteLibraryReturn()
+                                                    openAiDjFromHome = true
+                                                    goToTab(2)
+                                                },
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
@@ -1508,6 +1526,8 @@ fun HomeScreen(
                                 onInitialAlbumConsumed = { viewedAlbumFromPlayer = null },
                                 onStatsClick = onNavigateToStats,
                                 onOpenAiDjSettings = onNavigateToSettings,
+                                initialAiDj = openAiDjFromHome,
+                                onInitialAiDjConsumed = { openAiDjFromHome = false },
                                 onOpenChannel = onOpenChannel,
                                 onSongLongPress = { song -> songOptionsTarget = song },
                                 onEnqueueSong = { song, playNext ->
@@ -1518,7 +1538,43 @@ fun HomeScreen(
                             )
                         }
                     }
-                    3 -> {
+                    3 -> if (!videoMode) {
+                        // Music mode: the Explore tab (Quick Picks + Artist
+                        // Spotlight), separate from Search.
+                        val exploreLiked by viewModel.likedSongs.collectAsState()
+                        val exploreDownloaded by viewModel.downloadedSongs.collectAsState()
+                        val exploreRecent by viewModel.recentlyPlayed.collectAsState()
+                        val exploreTopArtists by viewModel.topArtists.collectAsState()
+                        val exploreArtistPhotos by viewModel.artistPhotos.collectAsState()
+                        ExploreContent(
+                            songs = songs,
+                            likedSongs = exploreLiked,
+                            downloadedSongs = exploreDownloaded,
+                            recentlyPlayed = exploreRecent,
+                            topArtists = exploreTopArtists,
+                            artistPhotos = exploreArtistPhotos,
+                            onPlaySongs = { queue, start ->
+                                playerViewModel.playQueue(queue, start)
+                                showPlayerSheet = true
+                            },
+                            onSongLongPress = { song -> songOptionsTarget = song },
+                            onArtistClick = { artist ->
+                                noteLibraryReturn()
+                                viewedArtistFromPlayer = artist
+                                goToTab(2)
+                            },
+                            onArtistRadio = { artist ->
+                                val artistSongs = (songs + exploreLiked).distinctBy { it.id }
+                                    .filter { it.artist.equals(artist, ignoreCase = true) }
+                                if (artistSongs.isNotEmpty()) {
+                                    playerViewModel.playQueueShuffled(artistSongs)
+                                    showPlayerSheet = true
+                                }
+                            },
+                            contentPadding = listContentPadding,
+                            listState = exploreScrollState,
+                        )
+                    } else {
                         // Video mode only: Library (playlists, Watch Later,
                         // liked videos, watch history)
                         if (videoMode && localOnly) {
@@ -1713,7 +1769,8 @@ fun HomeScreen(
         } else listOf(
             Triple(0, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
             Triple(1, stringResource(R.string.tab_search), Pair(Icons.Filled.Search, Icons.Outlined.Search)),
-            Triple(2, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic))
+            Triple(2, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic)),
+            Triple(3, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore))
         )
         val selectNavTab: (Int) -> Unit = { index ->
             if (selectedTab == index) {

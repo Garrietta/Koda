@@ -3,6 +3,7 @@ package com.ivor.ivormusic.ui.settings
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,22 +13,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -39,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +65,10 @@ class AiDjSettingsViewModel(application: Application) : AndroidViewModel(applica
     val hasApiKey = repository.hasApiKey
     val prompt = repository.prompt
     val trackCount = repository.trackCount
+    val model = repository.model
+    val safeTokenMode = repository.safeTokenMode
+    val djVoiceEnabled = repository.djVoiceEnabled
+    val tokenUsage = repository.tokenUsage
 }
 
 @Composable
@@ -87,12 +101,17 @@ internal fun AiDjSettingsPage(
     val hasKey by model.hasApiKey.collectAsState()
     val prompt by model.prompt.collectAsState()
     val trackCount by model.trackCount.collectAsState()
+    val aiModel by model.model.collectAsState()
+    val safeTokenMode by model.safeTokenMode.collectAsState()
+    val djVoiceEnabled by model.djVoiceEnabled.collectAsState()
+    val tokenUsage by model.tokenUsage.collectAsState()
 
     // Credentials never enter saved-instance-state or navigation arguments.
     var keyInput by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
     var promptInput by remember { mutableStateOf(prompt) }
     var promptDirty by remember { mutableStateOf(false) }
+    var showModelSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -115,7 +134,7 @@ internal fun AiDjSettingsPage(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
                 stringResource(R.string.aidj_intro),
@@ -123,115 +142,256 @@ internal fun AiDjSettingsPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Google AI API key.
-            Text(
-                stringResource(R.string.aidj_api_key_label),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            OutlinedTextField(
-                value = keyInput,
-                onValueChange = { keyInput = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        if (hasKey) stringResource(R.string.aidj_api_key_set_placeholder)
-                        else stringResource(R.string.aidj_api_key_hint)
-                    )
-                },
-                visualTransformation = if (showKey) VisualTransformation.None
-                else PasswordVisualTransformation(),
-                singleLine = true,
-                trailingIcon = {
-                    TextButton(onClick = { showKey = !showKey }) {
-                        Text(
-                            if (showKey) stringResource(R.string.aidj_hide)
-                            else stringResource(R.string.aidj_show)
-                        )
-                    }
-                },
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(
-                    onClick = {
-                        repository.setApiKey(keyInput)
-                        keyInput = ""
-                    },
-                    enabled = keyInput.isNotBlank(),
-                ) {
-                    Text(stringResource(R.string.aidj_save_key))
-                }
-                if (hasKey) {
-                    OutlinedButton(onClick = {
-                        repository.clearApiKey()
-                        keyInput = ""
-                    }) {
-                        Text(stringResource(R.string.aidj_remove_key))
-                    }
+            // Provider.
+            AiDjSectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Rounded.Check,
+                        Icons.Rounded.Science,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(28.dp),
                     )
+                    Spacer(Modifier.size(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.aidj_provider),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            stringResource(R.string.aidj_provider_sub),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        FilterChip(
+                            selected = true,
+                            onClick = {},
+                            label = { Text(stringResource(R.string.aidj_provider_gemini)) },
+                        )
+                    }
                 }
             }
-            TextButton(
-                onClick = {
-                    try {
-                        context.startActivity(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://aistudio.google.com/apikey"),
-                            )
-                        )
-                    } catch (_: Exception) { }
-                }
-            ) {
-                Text(stringResource(R.string.aidj_get_key))
-                Icon(
-                    Icons.AutoMirrored.Rounded.OpenInNew,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+
+            // Safe token mode + DJ voice.
+            AiDjSectionCard {
+                AiDjToggleRow(
+                    title = stringResource(R.string.aidj_safe_token_title),
+                    subtitle = stringResource(R.string.aidj_safe_token_sub),
+                    checked = safeTokenMode,
+                    onCheckedChange = { repository.setSafeTokenMode(it) },
+                )
+                Spacer(Modifier.height(12.dp))
+                AiDjToggleRow(
+                    title = stringResource(R.string.aidj_dj_voice_title),
+                    subtitle = stringResource(R.string.aidj_dj_voice_sub),
+                    checked = djVoiceEnabled,
+                    onCheckedChange = { repository.setDjVoiceEnabled(it) },
                 )
             }
 
-            // Custom DJ prompt.
+            // Credentials.
             Text(
-                stringResource(R.string.aidj_prompt_label),
+                stringResource(R.string.aidj_section_credentials),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
             )
-            OutlinedTextField(
-                value = if (promptDirty) promptInput else prompt,
-                onValueChange = {
-                    promptInput = it
-                    promptDirty = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp),
-                minLines = 4,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        repository.setPrompt(promptInput)
-                        promptDirty = false
+            AiDjSectionCard {
+                Text(
+                    stringResource(R.string.aidj_api_key_label),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.aidj_api_key_where),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            if (hasKey) stringResource(R.string.aidj_api_key_set_placeholder)
+                            else stringResource(R.string.aidj_api_key_hint)
+                        )
                     },
-                    enabled = promptDirty,
+                    visualTransformation = if (showKey) VisualTransformation.None
+                    else PasswordVisualTransformation(),
+                    singleLine = true,
+                    trailingIcon = {
+                        TextButton(onClick = { showKey = !showKey }) {
+                            Text(
+                                if (showKey) stringResource(R.string.aidj_hide)
+                                else stringResource(R.string.aidj_show)
+                            )
+                        }
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(stringResource(R.string.aidj_save_prompt))
+                    Button(
+                        onClick = {
+                            repository.setApiKey(keyInput)
+                            keyInput = ""
+                        },
+                        enabled = keyInput.isNotBlank(),
+                    ) {
+                        Text(stringResource(R.string.aidj_save_key))
+                    }
+                    if (hasKey) {
+                        OutlinedButton(onClick = {
+                            repository.clearApiKey()
+                            keyInput = ""
+                        }) {
+                            Text(stringResource(R.string.aidj_remove_key))
+                        }
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
-                TextButton(onClick = {
-                    repository.resetPrompt()
-                    promptInput = AiDjRepository.DEFAULT_PROMPT
-                    promptDirty = false
-                }) {
-                    Text(stringResource(R.string.aidj_reset_prompt))
+                TextButton(
+                    onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://aistudio.google.com/apikey"),
+                                )
+                            )
+                        } catch (_: Exception) { }
+                    }
+                ) {
+                    Text(stringResource(R.string.aidj_get_key))
+                    Icon(
+                        Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+
+            // Model selection.
+            Text(
+                stringResource(R.string.aidj_section_model),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            AiDjSectionCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showModelSheet = true }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Rounded.Science,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.size(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.aidj_model_label),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            stringResource(R.string.aidj_model_sub),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        FilterChip(
+                            selected = true,
+                            onClick = { showModelSheet = true },
+                            label = { Text(aiModel.prettyModelName()) },
+                        )
+                    }
+                }
+            }
+
+            // Prompt behavior.
+            Text(
+                stringResource(R.string.aidj_section_prompt),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            AiDjSectionCard {
+                Text(
+                    stringResource(R.string.aidj_prompt_label),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.aidj_prompt_sub),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.aidj_preset_prompts),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AiDjRepository.PROMPT_PRESETS.forEach { (name, preset) ->
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                repository.setPrompt(preset)
+                                promptInput = preset
+                                promptDirty = false
+                            },
+                            label = { Text(name) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = if (promptDirty) promptInput else prompt,
+                    onValueChange = {
+                        promptInput = it
+                        promptDirty = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    minLines = 4,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            repository.setPrompt(promptInput)
+                            promptDirty = false
+                        },
+                        enabled = promptDirty,
+                    ) {
+                        Text(stringResource(R.string.aidj_save_prompt))
+                    }
+                    TextButton(onClick = {
+                        repository.resetPrompt()
+                        promptInput = AiDjRepository.DEFAULT_PROMPT
+                        promptDirty = false
+                    }) {
+                        Text(stringResource(R.string.aidj_reset_prompt))
+                    }
                 }
             }
 
@@ -251,12 +411,131 @@ internal fun AiDjSettingsPage(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            // AI usage report.
+            Text(
+                stringResource(R.string.aidj_section_usage),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            AiDjSectionCard {
+                Text(
+                    stringResource(R.string.aidj_usage_total),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(
+                        R.string.aidj_usage_detail,
+                        tokenUsage.promptTokens + tokenUsage.outputTokens,
+                        tokenUsage.promptTokens,
+                        tokenUsage.outputTokens,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { repository.clearTokenUsage() }) {
+                    Text(stringResource(R.string.aidj_usage_clear))
+                }
+            }
+
             Text(
                 stringResource(R.string.aidj_privacy_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showModelSheet) {
+        ModalBottomSheet(onDismissRequest = { showModelSheet = false }) {
+            Text(
+                stringResource(R.string.aidj_model_label),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            LazyColumn(
+                modifier = Modifier.padding(bottom = 32.dp),
+            ) {
+                items(AiDjRepository.AI_MODELS) { modelName ->
+                    val selected = modelName == aiModel
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                repository.setModel(modelName)
+                                showModelSheet = false
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            modelName.prettyModelName(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "gemini-2.5-flash" -> "Gemini 2.5 Flash". */
+private fun String.prettyModelName(): String =
+    split("-").joinToString(" ") { part ->
+        part.replaceFirstChar { it.uppercase() }
+    }
+
+@Composable
+private fun AiDjSectionCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AiDjToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

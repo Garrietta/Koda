@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -111,6 +113,8 @@ fun SpotlightHomeContent(
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onOpenLiked: () -> Unit = {},
     onShowAllInLibrary: () -> Unit = {},
+    /** Open the AI DJ, from the DJ card at the top of Home. */
+    onOpenAiDj: () -> Unit = {},
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
     onProfileClick: () -> Unit,
@@ -208,6 +212,11 @@ fun SpotlightHomeContent(
 
             item(key = "chips") {
                 SpotlightFilterChips(selected = filter, onSelect = { filter = it })
+            }
+
+            // The AI DJ sits at the top of Home: one tap to a generated mix.
+            item(key = "ai_dj_card") {
+                AiDjHomeCard(onClick = onOpenAiDj)
             }
 
             // The shortcut grid only makes sense unfiltered - a two-column grid
@@ -1144,5 +1153,53 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * The AI DJ card at the top of Home: a single tap opens the DJ screen.
+ */
+@Composable
+private fun AiDjHomeCard(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(40.dp),
+            )
+            Spacer(Modifier.size(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.aidj_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    stringResource(R.string.aidj_home_card_sub),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+        }
     }
 }

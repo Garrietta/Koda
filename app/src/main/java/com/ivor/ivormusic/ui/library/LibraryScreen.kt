@@ -203,6 +203,13 @@ fun LibraryContent(
     /** Open Settings, for the AI DJ screen's key/prompt setup. */
     onOpenAiDjSettings: () -> Unit = {},
     /**
+     * Open straight onto the AI DJ screen, for the Home tab's DJ card.
+     * Same hand-off shape as [initialPlaylist]: consumed on arrival so
+     * returning to the tab later lands on the list.
+     */
+    initialAiDj: Boolean = false,
+    onInitialAiDjConsumed: () -> Unit = {},
+    /**
      * Long-press on a song row. Hoisted rather than handled here because the
      * options sheet acts on the player, and HomeScreen is where the
      * PlayerViewModel lives; hosting one sheet up there also keeps a single
@@ -268,6 +275,15 @@ fun LibraryContent(
             returnsToCaller = initialReturnToCaller
             currentRoute = LibraryRoute.Playlist
             onInitialPlaylistConsumed()
+        }
+    }
+
+    // Handle the Home tab's DJ card hand-off: open the AI DJ route once, then
+    // consume it so later visits to the tab land on the list.
+    LaunchedEffect(initialAiDj) {
+        if (initialAiDj) {
+            currentRoute = LibraryRoute.AiDj
+            onInitialAiDjConsumed()
         }
     }
 

@@ -100,6 +100,17 @@
     <string name="tab_search">Search</string>
     <string name="tab_subs">Subs</string>
     <string name="tab_library">Library</string>
+    <string name="tab_explore">Explore</string>
+    <string name="explore_filter_all">All</string>
+    <string name="explore_filter_liked">Liked</string>
+    <string name="explore_filter_downloads">Downloads</string>
+    <string name="explore_filter_recent">Recent</string>
+    <string name="explore_quick_picks">Quick Picks</string>
+    <string name="explore_artist_spotlight">Artist Spotlight</string>
+    <string name="explore_top_track">Top track: %1$s</string>
+    <string name="explore_artist_radio">Artist radio</string>
+    <string name="explore_view_artist">View artist</string>
+    <string name="explore_empty">Play something and it will show up here.</string>
 
     <!-- Local only mode notices -->
     <string name="local_only_title">Local only mode is on</string>

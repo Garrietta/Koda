@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.library
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,14 +27,17 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,9 +55,13 @@ import coil.compose.AsyncImage
 import com.ivor.ivormusic.R
 import com.ivor.ivormusic.data.AiDjMix
 import com.ivor.ivormusic.data.AiDjRepository
+import com.ivor.ivormusic.data.DjVoiceRepository
 import com.ivor.ivormusic.data.Song
+import com.ivor.ivormusic.data.SongSource
+import com.ivor.ivormusic.data.StatsRepository
 import com.ivor.ivormusic.ui.home.HomeViewModel
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,6 +70,11 @@ import java.util.Locale
  * The AI DJ: generates a mix from the user's library via the Google AI API,
  * guided by the custom prompt in Settings. The result can be played right
  * away or saved as a local playlist.
+ *
+ * With DJ voice enabled, the DJ's intro lines are synthesized with the
+ * device's text-to-speech and interleaved with the songs in the queue,
+ * Spotify AI DJ style. Intros are skippable queue items and never touch
+ * listening history.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +87,9 @@ fun AiDjScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { AiDjRepository(context.applicationContext) }
+    val voiceRepository = remember { DjVoiceRepository(context.applicationContext) }
     val hasKey by repository.hasApiKey.collectAsState()
+    val djVoiceEnabled by repository.djVoiceEnabled.collectAsState()
     val likedSongs by viewModel.likedSongs.collectAsState()
     val downloadedSongs by viewModel.downloadedSongs.collectAsState()
 
@@ -87,6 +102,8 @@ fun AiDjScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var mix by remember { mutableStateOf<AiDjMix?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var preparingVoice by remember { mutableStateOf(false) }
+    var voiceProgress by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
 
     fun generate() {
@@ -100,6 +117,56 @@ fun AiDjScreen(
                 onFailure = { error = it.message ?: "Generation failed" },
             )
             generating = false
+        }
+    }
+
+    /**
+     * Build the playback queue for [mix]: with DJ voice on, each song is
+     * preceded by its synthesized spoken intro. Falls back to songs-only if
+     * synthesis fails.
+     */
+    fun playMix(mix: AiDjMix) {
+        if (preparingVoice) return
+        if (!djVoiceEnabled) {
+            onPlayQueue(mix.tracks.map { it.song }, mix.tracks.firstOrNull()?.song)
+            return
+        }
+        preparingVoice = true
+        voiceProgress = 0f
+        error = null
+        scope.launch {
+            try {
+                val voiceDir = File(context.cacheDir, "dj_voice").apply { mkdirs() }
+                val mixKey = mix.title.hashCode().toString(36) + mix.tracks.size
+                val queue = mutableListOf<Song>()
+                mix.tracks.forEachIndexed { index, track ->
+                    val line = track.djLine?.takeIf { it.isNotBlank() }
+                        ?: "Up next: ${track.song.title} by ${track.song.artist}."
+                    val file = File(voiceDir, "intro_${mixKey}_$index.mp3")
+                    val synthesized = if (file.exists() && file.length() > 0) {
+                        true
+                    } else {
+                        voiceRepository.synthesize(line, file)
+                    }
+                    if (synthesized) {
+                        queue += Song(
+                            id = "${StatsRepository.DJ_INTRO_ID_PREFIX}${mixKey}_$index",
+                            title = context.getString(R.string.aidj_voice_intro_title),
+                            artist = line,
+                            album = mix.title,
+                            duration = 0L,
+                            uri = Uri.fromFile(file),
+                            source = SongSource.LOCAL,
+                            filePath = file.absolutePath,
+                        )
+                    }
+                    queue += track.song
+                    voiceProgress = (index + 1).toFloat() / mix.tracks.size
+                }
+                onPlayQueue(queue, queue.firstOrNull())
+            } finally {
+                preparingVoice = false
+            }
         }
     }
 
@@ -137,22 +204,22 @@ fun AiDjScreen(
                 )
             }
             generating -> {
-                Box(
+                AiDjBusy(
+                    message = stringResource(R.string.aidj_generating),
+                    progress = null,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            stringResource(R.string.aidj_generating),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                )
+            }
+            preparingVoice -> {
+                AiDjBusy(
+                    message = stringResource(R.string.aidj_preparing_voice),
+                    progress = voiceProgress,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                )
             }
             else -> {
                 val currentMix = mix
@@ -188,6 +255,20 @@ fun AiDjScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.aidj_dj_voice_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Switch(
+                                    checked = djVoiceEnabled,
+                                    onCheckedChange = { repository.setDjVoiceEnabled(it) },
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = ::generate,
@@ -207,12 +288,7 @@ fun AiDjScreen(
                                 }
                                 if (currentMix != null) {
                                     OutlinedButton(
-                                        onClick = {
-                                            onPlayQueue(
-                                                currentMix.tracks.map { it.song },
-                                                currentMix.tracks.firstOrNull()?.song,
-                                            )
-                                        },
+                                        onClick = { playMix(currentMix) },
                                     ) {
                                         Icon(
                                             Icons.Rounded.PlayArrow,
@@ -285,6 +361,38 @@ fun AiDjScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AiDjBusy(
+    message: String,
+    progress: Float?,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 48.dp),
+        ) {
+            if (progress == null) {
+                CircularProgressIndicator()
+            } else {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
