@@ -32,6 +32,14 @@ class GeminiTtsRepository(context: Context) {
         PREFS_NAME, Context.MODE_PRIVATE
     )
 
+    /**
+     * The API key: always the DJ's key from the shared DJ prefs. TTS has no
+     * separate key storage — one key for all Gemini features.
+     */
+    private fun apiKey(): String =
+        appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_API_KEY, null)?.trim().orEmpty()
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
@@ -50,12 +58,7 @@ class GeminiTtsRepository(context: Context) {
 
     suspend fun synthesize(text: String, voiceName: String, outputFile: File): Boolean =
         withContext(Dispatchers.IO) {
-            val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
-                // Fall back to the DJ's key — same Google AI credential.
-                .ifEmpty {
-                    appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
-                        .getString(KEY_API_KEY, null)?.trim().orEmpty()
-                }
+            val apiKey = apiKey()
             if (apiKey.isEmpty()) {
                 KLog.w(TAG, "Gemini TTS: no API key")
                 return@withContext false
@@ -138,11 +141,7 @@ class GeminiTtsRepository(context: Context) {
         voiceName: String,
         outputFile: File,
     ): TtsTestResult = withContext(Dispatchers.IO) {
-        val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
-            .ifEmpty {
-                appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
-                    .getString(KEY_API_KEY, null)?.trim().orEmpty()
-            }
+        val apiKey = apiKey()
         if (apiKey.isEmpty()) {
             return@withContext TtsTestResult(model, false, 0, "No API key saved")
         }
