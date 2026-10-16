@@ -62,4 +62,4 @@
 
 # Glance AppWidget actionRunCallback instantiates ActionCallback classes via
 # reflection. R8 strips them in release builds, silently breaking widget buttons.
--keep class * implements androidx.glance.action.ActionCallback { *; }
+-keep class * implements androidx.glance.appwidget.action.ActionCallback { *; }
