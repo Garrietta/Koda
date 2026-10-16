@@ -228,10 +228,24 @@ fun LibraryContent(
      * their own states, since each is a different list and sharing one would
      * restore another list's index.
      */
-    allSongsListState: LazyListState = rememberLazyListState()
+    allSongsListState: LazyListState = rememberLazyListState(),
+    /**
+     * Increment to pop the Library back to its Main landing page. Used when
+     * the Library tab is re-tapped while already selected.
+     */
+    resetSignal: Int = 0,
 ) {
     // Navigation State
     var currentRoute by rememberSaveable { mutableStateOf(LibraryRoute.Main) }
+
+    // Re-tapping the Library tab pops back to the landing page and scrolls
+    // to the top.
+    LaunchedEffect(resetSignal) {
+        if (resetSignal > 0) {
+            currentRoute = LibraryRoute.Main
+            allSongsListState.scrollToItem(0)
+        }
+    }
 
     // Cached-in-full songs. Re-read whenever the tab comes back to its root,
     // because the cache changes as a side effect of listening: songs arrive by

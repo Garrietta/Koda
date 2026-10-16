@@ -445,6 +445,10 @@ fun HomeScreen(
         mutableIntStateOf(if (reachable) stored else videoRootTab)
     }
 
+    // Incremented when the Library tab is re-tapped while already selected,
+    // to pop its internal navigation back to the Main landing page.
+    var libraryResetSignal by androidx.compose.runtime.remember { mutableIntStateOf(0) }
+
     val rootTab = if (videoMode) videoRootTab else 0
     val visualTabOrder = if (videoMode) {
         videoHomeConfiguration.destinationOrder.map(VideoHomeDestination::tabId)
@@ -1617,7 +1621,8 @@ fun HomeScreen(
                                     if (playNext) playerViewModel.playNext(song)
                                     else playerViewModel.addToQueue(song)
                                 },
-                                allSongsListState = musicLibraryScrollState
+                                allSongsListState = musicLibraryScrollState,
+                                resetSignal = libraryResetSignal,
                             )
                         }
                     }
@@ -1860,7 +1865,14 @@ fun HomeScreen(
         )
         val selectNavTab: (Int) -> Unit = { index ->
             if (selectedTab == index) {
-                if (currentTabScrollState.canScrollBackward) {
+                // Re-tapping the current tab: pop its internal navigation back
+                // to the landing page, then scroll to top if already there.
+                // Library has sub-routes (Playlist, PodcastDetail, AiDj, ...);
+                // the others scroll.
+                if (index == TAB_LIBRARY) {
+                    navBarHaptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    libraryResetSignal++
+                } else if (currentTabScrollState.canScrollBackward) {
                     navBarHaptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     scope.launch { currentTabScrollState.scrollToTop() }
                 }
