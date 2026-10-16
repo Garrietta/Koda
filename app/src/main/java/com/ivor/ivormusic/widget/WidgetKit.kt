@@ -139,15 +139,18 @@ internal fun WidgetSurface(
 // ------------------------------------------------------------------- controls
 
 /**
- * Widget button action via transparent activity. Glance's actionRunCallback
- * stopped firing, so transport buttons launch WidgetActionActivity instead.
+ * Widget button action via Glance actionRunCallback. The ActionCallback classes
+ * are kept by ProGuard (see proguard-rules.pro) so R8 doesn't strip them.
  */
 internal fun widgetTransportAction(action: String): Action {
-    return actionStartActivity<WidgetActionActivity>(
-        parameters = actionParametersOf(
-            androidx.glance.action.ActionParameters.Key<String>(WidgetActionActivity.EXTRA_ACTION) to action
-        )
-    )
+    return when (action) {
+        WidgetActionActivity.ACTION_TOGGLE -> actionRunCallback<TogglePlaybackAction>()
+        WidgetActionActivity.ACTION_NEXT -> actionRunCallback<SkipNextAction>()
+        WidgetActionActivity.ACTION_PREVIOUS -> actionRunCallback<SkipPreviousAction>()
+        WidgetActionActivity.ACTION_SHUFFLE -> actionRunCallback<ToggleShuffleAction>()
+        WidgetActionActivity.ACTION_CYCLE_REPEAT -> actionRunCallback<CycleRepeatAction>()
+        else -> actionRunCallback<TogglePlaybackAction>()
+    }
 }
 
 /** Variant that also carries a queue index (for PlayQueueIndexAction). */
@@ -155,10 +158,9 @@ internal fun widgetTransportActionWithIndex(
     action: String,
     index: Int
 ): Action {
-    return actionStartActivity<WidgetActionActivity>(
+    return actionRunCallback<PlayQueueIndexAction>(
         parameters = actionParametersOf(
-            androidx.glance.action.ActionParameters.Key<String>(WidgetActionActivity.EXTRA_ACTION) to action,
-            androidx.glance.action.ActionParameters.Key<Int>(WidgetActionActivity.EXTRA_INDEX) to index
+            PlayQueueIndexAction.QueueIndexKey to index
         )
     )
 }
