@@ -140,7 +140,7 @@ private fun PulseCard(ui: PlayerWidgetUi) {
                 WidgetToggleButton(
                     iconRes = R.drawable.ic_media_shuffle,
                     description = widgetString(R.string.widget_action_shuffle),
-                    action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_SHUFFLE),
+                    action = widgetTransportAction(WidgetActionActivity.ACTION_SHUFFLE),
                     selected = snapshot.shuffleEnabled,
                     size = 42.dp,
                 )

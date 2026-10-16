@@ -109,7 +109,7 @@ private fun BloomContent(ui: PlayerWidgetUi) {
                 WidgetSquareButton(
                     iconRes = R.drawable.ic_media_next,
                     description = widgetString(R.string.widget_action_next),
-                    action = widgetTransportAction(LocalContext.current, WidgetActionActivity.ACTION_NEXT),
+                    action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
                     size = side,
                 )
             }
