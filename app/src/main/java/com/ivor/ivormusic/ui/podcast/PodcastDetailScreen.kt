@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -348,7 +349,7 @@ private fun EpisodeDetailRow(
         }
         if (progress?.completed == true) {
             Icon(
-                imageVector = Icons.Default.CheckCircle,
+                imageVector = Icons.Filled.CheckCircle,
                 contentDescription = stringResource(R.string.podcast_episode_played_cd),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp),

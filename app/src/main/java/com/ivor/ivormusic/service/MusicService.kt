@@ -42,6 +42,7 @@ import com.ivor.ivormusic.MainActivity
 import android.media.audiofx.AudioEffect
 import com.ivor.ivormusic.data.CacheManager
 import com.ivor.ivormusic.data.DownloadRepository
+import com.ivor.ivormusic.data.EpisodeProgressRepository
 import com.ivor.ivormusic.data.NotificationArtworkLoader
 import com.ivor.ivormusic.data.AudioProfileStore
 import com.ivor.ivormusic.data.AudioProfiler
