@@ -264,12 +264,33 @@ class AiDjRepository(context: Context) {
         }
         val count = _trackCount.value.coerceAtMost(pool.size)
 
-        val numbered = pool.mapIndexed { i, song ->
+        // Shuffle the library order every generation so the numbered list is
+        // different each time. Position bias is real — same order = same picks.
+        val shuffled = pool.shuffled()
+        val numbered = shuffled.mapIndexed { i, song ->
             "${i + 1}. ${song.title} — ${song.artist}"
         }.joinToString("\n")
 
+        // Per-generation seed: guarantees no two generations get the same prompt.
+        val sessionSeed = (1..100000).random()
+        // Random mix angle for the library portion (rotates every generation).
+        val mixAngles = listOf(
+            "open with an unexpected deep cut, then build",
+            "front-load the energy, peak early, coast out",
+            "slow burn: start mellow, build to a late peak",
+            "genre-hop aggressively but make each transition land",
+            "spotlight forgotten favorites from the middle of the library",
+            "build around a single mood and go deep on it",
+            "alternate between familiar anthems and curveballs",
+            "tell a story: each song hands off to the next",
+        )
+        val mixAngle = mixAngles.random()
+
         val userText = buildString {
             appendLine(_prompt.value.trim().ifEmpty { DEFAULT_PROMPT })
+            appendLine()
+            appendLine("Session #$sessionSeed — make this mix unlike any other.")
+            appendLine("Mix angle for this session: $mixAngle.")
             appendLine()
             appendLine("The listener's library (numbered as \"title — artist\"):")
             appendLine(numbered)
@@ -353,20 +374,23 @@ class AiDjRepository(context: Context) {
         if (recentPool.isEmpty() && likedPool.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("Nothing to build a mix from yet"))
         }
-        // One numbered pool; the model sees which list each track came from.
-        val pool = recentPool + likedPool
+        // Shuffle both pools every generation — fixed order = fixed picks.
+        val shuffledRecent = recentPool.shuffled()
+        val shuffledLiked = likedPool.shuffled()
         val numbered = buildString {
             appendLine("Recently played:")
-            recentPool.forEachIndexed { i, song ->
+            shuffledRecent.forEachIndexed { i, song ->
                 appendLine("${i + 1}. ${song.title} — ${song.artist}")
             }
-            if (likedPool.isNotEmpty()) {
+            if (shuffledLiked.isNotEmpty()) {
                 appendLine("Liked favorites (taste context):")
-                likedPool.forEachIndexed { i, song ->
-                    appendLine("${recentPool.size + i + 1}. ${song.title} — ${song.artist}")
+                shuffledLiked.forEachIndexed { i, song ->
+                    appendLine("${shuffledRecent.size + i + 1}. ${song.title} — ${song.artist}")
                 }
             }
         }
+        // Per-generation seed so no two mixes share a prompt.
+        val sessionSeed = (1..100000).random()
 
         val libraryCount = (INSTANT_MIX_TRACKS * 0.6).toInt()
         val discoveryCount = INSTANT_MIX_TRACKS - libraryCount
@@ -390,7 +414,7 @@ class AiDjRepository(context: Context) {
             appendLine()
             append("Today is $today. Build a $INSTANT_MIX_TRACKS-song DJ set in play order, ")
             append("flowing from what they have been playing lately through their liked favorites. ")
-            append("Today's discovery angle: $dailyAngle. ")
+            append("Session #$sessionSeed. Today's discovery angle: $dailyAngle. ")
             append("$libraryCount tracks: pick by their 1-based numbers from the lists above. ")
             append("$discoveryCount tracks: NEW discoveries NOT in the lists above — songs they have ")
             append("never heard that match their taste, from popular charts or deep cuts. ")
