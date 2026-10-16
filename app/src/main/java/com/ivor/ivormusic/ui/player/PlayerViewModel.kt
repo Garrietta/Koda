@@ -1701,7 +1701,7 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
                     else com.ivor.ivormusic.data.LikeStatus.INDIFFERENT,
                 )
             } catch (e: Exception) {
-                KLog.w(TAG, "YouTube like sync failed", e)
+                KLog.w("PlayerViewModel", "YouTube like sync failed", e)
             }
         }
     }

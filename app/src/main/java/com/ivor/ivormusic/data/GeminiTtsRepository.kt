@@ -159,7 +159,7 @@ class GeminiTtsRepository(context: Context) {
     companion object {
         private const val TAG = "GeminiTts"
         private const val PREFS_NAME = "gemini_tts"
-        private const val DJ_PREFS_NAME = "ai_dj"
+        private const val DJ_PREFS_NAME = "ivor_music_ai_dj"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_VOICE = "tts_voice"
         private const val TTS_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
