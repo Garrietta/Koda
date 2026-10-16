@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,6 +30,15 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
     /** Per-episode playback progress, for progress bars and resume. */
     val episodeProgress: StateFlow<Map<String, com.ivor.ivormusic.data.EpisodeProgress>> =
         progressRepository.progress
+
+    /** Ids of downloaded episodes, for the row download state. */
+    val downloadedEpisodeIds: StateFlow<Set<String>> =
+        downloadRepository.downloadedSongs
+            .map { list -> list.map { it.id }.toSet() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** Ids of episodes currently downloading. */
+    val downloadingEpisodeIds: StateFlow<Set<String>> = downloadRepository.downloadingIds
 
     val feeds: StateFlow<List<PodcastFeed>> = repository.feeds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

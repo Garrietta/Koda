@@ -12,6 +12,7 @@
     <string name="podcast_episode_count">%1$d episodes</string>
     <string name="podcast_new_episodes">New episodes</string>
     <string name="podcast_episode_played_cd">Episode played</string>
+    <string name="podcast_episode_downloaded_cd">Episode downloaded</string>
     <string name="podcast_detail_stats">Podcast • %1$d episodes • %2$s</string>
     <string name="podcast_refresh">Refresh feed</string>
     <string name="podcast_remove">Remove feed</string>

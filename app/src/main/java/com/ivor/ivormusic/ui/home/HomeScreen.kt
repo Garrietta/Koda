@@ -1507,6 +1507,7 @@ fun HomeScreen(
                                 initialAlbum = viewedAlbumFromPlayer,
                                 onInitialAlbumConsumed = { viewedAlbumFromPlayer = null },
                                 onStatsClick = onNavigateToStats,
+                                onOpenAiDjSettings = onNavigateToSettings,
                                 onOpenChannel = onOpenChannel,
                                 onSongLongPress = { song -> songOptionsTarget = song },
                                 onEnqueueSong = { song, playNext ->

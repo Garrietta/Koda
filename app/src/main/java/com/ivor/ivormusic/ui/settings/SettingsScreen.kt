@@ -277,6 +277,7 @@ internal enum class SettingsPage {
     DISPLAY_SIZE,
     LYRICS,
     LASTFM,
+    AIDJ,
     SPONSORBLOCK,
     APP_ICON,
     BACKUP,
@@ -859,6 +860,7 @@ fun SettingsScreen(
         )
 
         SettingsPage.LASTFM -> LastFmSettingsPage(onBack = { page = SettingsPage.HUB })
+        SettingsPage.AIDJ -> AiDjSettingsPage(onBack = { page = SettingsPage.HUB })
         SettingsPage.LYRICS -> LyricsSettingsPage(
             configuration = lyricsConfiguration,
             onChange = onLyricsConfigurationChange,
@@ -1771,6 +1773,11 @@ private fun SettingsHub(
                         LastFmHubRow(
                             onClick = { onOpenPage(SettingsPage.LASTFM) },
                             selected = selectedPage == SettingsPage.LASTFM
+                        )
+                        SettingsDivider()
+                        AiDjHubRow(
+                            onClick = { onOpenPage(SettingsPage.AIDJ) },
+                            selected = selectedPage == SettingsPage.AIDJ
                         )
                         SettingsDivider()
                         SettingsHubRow(

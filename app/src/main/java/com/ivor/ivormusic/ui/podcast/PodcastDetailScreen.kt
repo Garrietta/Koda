@@ -72,6 +72,8 @@ fun PodcastDetailScreen(
 ) {
     val episodes by viewModel.episodesByFeed.collectAsState()
     val progressByEpisode by viewModel.episodeProgress.collectAsState()
+    val downloadedIds by viewModel.downloadedEpisodeIds.collectAsState()
+    val downloadingIds by viewModel.downloadingEpisodeIds.collectAsState()
     val feedEpisodes = (episodes[feed.id].orEmpty()).sortedByDescending { it.pubDate }
     val songs = viewModel.episodeSongs(feed.id)
     val songsById = remember(songs) { songs.associateBy { it.id } }
@@ -254,9 +256,15 @@ fun PodcastDetailScreen(
 
         items(feedEpisodes, key = { "episode:${it.id}" }) { episode ->
             val song = songsById["podcast:${episode.id}"]
+            val songId = "${com.ivor.ivormusic.data.EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX}${episode.id}"
             EpisodeDetailRow(
                 episode = episode,
                 progress = progressByEpisode[episode.id],
+                downloadState = when {
+                    songId in downloadingIds -> EpisodeDownloadState.Downloading
+                    songId in downloadedIds -> EpisodeDownloadState.Downloaded
+                    else -> EpisodeDownloadState.NotDownloaded
+                },
                 onClick = {
                     if (song != null) onPlayQueue(songs, song)
                 },
@@ -266,10 +274,13 @@ fun PodcastDetailScreen(
     }
 }
 
+private enum class EpisodeDownloadState { NotDownloaded, Downloading, Downloaded }
+
 @Composable
 private fun EpisodeDetailRow(
     episode: PodcastEpisode,
     progress: com.ivor.ivormusic.data.EpisodeProgress?,
+    downloadState: EpisodeDownloadState = EpisodeDownloadState.NotDownloaded,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit = {},
 ) {
@@ -356,12 +367,31 @@ private fun EpisodeDetailRow(
             )
             Spacer(Modifier.width(4.dp))
         }
-        androidx.compose.material3.IconButton(onClick = onDownloadClick) {
-            Icon(
-                imageVector = Icons.Default.Download,
-                contentDescription = stringResource(R.string.cd_downloads),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        when (downloadState) {
+            EpisodeDownloadState.Downloading -> {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            EpisodeDownloadState.Downloaded -> {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = stringResource(R.string.podcast_episode_downloaded_cd),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            EpisodeDownloadState.NotDownloaded -> {
+                androidx.compose.material3.IconButton(onClick = onDownloadClick) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = stringResource(R.string.cd_downloads),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

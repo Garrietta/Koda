@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AI DJ: Gemini-powered playlist generation. -->
+    <string name="aidj_title">AI DJ</string>
+    <string name="aidj_intro">The DJ reads your library and crafts a mix around your custom prompt, with an intro line for every pick.</string>
+    <string name="aidj_configured">Ready</string>
+    <string name="aidj_not_configured">API key needed</string>
+    <string name="aidj_api_key_label">Google AI API key</string>
+    <string name="aidj_api_key_hint">Paste your API key</string>
+    <string name="aidj_api_key_set_placeholder">Key saved — paste a new one to replace it</string>
+    <string name="aidj_save_key">Save key</string>
+    <string name="aidj_remove_key">Remove</string>
+    <string name="aidj_get_key">Get a free Google AI API key</string>
+    <string name="aidj_show">Show</string>
+    <string name="aidj_hide">Hide</string>
+    <string name="aidj_prompt_label">DJ prompt</string>
+    <string name="aidj_save_prompt">Save prompt</string>
+    <string name="aidj_reset_prompt">Reset to default</string>
+    <string name="aidj_track_count_label">Tracks per mix</string>
+    <string name="aidj_privacy_note">Your key stays on this device. Your library titles are sent to Google\u2019s API only when you generate a mix.</string>
+    <string name="aidj_generating">The DJ is digging through your crates\u2026</string>
+    <string name="aidj_generate">Generate mix</string>
+    <string name="aidj_regenerate">Regenerate</string>
+    <string name="aidj_pool_size">%1$d songs in the crates</string>
+    <string name="aidj_play">Play</string>
+    <string name="aidj_save_playlist">Save as playlist</string>
+    <string name="aidj_needs_key_title">The DJ needs a key</string>
+    <string name="aidj_needs_key_body">Add your Google AI API key in Settings to start generating mixes.</string>
+    <string name="aidj_open_settings">Open Settings</string>
+</resources>

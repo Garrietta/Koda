@@ -2309,10 +2309,23 @@ class MusicService : MediaLibraryService() {
                     .setMediaMetadata(meta)
                     .build()
             } else if (isPodcastUri) {
-                KLog.d(TAG, "onAddMediaItems: Preserving podcast stream URI for ${item.mediaId}")
-                item.buildUpon()
-                    .setMediaMetadata(meta)
-                    .build()
+                // A downloaded episode plays from its local file, not the
+                // network. Without this, podcast items bypassed
+                // performResolution (which checks downloads first) and a
+                // downloaded episode would still stream.
+                val localUri = findDownloadedUri(item.mediaId)
+                if (localUri != null) {
+                    KLog.d(TAG, "onAddMediaItems: Using downloaded file for ${item.mediaId}")
+                    item.buildUpon()
+                        .setUri(localUri)
+                        .setMediaMetadata(meta)
+                        .build()
+                } else {
+                    KLog.d(TAG, "onAddMediaItems: Preserving podcast stream URI for ${item.mediaId}")
+                    item.buildUpon()
+                        .setMediaMetadata(meta)
+                        .build()
+                }
             } else {
                 // YouTube song: use placeholder — resolution will happen via prefetch system
                 MediaItem.Builder()
@@ -2632,6 +2645,12 @@ class MusicService : MediaLibraryService() {
                     .build()
             )
             .build()
+
+    /** Local file for a downloaded media id, or null when not downloaded. */
+    private fun findDownloadedUri(mediaId: String): android.net.Uri? {
+        if (!::downloadRepository.isInitialized) return null
+        return downloadRepository.downloadedSongs.value.firstOrNull { it.id == mediaId }?.uri
+    }
 
     /** A single playable id looked up across every store the tree serves. */
     private suspend fun findSongForBrowseId(mediaId: String): Song? {

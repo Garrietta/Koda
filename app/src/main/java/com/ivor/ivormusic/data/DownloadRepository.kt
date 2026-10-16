@@ -699,7 +699,7 @@ class DownloadRepository private constructor(private val context: Context) {
      */
     suspend fun downloadPodcastEpisode(episode: PodcastEpisode, feed: PodcastFeed?) {
         val song = Song(
-            id = "podcast:${episode.id}",
+            id = "${EpisodeProgressRepository.PODCAST_SONG_ID_PREFIX}${episode.id}",
             title = episode.title,
             artist = feed?.title ?: "Podcast",
             album = feed?.title ?: "Podcast",
@@ -1007,10 +1007,19 @@ class DownloadRepository private constructor(private val context: Context) {
             updateProgress(request, 0.02f, DownloadStatus.DOWNLOADING)
 
             try {
-                val streamUrl = youtubeRepository
-                    .getDownloadAudioStreamUrl(request.id, request.audioQuality)
-                    .getOrNull()
-                    ?: throw java.io.IOException("No stream URL for ${request.id}")
+                // Podcast episodes carry their own RSS enclosure URL.
+                // Routing them through YouTube stream resolution is what
+                // made every podcast download fail with "No stream URL".
+                val streamUrl = if (song.source == SongSource.PODCAST) {
+                    song.uri?.toString()?.takeIf {
+                        it.startsWith("http://") || it.startsWith("https://")
+                    } ?: throw java.io.IOException("No audio URL for ${request.id}")
+                } else {
+                    youtubeRepository
+                        .getDownloadAudioStreamUrl(request.id, request.audioQuality)
+                        .getOrNull()
+                        ?: throw java.io.IOException("No stream URL for ${request.id}")
+                }
                 val keepLyrics = request.saveLyrics
                     ?: ThemePreferences.saveLyricsWithDownloads(context)
 

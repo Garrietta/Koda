@@ -200,6 +200,8 @@ fun LibraryContent(
     initialAlbum: String? = null,
     onInitialAlbumConsumed: () -> Unit = {},
     onStatsClick: () -> Unit = {},
+    /** Open Settings, for the AI DJ screen's key/prompt setup. */
+    onOpenAiDjSettings: () -> Unit = {},
     /**
      * Long-press on a song row. Hoisted rather than handled here because the
      * options sheet acts on the player, and HomeScreen is where the
@@ -362,6 +364,9 @@ fun LibraryContent(
                 onNavigateToPodcast = { feed ->
                     selectedPodcastFeed = feed
                     currentRoute = LibraryRoute.PodcastDetail
+                },
+                onNavigateToAiDj = {
+                    currentRoute = LibraryRoute.AiDj
                 },
                 onNavigateToStats = {
                     currentRoute = LibraryRoute.Stats
@@ -563,6 +568,15 @@ fun LibraryContent(
                     }
                 )
             }
+            LibraryRoute.AiDj -> {
+                AiDjScreen(
+                    viewModel = viewModel,
+                    onBack = { back() },
+                    onPlayQueue = { songs, song -> onPlayQueue(songs, song) },
+                    onOpenSettings = onOpenAiDjSettings,
+                    contentPadding = contentPadding,
+                )
+            }
             LibraryRoute.AddSongs -> {
                 selectedPlaylist?.let { target ->
                     val localIds by viewModel.localPlaylistIds.collectAsState()
@@ -679,7 +693,9 @@ enum class LibraryRoute {
     /** Recents, likes and a YouTube Music search into the open playlist (PlaylistAddSongsScreen). */
     AddSongs,
     /** A Spotify playlist or album, matched on YouTube Music into a new device playlist (SpotifyImportScreen). */
-    SpotifyImport
+    SpotifyImport,
+    /** The AI DJ mix generator (AiDjScreen). */
+    AiDj
 }
 
 enum class LibraryTab(val label: String) {
@@ -821,6 +837,7 @@ fun LibraryMainScreen(
     onNavigateToFollowedArtist: (com.ivor.ivormusic.data.TasteArtist) -> Unit = {},
     onNavigateToAlbum: (String, List<Song>) -> Unit,
     onNavigateToPodcast: (com.ivor.ivormusic.data.PodcastFeed) -> Unit = {},
+    onNavigateToAiDj: () -> Unit = {},
     onNavigateToStats: () -> Unit,
     onNavigateToHistory: () -> Unit,
     /** Songs cached in full; the entry point hides itself when nothing is. */
@@ -950,6 +967,13 @@ fun LibraryMainScreen(
                         shapes = IconButtonDefaults.shapes()
                     ) {
                         Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = stringResource(R.string.action_new_playlist), modifier = Modifier.size(24.dp))
+                    }
+                    FilledTonalIconButton(
+                        onClick = onNavigateToAiDj,
+                        modifier = Modifier.size(56.dp),
+                        shapes = IconButtonDefaults.shapes()
+                    ) {
+                        Icon(Icons.Rounded.AutoAwesome, contentDescription = stringResource(R.string.aidj_title), modifier = Modifier.size(24.dp))
                     }
                     FilledTonalIconButton(
                         onClick = onNavigateToStats,
