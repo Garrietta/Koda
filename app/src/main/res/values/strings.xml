@@ -152,6 +152,7 @@
     <string name="cd_settings">Settings</string>
     <string name="cd_play">Play</string>
     <string name="cd_pause">Pause</string>
+    <string name="cd_open_player">Open player</string>
     <string name="cd_next">Next</string>
     <string name="cd_album_art">Album Art</string>
     <string name="cd_show_all">Show all %1$s</string>

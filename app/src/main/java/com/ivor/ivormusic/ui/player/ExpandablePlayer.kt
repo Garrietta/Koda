@@ -626,6 +626,9 @@ fun ExpandablePlayer(
                             onPlayPauseClick = onPlayPauseClick,
                             onNextClick = onNextClick,
                             onClick = { onExpandChange(true) },
+                            // Shrunk to a bubble, the cover is the whole
+                            // control: tapping it opens the player.
+                            isBubble = bubbleFraction() > 0.5f,
                             onLongClick = when (miniCustomization.longPress) {
                                 com.ivor.ivormusic.data.MiniLongPress.NOTHING -> null
                                 // The options sheet belongs to the open
