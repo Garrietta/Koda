@@ -2264,7 +2264,7 @@ class MusicService : MediaLibraryService() {
                         preparePlaybackItem(tagDjMixItem(mapSongToMediaItem(song)))
                     }
                     // DJ mixes are strictly ordered: no shuffle, ever.
-                    session.player.shuffleModeEnabled = false
+                    mediaSession.player.shuffleModeEnabled = false
                     if (prepared.isEmpty()) {
                         // Fall back to liked songs rather than playing nothing.
                         likedSongsRepository.likedSongs.value

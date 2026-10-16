@@ -99,7 +99,6 @@ fun PlayerSheetContent(
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
     val shuffleModeEnabled by viewModel.shuffleModeEnabled.collectAsState()
-    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
     val currentQueue by viewModel.playOrderQueue.collectAsState()
     val currentQueueItemId by viewModel.currentQueueItemId.collectAsState()
@@ -257,6 +256,7 @@ private fun ExpressiveNowPlayingView(
     onSurfaceVariantColor: Color,
     stableShapes: IconButtonShapes
 ) {
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     // State for toggling between album art and lyrics
     var showLyrics by remember { mutableStateOf(false) }
     val playerHaptics = rememberPlayerHaptics()
