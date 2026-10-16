@@ -168,7 +168,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
             }
             Spacer(modifier = GlanceModifier.width(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                HeroPlayButton(isPlaying = playing, size = hero, background = songAccent)
+                HeroPlayButton(isPlaying = playing, size = hero)
                 Spacer(modifier = GlanceModifier.height(4.dp))
                 WidgetSquareButton(
                     iconRes = R.drawable.ic_media_next,
