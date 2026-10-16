@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.ivor.ivormusic.util.KLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +24,16 @@ import java.util.concurrent.TimeUnit
 @kotlinx.serialization.Serializable
 data class AiDjTrack(
     val song: Song,
+    val djLine: String?,
+)
+
+/**
+ * A new-song discovery: not in the listener's library, to be resolved via
+ * YouTube search into a playable [Song].
+ */
+data class AiDjDiscovery(
+    val title: String,
+    val artist: String,
     val djLine: String?,
 )
 
@@ -66,6 +78,8 @@ class AiDjRepository(context: Context) {
     private val prefs: SharedPreferences = appContext.getSharedPreferences(
         PREFS_NAME, Context.MODE_PRIVATE
     )
+
+    private val youTubeRepository by lazy { YouTubeRepository(appContext) }
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -276,9 +290,13 @@ class AiDjRepository(context: Context) {
 
     /**
      * The one-press DJ: builds a long (60-track) set from the [recent] plays
-     * with [liked] as taste context. Spoken transition lines are attached
-     * only at notable theme or mood shifts, not between every song —
-     * Spotify DJ style.
+     * with [liked] as taste context, plus fresh discoveries. Spoken transition
+     * lines are attached only at notable theme or mood shifts, not between
+     * every song — Spotify DJ style.
+     *
+     * The mix is 60% familiar (from their library) and 40% new discoveries
+     * the AI thinks they'll love, resolved via YouTube search. A daily seed
+     * keeps each day's mix unique.
      */
     suspend fun generateInstantMix(
         recent: List<Song>,
@@ -310,18 +328,39 @@ class AiDjRepository(context: Context) {
             }
         }
 
+        val libraryCount = (INSTANT_MIX_TRACKS * 0.6).toInt()
+        val discoveryCount = INSTANT_MIX_TRACKS - libraryCount
+        // Daily seed: a fresh angle every day so the mix never repeats itself.
+        val today = java.time.LocalDate.now().toString()
+        val dailyAngles = listOf(
+            "deep cuts and B-sides they have never considered",
+            "current chart climbers across their favorite genres",
+            "one-hit wonders and forgotten gems from the last three decades",
+            "live versions and acoustic reimaginings of familiar sounds",
+            "rising underground artists about to break through",
+            "cross-genre collaborations and unexpected features",
+            "songs that sample or interpolate artists they love",
+        )
+        val dailyAngle = dailyAngles[today.hashCode().mod(dailyAngles.size).let { if (it < 0) it + dailyAngles.size else it }]
+
         val userText = buildString {
             appendLine(_prompt.value.trim().ifEmpty { DEFAULT_PROMPT })
             appendLine()
             appendLine(numbered)
             appendLine()
-            append("Build a $INSTANT_MIX_TRACKS-song DJ set from the lists above, in play order, ")
+            append("Today is $today. Build a $INSTANT_MIX_TRACKS-song DJ set in play order, ")
             append("flowing from what they have been playing lately through their liked favorites. ")
-            append("You may only pick from the numbered lists. ")
+            append("Today's discovery angle: $dailyAngle. ")
+            append("$libraryCount tracks: pick by their 1-based numbers from the lists above. ")
+            append("$discoveryCount tracks: NEW discoveries NOT in the lists above — songs they have ")
+            append("never heard that match their taste, from popular charts or deep cuts. ")
+            append("Give each discovery as {\"new\": {\"title\": \"...\", \"artist\": \"...\"}}. ")
+            append("Interleave discoveries through the set so familiar and new alternate naturally. ")
             append("Attach a spoken transition \"line\" ONLY at notable theme or mood shifts ")
             append("(a new energy, a genre turn, a moment worth announcing) — most tracks get no line. ")
             append("Respond with ONLY this JSON object and no other text: ")
-            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 12, \"line\": \"spoken transition\"}]}")
+            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 12, \"line\": \"spoken transition\"}, ")
+            append("{\"new\": {\"title\": \"...\", \"artist\": \"...\"}, \"line\": \"...\"}]}")
         }
 
         val body = JSONObject()
@@ -334,7 +373,7 @@ class AiDjRepository(context: Context) {
                 ))
             ))
             .put("generationConfig", JSONObject()
-                .put("temperature", 0.9)
+                .put("temperature", 0.95)
                 .put("response_mime_type", "application/json")
                 .put("maxOutputTokens", 8192)
             )
@@ -361,11 +400,107 @@ class AiDjRepository(context: Context) {
                         )
                     )
                 }
-                return@withContext parseMix(responseBody, pool)
+                return@withContext parseMixWithDiscoveries(responseBody, pool)
             }
         } catch (e: Exception) {
             KLog.w(TAG, "AI DJ instant mix failed", e)
             return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Parse a mix that interleaves library picks ({"n": ...}) with new
+     * discoveries ({"new": {"title": ..., "artist": ...}}). Discoveries are
+     * resolved to playable songs via YouTube search, in parallel.
+     */
+    private suspend fun parseMixWithDiscoveries(
+        responseBody: String,
+        pool: List<Song>,
+    ): Result<AiDjMix> = withContext(Dispatchers.IO) {
+        data class ParsedItem(
+            val libraryIndex: Int?,
+            val discovery: AiDjDiscovery?,
+            val line: String?,
+        )
+        val (title, items) = try {
+            val root = JSONObject(responseBody)
+            root.optJSONObject("usageMetadata")?.let { usage ->
+                recordTokenUsage(
+                    promptTokens = usage.optLong("promptTokenCount", 0L),
+                    outputTokens = usage.optLong("candidatesTokenCount", 0L),
+                )
+            }
+            val text = root.getJSONArray("candidates")
+                .getJSONObject(0)
+                .getJSONObject("content")
+                .getJSONArray("parts")
+                .getJSONObject(0)
+                .getString("text")
+            val jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+            val mix = JSONObject(jsonText)
+            val mixTitle = mix.optString("title").ifBlank { "AI DJ Mix" }
+            val tracksJson = mix.getJSONArray("tracks")
+            val seen = HashSet<Int>()
+            val parsedItems = (0 until tracksJson.length()).mapNotNull { i ->
+                val entry = tracksJson.getJSONObject(i)
+                val line = entry.optString("line").takeIf { it.isNotBlank() }
+                val n = entry.optInt("n", -1)
+                if (n >= 1 && n <= pool.size && seen.add(n)) {
+                    ParsedItem(libraryIndex = n, discovery = null, line = line)
+                } else {
+                    val newObj = entry.optJSONObject("new") ?: return@mapNotNull null
+                    val dTitle = newObj.optString("title").trim()
+                    val dArtist = newObj.optString("artist").trim()
+                    if (dTitle.isBlank() || dArtist.isBlank()) return@mapNotNull null
+                    // Skip discoveries already in the library.
+                    if (pool.any {
+                            it.title.equals(dTitle, ignoreCase = true) &&
+                                it.artist.equals(dArtist, ignoreCase = true)
+                        }
+                    ) return@mapNotNull null
+                    ParsedItem(
+                        libraryIndex = null,
+                        discovery = AiDjDiscovery(dTitle, dArtist, line),
+                        line = line,
+                    )
+                }
+            }
+            mixTitle to parsedItems
+        } catch (e: Exception) {
+            KLog.w(TAG, "Failed to parse AI DJ response", e)
+            return@withContext Result.failure(IllegalStateException("Couldn't understand the DJ's reply"))
+        }
+
+        // Resolve discoveries in parallel via YouTube search.
+        val tracks = items.map { item ->
+            async {
+                val song = when {
+                    item.libraryIndex != null -> pool[item.libraryIndex - 1]
+                    item.discovery != null -> resolveDiscovery(item.discovery)
+                    else -> null
+                }
+                song?.let { AiDjTrack(song = it, djLine = item.line) }
+            }
+        }.awaitAll().filterNotNull()
+
+        if (tracks.isEmpty()) {
+            Result.failure(IllegalStateException("The DJ came back with no playable picks"))
+        } else {
+            Result.success(AiDjMix(title = title, tracks = tracks))
+        }
+    }
+
+    /**
+     * Resolve a discovery to a playable YouTube song via search. Returns null
+     * when nothing suitable is found.
+     */
+    private suspend fun resolveDiscovery(discovery: AiDjDiscovery): Song? {
+        return try {
+            val results = youTubeRepository.search("${discovery.title} ${discovery.artist}")
+            results.firstOrNull()
+        } catch (e: Exception) {
+            KLog.w(TAG, "Discovery search failed for ${discovery.title}", e)
+            null
         }
     }
 
