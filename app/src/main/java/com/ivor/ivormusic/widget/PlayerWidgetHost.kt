@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.palette.graphics.Palette
 import com.ivor.ivormusic.util.KLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * What every widget draws, as observable state.
@@ -157,8 +159,46 @@ object PlayerWidgets {
         pushJob?.cancel()
         pushJob = scope.launch {
             delay(PUSH_DEBOUNCE_MS)
-            PlayerWidgetHost.set(appContext, snapshot)
+            // Extract vibrant artwork color (in app process, not in Glance).
+            // This is safe: it runs before widget update, independent of button actions.
+            val enriched = withContext(Dispatchers.IO) {
+                enrichWithArtworkColor(appContext, snapshot)
+            }
+            PlayerWidgetHost.set(appContext, enriched)
             updateEveryWidget(appContext)
+        }
+    }
+
+    /**
+     * Extracts a vibrant color from the snapshot's artwork. Returns the original
+     * snapshot if no artwork or extraction fails. Runs on IO dispatcher.
+     */
+    private suspend fun enrichWithArtworkColor(
+        context: Context,
+        snapshot: PlayerWidgetSnapshot
+    ): PlayerWidgetSnapshot {
+        // Already has a color, or no artwork to extract from.
+        if (snapshot.artworkColor != null || snapshot.artworkUri == null) {
+            return snapshot
+        }
+        return try {
+            val bitmap = PlayerWidgetStore.loadArtwork(
+                context,
+                snapshot.artworkUri,
+                128 // Small size is enough for color extraction
+            ) ?: return snapshot
+            val palette = Palette.from(bitmap).generate()
+            val vibrant = palette.getVibrantColor(0)
+            if (vibrant != 0) {
+                snapshot.copy(artworkColor = vibrant)
+            } else {
+                // Fallback to dominant if no vibrant swatch
+                val dominant = palette.getDominantColor(0)
+                if (dominant != 0) snapshot.copy(artworkColor = dominant) else snapshot
+            }
+        } catch (e: Exception) {
+            KLog.w(TAG, "Artwork color extraction failed: ${e.message}")
+            snapshot
         }
     }
 

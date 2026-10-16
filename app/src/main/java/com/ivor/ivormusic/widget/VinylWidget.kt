@@ -8,6 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -152,12 +153,21 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     modifier = GlanceModifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    VinylArm(width = record + armReach, height = record, onRecord = playing)
+                    val accent = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
+                        ?: GlanceTheme.colors.primary
+                    VinylArm(
+                        width = record + armReach,
+                        height = record,
+                        onRecord = playing,
+                        accentColor = accent
+                    )
                 }
             }
             Spacer(modifier = GlanceModifier.width(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                HeroPlayButton(isPlaying = playing, size = hero)
+                val playBg = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
+                    ?: GlanceTheme.colors.primary
+                HeroPlayButton(isPlaying = playing, size = hero, background = playBg)
                 Spacer(modifier = GlanceModifier.height(4.dp))
                 WidgetSquareButton(
                     iconRes = R.drawable.ic_media_next,
@@ -176,20 +186,20 @@ private fun VinylContent(ui: PlayerWidgetUi) {
  * cap in the accent colour.
  */
 @Composable
-private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean) {
+private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: ColorProvider) {
     val colors = GlanceTheme.colors
     val dark = KodaWidgetTheme.isDark(LocalContext.current)
     val layers = if (onRecord) {
         listOf(
             R.drawable.vinyl_arm_on_shadow to recordColor(),
             R.drawable.vinyl_arm_on_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_on_accent to colors.primary,
+            R.drawable.vinyl_arm_on_accent to accentColor,
         )
     } else {
         listOf(
             R.drawable.vinyl_arm_off_shadow to recordColor(),
             R.drawable.vinyl_arm_off_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_off_accent to colors.primary,
+            R.drawable.vinyl_arm_off_accent to accentColor,
         )
     }
     Box(modifier = GlanceModifier.width(width).height(height)) {
