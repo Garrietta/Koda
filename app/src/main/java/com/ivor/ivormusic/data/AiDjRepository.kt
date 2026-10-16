@@ -239,8 +239,11 @@ class AiDjRepository(context: Context) {
             appendLine()
             append("Pick exactly $count tracks by their 1-based numbers, in play order, ")
             append("for a flowing DJ set. You may only pick from the list above. ")
+            append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY for a genuine ")
+            append("shift worth announcing (new genre, big energy change, different era). NO MORE than ")
+            append("1 in 4 tracks may have a line. When in doubt, leave it off. ")
             append("Respond with ONLY this JSON object and no other text: ")
-            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3, \"line\": \"short spoken DJ intro line for this track\"}]}")
+            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 7}, {\"n\": 12, \"line\": \"short spoken DJ intro\"}]}")
         }
 
         val body = JSONObject()
@@ -356,11 +359,13 @@ class AiDjRepository(context: Context) {
             append("never heard that match their taste, from popular charts or deep cuts. ")
             append("Give each discovery as {\"new\": {\"title\": \"...\", \"artist\": \"...\"}}. ")
             append("Interleave discoveries through the set so familiar and new alternate naturally. ")
-            append("Attach a spoken transition \"line\" ONLY at notable theme or mood shifts ")
-            append("(a new energy, a genre turn, a moment worth announcing) — most tracks get no line. ")
+            append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY when the ")
+            append("next track is a genuine shift worth announcing: a new genre, a big energy change, ")
+            append("a different era, or a discovery that needs context. NO MORE than 1 in 4 tracks may ")
+            append("have a line. When in doubt, leave it off. A line marks a moment, not every song. ")
             append("Respond with ONLY this JSON object and no other text: ")
-            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 12, \"line\": \"spoken transition\"}, ")
-            append("{\"new\": {\"title\": \"...\", \"artist\": \"...\"}, \"line\": \"...\"}]}")
+            append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 7}, {\"n\": 12, \"line\": \"spoken transition\"}, ")
+            append("{\"new\": {\"title\": \"...\", \"artist\": \"...\"}}]}")
         }
 
         val body = JSONObject()
@@ -486,7 +491,22 @@ class AiDjRepository(context: Context) {
         if (tracks.isEmpty()) {
             Result.failure(IllegalStateException("The DJ came back with no playable picks"))
         } else {
-            Result.success(AiDjMix(title = title, tracks = tracks))
+            // Safety cap: no more than 1 in 4 tracks carries a spoken line.
+            // If the model ignored the prompt constraint, thin the lines out,
+            // keeping them spread through the set.
+            val maxLines = (tracks.size / 4).coerceAtLeast(1)
+            val withLines = tracks.mapIndexedNotNull { i, t ->
+                if (t.djLine != null) i else null
+            }
+            val capped = if (withLines.size > maxLines) {
+                // Keep lines evenly spread through the set.
+                val step = withLines.size.toFloat() / maxLines
+                val keepPos = (0 until maxLines).map { withLines[(it * step).toInt()] }.toSet()
+                tracks.mapIndexed { i, t ->
+                    if (t.djLine != null && i !in keepPos) t.copy(djLine = null) else t
+                }
+            } else tracks
+            Result.success(AiDjMix(title = title, tracks = capped))
         }
     }
 
@@ -647,7 +667,7 @@ class AiDjRepository(context: Context) {
         const val INSTANT_MIX_TRACKS = 60
         private const val INSTANT_MIX_RECENT = 30
         private const val INSTANT_MIX_LIKED = 200
-        val TRACK_COUNT_OPTIONS = listOf(10, 15, 20, 25)
+        val TRACK_COUNT_OPTIONS = listOf(10, 15, 20, 25, 40, 60)
 
         /** The default; the API reports older models as retired, so this stays current. */
         const val DEFAULT_MODEL = "gemini-3.8-flash"

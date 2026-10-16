@@ -124,7 +124,10 @@ class DjVoiceRepository(context: Context) {
         onProgress: (Float) -> Unit = {},
     ): List<Song> = withContext(Dispatchers.IO) {
         val voiceDir = java.io.File(appContext.cacheDir, "dj_voice").apply { mkdirs() }
-        val mixKey = (mix.title.hashCode().toString(36) + mix.tracks.size)
+        // The voice is part of the key: changing voices in Settings must
+        // regenerate the audio, not reuse the old voice's files.
+        val voiceKey = geminiTts.voice.hashCode().toString(36)
+        val mixKey = (mix.title.hashCode().toString(36) + mix.tracks.size + voiceKey)
         val queue = mutableListOf<Song>()
         mix.tracks.forEachIndexed { index, track ->
             val line = track.djLine?.takeIf { it.isNotBlank() }
