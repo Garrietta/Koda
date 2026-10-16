@@ -35,6 +35,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -100,7 +101,13 @@ fun AiDjScreen(
 
     var generating by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Open on the cached mix when one exists; only the Generate/Regenerate
+    // buttons (or the Home emblem) build a fresh one.
+    val cachedMix by repository.cachedMix.collectAsState()
     var mix by remember { mutableStateOf<AiDjMix?>(null) }
+    LaunchedEffect(cachedMix) {
+        if (mix == null) mix = cachedMix
+    }
     var saving by remember { mutableStateOf(false) }
     var preparingVoice by remember { mutableStateOf(false) }
     var voiceProgress by remember { mutableFloatStateOf(0f) }
@@ -113,7 +120,10 @@ fun AiDjScreen(
         mix = null
         scope.launch {
             repository.generateMix(library).fold(
-                onSuccess = { mix = it },
+                onSuccess = {
+                    repository.cacheMix(it)
+                    mix = it
+                },
                 onFailure = { error = it.message ?: "Generation failed" },
             )
             generating = false

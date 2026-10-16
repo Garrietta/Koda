@@ -678,12 +678,13 @@ fun HomeScreen(
     // LibraryContent on arrival like the playlist hand-off above.
     var openAiDjFromHome by remember { mutableStateOf(false) }
 
-    // The one-press DJ: tap the Home card and a 60-song mix starts playing,
-    // with spoken transitions only at notable mood shifts. Failures fall back
-    // to the DJ screen, which explains what went wrong.
+    // The DJ emblem regenerates the mix right away: a 60-song set from the
+    // last 30 plays plus liked context, with spoken transitions only at
+    // notable mood shifts. The fresh mix is cached and starts playing.
+    // Failures fall back to the DJ screen, which explains what went wrong.
     var djInstantLoading by remember { mutableStateOf(false) }
     val djContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
-    fun startInstantDj() {
+    fun regenerateDj() {
         if (djInstantLoading) return
         djInstantLoading = true
         scope.launch {
@@ -694,6 +695,7 @@ fun HomeScreen(
                 val liked = viewModel.likedSongs.value
                 repository.generateInstantMix(recent, liked).fold(
                     onSuccess = { mix ->
+                        repository.cacheMix(mix)
                         val queue = if (repository.djVoiceEnabled.value) {
                             voiceRepository.buildQueueWithIntros(mix)
                         } else {
@@ -1333,7 +1335,12 @@ fun HomeScreen(
                                                 },
                                                 onOpenLiked = { selectedTab = TAB_LIBRARY },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
-                                                onInstantDj = { startInstantDj() },
+                                                onOpenAiDj = {
+                                                    noteLibraryReturn()
+                                                    openAiDjFromHome = true
+                                                    goToTab(TAB_LIBRARY)
+                                                },
+                                                onRegenerateDj = { regenerateDj() },
                                                 djLoading = djInstantLoading,
                                                 onSpinClick = { source ->
                                                     spinSource = source
@@ -1631,6 +1638,7 @@ fun HomeScreen(
                             artistPhotos = exploreArtistPhotos,
                             newFromLiked = viewModel.exploreNewFromLiked.collectAsState().value,
                             subgenreShelves = viewModel.exploreSubgenreShelves.collectAsState().value,
+                            recommendations = viewModel.exploreRecommendations.collectAsState().value,
                             onPlaySongs = { queue, start ->
                                 playerViewModel.playQueue(queue, start)
                                 showPlayerSheet = true

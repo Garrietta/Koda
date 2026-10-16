@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,6 +69,7 @@ fun ExploreContent(
     artistPhotos: Map<String, String>,
     newFromLiked: List<Song> = emptyList(),
     subgenreShelves: List<SubgenreShelf> = emptyList(),
+    recommendations: List<Song> = emptyList(),
     onPlaySongs: (List<Song>, Song?) -> Unit,
     onSongLongPress: ((Song) -> Unit)? = null,
     onArtistClick: (String) -> Unit,
@@ -311,6 +313,57 @@ fun ExploreContent(
                     }
                 }
             }
+
+            // Top artists rail: the listener's most-played artists.
+            if (topArtists.isNotEmpty()) {
+                item(key = "explore_artists_header") {
+                    Text(
+                        stringResource(R.string.explore_top_artists),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp),
+                    )
+                }
+                item(key = "explore_artists_rail") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(topArtists.take(10), key = { "artist_${it.name}" }) { artist ->
+                            ExploreArtistCard(
+                                artist = artist,
+                                photo = artistPhotos[artist.name] ?: artist.fallbackArtwork,
+                                onClick = { onArtistClick(artist.name) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Recommended for you.
+            if (recommendations.isNotEmpty()) {
+                item(key = "explore_recommended_header") {
+                    Text(
+                        stringResource(R.string.explore_recommended),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp),
+                    )
+                }
+                item(key = "explore_recommended_rail") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(recommendations, key = { "rec_${it.id}" }) { song ->
+                            ExplorePickCard(
+                                song = song,
+                                onClick = { onPlaySongs(recommendations, song) },
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (quickPicks.isEmpty() && spotlightArtist == null) {
@@ -364,6 +417,57 @@ private fun ExplorePickCard(
         )
         Text(
             song.artist,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * A circular artist card for the Top Artists rail: photo, name, play count.
+ */
+@Composable
+private fun ExploreArtistCard(
+    artist: TopArtist,
+    photo: String?,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (photo != null) {
+            AsyncImage(
+                model = photo,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Spacer(
+                Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            artist.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            stringResource(R.string.explore_artist_plays, artist.plays),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

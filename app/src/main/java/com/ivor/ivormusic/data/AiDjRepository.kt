@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit
 /**
  * One track of an AI DJ mix: the library song plus the DJ's intro line.
  */
+@kotlinx.serialization.Serializable
 data class AiDjTrack(
     val song: Song,
     val djLine: String?,
@@ -91,6 +92,46 @@ class AiDjRepository(context: Context) {
 
     private val _tokenUsage = MutableStateFlow(loadTokenUsage())
     val tokenUsage: StateFlow<AiDjTokenUsage> = _tokenUsage.asStateFlow()
+
+    // --- Cached mix ---
+    //
+    // The last generated mix is persisted so the DJ screen can reopen on it
+    // without regenerating. Tapping the DJ card opens the page; only the
+    // emblem (or the page's Regenerate button) builds a fresh one.
+    private val _cachedMix = MutableStateFlow(loadCachedMix())
+    val cachedMix: StateFlow<AiDjMix?> = _cachedMix.asStateFlow()
+
+    /** Persist [mix] as the cached DJ playlist. */
+    fun cacheMix(mix: AiDjMix) {
+        _cachedMix.value = mix
+        try {
+            val json = kotlinx.serialization.json.Json.encodeToString(
+                kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
+                mix.tracks,
+            )
+            prefs.edit()
+                .putString(KEY_CACHED_MIX_TITLE, mix.title)
+                .putString(KEY_CACHED_MIX_TRACKS, json)
+                .apply()
+        } catch (e: Exception) {
+            KLog.w(TAG, "Failed to cache DJ mix", e)
+        }
+    }
+
+    private fun loadCachedMix(): AiDjMix? {
+        return try {
+            val title = prefs.getString(KEY_CACHED_MIX_TITLE, null) ?: return null
+            val json = prefs.getString(KEY_CACHED_MIX_TRACKS, null) ?: return null
+            val tracks = kotlinx.serialization.json.Json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
+                json,
+            )
+            if (tracks.isEmpty()) null else AiDjMix(title, tracks)
+        } catch (e: Exception) {
+            KLog.w(TAG, "Failed to load cached DJ mix", e)
+            null
+        }
+    }
 
     fun setApiKey(key: String) {
         prefs.edit().putString(KEY_API_KEY, key.trim()).apply()
@@ -458,6 +499,8 @@ class AiDjRepository(context: Context) {
         private const val KEY_DJ_VOICE = "dj_voice_enabled"
         private const val KEY_TOKENS_PROMPT = "tokens_prompt"
         private const val KEY_TOKENS_OUTPUT = "tokens_output"
+        private const val KEY_CACHED_MIX_TITLE = "cached_mix_title"
+        private const val KEY_CACHED_MIX_TRACKS = "cached_mix_tracks"
 
         private const val GENERATE_URL_BASE =
             "https://generativelanguage.googleapis.com/v1beta/models"

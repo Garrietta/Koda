@@ -115,9 +115,11 @@ fun SpotlightHomeContent(
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onOpenLiked: () -> Unit = {},
     onShowAllInLibrary: () -> Unit = {},
-    /** One press starts the DJ's instant mix; no generation page. */
-    onInstantDj: () -> Unit = {},
-    /** True while the instant mix is being generated. */
+    /** Open the DJ page (shows the cached mix if one exists). */
+    onOpenAiDj: () -> Unit = {},
+    /** Regenerate the mix right away (from the emblem). */
+    onRegenerateDj: () -> Unit = {},
+    /** True while a fresh mix is being generated. */
     djLoading: Boolean = false,
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
@@ -218,10 +220,12 @@ fun SpotlightHomeContent(
                 SpotlightFilterChips(selected = filter, onSelect = { filter = it })
             }
 
-            // The AI DJ sits at the top of Home: one tap starts the mix.
+            // The AI DJ sits at the top of Home: tap for the playlist page,
+            // tap the emblem to regenerate.
             item(key = "ai_dj_card") {
                 AiDjHomeCard(
-                    onClick = onInstantDj,
+                    onOpen = onOpenAiDj,
+                    onRegenerate = onRegenerateDj,
                     loading = djLoading,
                 )
             }
@@ -1164,43 +1168,48 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
 }
 
 /**
- * The AI DJ card at the top of Home: one tap starts the instant mix.
- * Same width as the rest of the page, with the DJ's abstract logo.
+ * The AI DJ card at the top of Home. Slim, matching the shortcut buttons
+ * below: tap the card for the playlist page, tap the emblem to regenerate.
+ * The emblem is drawn in code so it follows the dynamic theme.
  */
 @Composable
 private fun AiDjHomeCard(
-    onClick: () -> Unit,
+    onOpen: () -> Unit,
+    onRegenerate: () -> Unit,
     loading: Boolean,
 ) {
     Card(
-        onClick = onClick,
-        enabled = !loading,
+        onClick = onOpen,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(top = 4.dp),
-        shape = RoundedCornerShape(28.dp),
+            .padding(horizontal = 16.dp)
+            .padding(top = 4.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
         ),
     ) {
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AsyncImage(
-                model = R.drawable.dj_logo,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
-            Spacer(Modifier.size(16.dp))
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(40.dp),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    strokeWidth = 3.dp,
+                )
+            } else {
+                DjEmblem(
+                    size = 40.dp,
+                    onClick = onRegenerate,
+                )
+            }
+            Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.aidj_title),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
@@ -1209,21 +1218,16 @@ private fun AiDjHomeCard(
                     else stringResource(R.string.aidj_home_card_sub),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    strokeWidth = 3.dp,
-                )
-            } else {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowForward,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

@@ -855,6 +855,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _exploreSubgenreShelves = MutableStateFlow<List<SubgenreShelf>>(emptyList())
     val exploreSubgenreShelves: StateFlow<List<SubgenreShelf>> = _exploreSubgenreShelves.asStateFlow()
 
+    /** YouTube recommendations for the Explore tab. */
+    private val _exploreRecommendations = MutableStateFlow<List<Song>>(emptyList())
+    val exploreRecommendations: StateFlow<List<Song>> = _exploreRecommendations.asStateFlow()
+
     private var exploreDiscoveryLoaded = false
 
     /**
@@ -866,6 +870,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (exploreDiscoveryLoaded) return
         exploreDiscoveryLoaded = true
         viewModelScope.launch {
+            // YouTube recommendations.
+            try {
+                _exploreRecommendations.value = youtubeRepository.getRecommendations().take(20)
+            } catch (_: Exception) { }
             val likedArtists = likedSongs.value
                 .groupingBy { it.artist }
                 .eachCount()
