@@ -1,9 +1,11 @@
 package com.ivor.ivormusic.widget
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
-import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -13,10 +15,12 @@ import kotlinx.coroutines.launch
  */
 class WidgetActionActivity : Activity() {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val action = intent.getStringExtra(EXTRA_ACTION)
-        lifecycleScope.launch {
+        scope.launch {
             when (action) {
                 ACTION_TOGGLE -> {
                     withController(this@WidgetActionActivity) { controller ->
@@ -86,6 +90,11 @@ class WidgetActionActivity : Activity() {
             }
             finish()
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     companion object {
