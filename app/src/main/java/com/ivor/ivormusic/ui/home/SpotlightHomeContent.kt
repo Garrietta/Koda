@@ -1201,7 +1201,7 @@ private fun AiDjHomeCard(
                 )
             } else {
                 DjEmblem(
-                    size = 40.dp,
+                    emblemSize = 40.dp,
                     onClick = onRegenerate,
                 )
             }

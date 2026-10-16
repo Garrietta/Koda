@@ -22,17 +22,18 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun DjEmblem(
     modifier: Modifier = Modifier,
-    size: Dp = 44.dp,
+    emblemSize: Dp = 44.dp,
     onClick: (() -> Unit)? = null,
 ) {
     val container = MaterialTheme.colorScheme.tertiaryContainer
     val mark = MaterialTheme.colorScheme.onTertiaryContainer
     Canvas(
         modifier = modifier
-            .size(size)
+            .size(emblemSize)
             .clip(CircleShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
+        // DrawScope.size: the canvas in pixels; the emblem is square.
         val r = size.minDimension / 2f
         drawCircle(color = container, radius = r, center = center)
 
