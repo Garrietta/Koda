@@ -132,8 +132,9 @@ private fun LineupRow(entry: UpNextEntry) {
             // Both: the shape draws the row, the corner radius clips its ripple.
             .cornerRadius(12.dp)
             .clickable(
-                actionRunCallback<PlayQueueIndexAction>(
-                    actionParametersOf(PlayQueueIndexAction.QueueIndexKey to entry.index)
+                widgetTransportActionWithIndex(
+                    WidgetActionActivity.ACTION_PLAY_INDEX,
+                    entry.index
                 )
             )
             .padding(horizontal = 12.dp),

@@ -165,6 +165,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Transparent activity for widget button presses (Glance actionRunCallback is not firing). -->
+        <activity
+            android:name=".widget.WidgetActionActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
         <!-- Launcher activity aliases for dynamic app icon switching -->
         <activity-alias
             android:name=".MainActivityDefault"

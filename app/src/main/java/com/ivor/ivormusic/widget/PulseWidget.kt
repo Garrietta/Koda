@@ -124,7 +124,7 @@ private fun PulseCard(ui: PlayerWidgetUi) {
                     iconRes = R.drawable.ic_media_shuffle,
                     description = widgetString(R.string.widget_action_shuffle),
                     action = androidx.glance.appwidget.action
-                        .actionRunCallback<ToggleShuffleAction>(),
+                        .widgetTransportAction(WidgetActionActivity.ACTION_SHUFFLE),
                     selected = snapshot.shuffleEnabled,
                     size = 42.dp,
                 )

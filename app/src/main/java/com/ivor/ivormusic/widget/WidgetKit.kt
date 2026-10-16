@@ -138,6 +138,32 @@ internal fun WidgetSurface(
 // ------------------------------------------------------------------- controls
 
 /**
+ * Widget button action via transparent activity. Glance's actionRunCallback
+ * stopped firing, so transport buttons launch WidgetActionActivity instead.
+ */
+@Composable
+internal fun widgetTransportAction(action: String): Action {
+    val context = LocalContext.current
+    return actionStartActivity(
+        android.content.Intent(context, WidgetActionActivity::class.java).apply {
+            putExtra(WidgetActionActivity.EXTRA_ACTION, action)
+        }
+    )
+}
+
+/** Variant that also carries a queue index (for PlayQueueIndexAction). */
+@Composable
+internal fun widgetTransportActionWithIndex(action: String, index: Int): Action {
+    val context = LocalContext.current
+    return actionStartActivity(
+        android.content.Intent(context, WidgetActionActivity::class.java).apply {
+            putExtra(WidgetActionActivity.EXTRA_ACTION, action)
+            putExtra(WidgetActionActivity.EXTRA_INDEX, index)
+        }
+    )
+}
+
+/**
  * The hero: the only circle on the widget, filled with primary. Sizes follow
  * the M3 icon-button scale - 48 small, 56 medium, 64 where there is room.
  */
@@ -155,7 +181,7 @@ internal fun HeroPlayButton(
         contentDescription = widgetString(
             if (isPlaying) R.string.widget_action_pause else R.string.widget_action_play
         ),
-        onClick = actionRunCallback<TogglePlaybackAction>(),
+        onClick = widgetTransportAction(WidgetActionActivity.ACTION_TOGGLE),
         modifier = GlanceModifier.size(size),
         backgroundColor = background,
         contentColor = content,
@@ -224,7 +250,7 @@ internal fun WidgetModeToggles(
         WidgetToggleButton(
             iconRes = R.drawable.ic_media_shuffle,
             description = widgetString(R.string.widget_action_shuffle),
-            action = actionRunCallback<ToggleShuffleAction>(),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_SHUFFLE),
             selected = snapshot.shuffleEnabled,
             size = size,
         )
@@ -242,7 +268,7 @@ internal fun WidgetModeToggles(
                     else -> R.string.widget_action_repeat
                 }
             ),
-            action = actionRunCallback<CycleRepeatAction>(),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_CYCLE_REPEAT),
             selected = snapshot.repeatMode != Player.REPEAT_MODE_OFF,
             size = size,
         )
@@ -265,7 +291,7 @@ internal fun WidgetTransportRow(
         WidgetSquareButton(
             iconRes = R.drawable.ic_media_previous,
             description = widgetString(R.string.widget_action_previous),
-            action = actionRunCallback<SkipPreviousAction>(),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_PREVIOUS),
             size = sideSize,
         )
         Spacer(modifier = GlanceModifier.width(gap))
@@ -274,7 +300,7 @@ internal fun WidgetTransportRow(
         WidgetSquareButton(
             iconRes = R.drawable.ic_media_next,
             description = widgetString(R.string.widget_action_next),
-            action = actionRunCallback<SkipNextAction>(),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
             size = sideSize,
         )
     }
