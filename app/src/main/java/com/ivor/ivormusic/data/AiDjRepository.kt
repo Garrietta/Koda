@@ -167,12 +167,17 @@ class AiDjRepository(context: Context) {
     }
 
     fun setApiKey(key: String) {
-        prefs.edit().putString(KEY_API_KEY, key.trim()).apply()
-        _hasApiKey.value = key.isNotBlank()
+        // Use commit() (synchronous) for the API key to guarantee it hits disk
+        // before we report success. apply() is async and can lose the write.
+        val trimmed = key.trim()
+        val ok = prefs.edit().putString(KEY_API_KEY, trimmed).commit()
+        // Verify by reading back; the UI must reflect what's actually in prefs.
+        val persisted = prefs.getString(KEY_API_KEY, null)?.isNotBlank() == true
+        _hasApiKey.value = ok && persisted
     }
 
     fun clearApiKey() {
-        prefs.edit().remove(KEY_API_KEY).apply()
+        prefs.edit().remove(KEY_API_KEY).commit()
         _hasApiKey.value = false
     }
 
