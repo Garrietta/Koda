@@ -111,6 +111,13 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     private val _shuffleModeEnabled = MutableStateFlow(false)
     val shuffleModeEnabled: StateFlow<Boolean> = _shuffleModeEnabled.asStateFlow()
 
+    /**
+     * True while a curated AI DJ mix is playing. DJ mixes are strictly
+     * ordered — shuffle is forced off and the shuffle control is hidden.
+     */
+    private val _isDjMixPlaying = MutableStateFlow(false)
+    val isDjMixPlaying: StateFlow<Boolean> = _isDjMixPlaying.asStateFlow()
+
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
 
@@ -886,7 +893,18 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     }
 
     fun playQueue(songs: List<Song>, startSong: Song? = null) {
+        _isDjMixPlaying.value = false
         playQueueAtPosition(songs, startSong, resumePositionFor(startSong))
+    }
+
+    /**
+     * Play a curated AI DJ mix: strictly ordered, shuffle forced off and
+     * unavailable while the mix plays.
+     */
+    fun playDjMix(songs: List<Song>) {
+        _isDjMixPlaying.value = true
+        setShuffleEnabled(false)
+        playQueueAtPosition(songs, songs.firstOrNull(), 0L)
     }
 
     /**
@@ -1439,10 +1457,14 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     }
 
     fun toggleShuffle() {
+        // DJ mixes are strictly ordered: shuffle is unavailable while one plays.
+        if (_isDjMixPlaying.value) return
         setShuffleEnabled(!(controller?.shuffleModeEnabled ?: false))
     }
 
     fun setShuffleEnabled(enabled: Boolean) {
+        // DJ mixes are strictly ordered: shuffle can never turn on mid-mix.
+        if (enabled && _isDjMixPlaying.value) return
         val ctrl = controller
         if (ctrl == null) {
             // Nothing to write to yet. Remembered rather than dropped, because

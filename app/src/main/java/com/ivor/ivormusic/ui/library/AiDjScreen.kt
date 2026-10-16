@@ -83,6 +83,7 @@ fun AiDjScreen(
     viewModel: HomeViewModel,
     onBack: () -> Unit,
     onPlayQueue: (List<Song>, Song?) -> Unit,
+    onPlayDjMix: (List<Song>) -> Unit,
     onOpenSettings: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -153,7 +154,7 @@ fun AiDjScreen(
     fun playMix(mix: AiDjMix) {
         if (preparingVoice) return
         if (!djVoiceEnabled) {
-            onPlayQueue(mix.tracks.map { it.song }, mix.tracks.firstOrNull()?.song)
+            onPlayDjMix(mix.tracks.map { it.song })
             return
         }
         preparingVoice = true
@@ -164,7 +165,7 @@ fun AiDjScreen(
                 val queue = voiceRepository.buildQueueWithIntros(mix) { progress ->
                     voiceProgress = progress
                 }
-                onPlayQueue(queue, queue.firstOrNull())
+                onPlayDjMix(queue)
             } finally {
                 preparingVoice = false
             }

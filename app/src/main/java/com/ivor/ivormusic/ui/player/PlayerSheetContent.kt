@@ -99,6 +99,7 @@ fun PlayerSheetContent(
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
     val shuffleModeEnabled by viewModel.shuffleModeEnabled.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
     val currentQueue by viewModel.playOrderQueue.collectAsState()
     val currentQueueItemId by viewModel.currentQueueItemId.collectAsState()
@@ -628,20 +629,23 @@ private fun ExpressiveNowPlayingView(
                 // Shuffle Toggle - with animateWidth for squishy physics
                 customItem(
                     buttonGroupContent = {
-                        FilledTonalIconToggleButton(
-                            checked = shuffleModeEnabled,
-                            onCheckedChange = { viewModel.toggleShuffle() },
-                            interactionSource = shuffleInteraction,
-                            modifier = Modifier
-                                .weight(0.8f)
-                                .fillMaxHeight()
-                                .animateWidth(shuffleInteraction)
-                        ) {
-                            Icon(
-                                Icons.Default.Shuffle,
-                                contentDescription = stringResource(R.string.cd_shuffle),
-                                modifier = Modifier.size(28.dp)
-                            )
+                        // DJ mixes are strictly ordered: no shuffle option.
+                        if (!isDjMixPlaying) {
+                            FilledTonalIconToggleButton(
+                                checked = shuffleModeEnabled,
+                                onCheckedChange = { viewModel.toggleShuffle() },
+                                interactionSource = shuffleInteraction,
+                                modifier = Modifier
+                                    .weight(0.8f)
+                                    .fillMaxHeight()
+                                    .animateWidth(shuffleInteraction)
+                            ) {
+                                Icon(
+                                    Icons.Default.Shuffle,
+                                    contentDescription = stringResource(R.string.cd_shuffle),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
                     },
                     menuContent = {}

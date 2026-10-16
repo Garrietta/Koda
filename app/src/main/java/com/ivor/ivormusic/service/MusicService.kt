@@ -465,6 +465,9 @@ class MusicService : MediaLibraryService() {
         const val CMD_REFRESH_STREAM = "com.ivor.ivormusic.REFRESH_STREAM"
         const val EXTRA_SONG_SOURCE = "com.ivor.ivormusic.SONG_SOURCE"
 
+        /** Marks a MediaItem as part of a curated AI DJ mix (strictly ordered, no shuffle). */
+        const val EXTRA_DJ_MIX = "com.ivor.ivormusic.DJ_MIX"
+
         /** Session-extras keys the timer state is published under. */
         const val EXTRA_SLEEP_TIMER_ENDS_AT = "sleep_timer_ends_at"
         const val EXTRA_SLEEP_TIMER_END_OF_TRACK = "sleep_timer_end_of_track"
@@ -923,49 +926,63 @@ class MusicService : MediaLibraryService() {
         val songId = player.currentMediaItem?.mediaId
         val liked = songId != null && likedSongsRepository.isLiked(songId)
         val shuffleOn = player.shuffleModeEnabled
+        val isDjMix = player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(EXTRA_DJ_MIX) == true
+        // DJ mixes are strictly ordered: force shuffle off and hide the button.
+        if (isDjMix && shuffleOn) {
+            player.shuffleModeEnabled = false
+        }
         val state = Triple(player.repeatMode, liked, shuffleOn)
         if (state == mediaButtonsState) return
         mediaButtonsState = state
 
-        val shuffle = CommandButton.Builder(
-            if (shuffleOn) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF
-        )
-            .setDisplayName(
-                getString(
-                    if (shuffleOn) R.string.notification_shuffle_on
-                    else R.string.notification_shuffle_off
+        val buttons = mutableListOf<CommandButton>()
+        if (!isDjMix) {
+            buttons.add(
+                CommandButton.Builder(
+                    if (shuffleOn) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF
                 )
+                    .setDisplayName(
+                        getString(
+                            if (shuffleOn) R.string.notification_shuffle_on
+                            else R.string.notification_shuffle_off
+                        )
+                    )
+                    .setSessionCommand(SessionCommand(CMD_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                    .build()
             )
-            .setSessionCommand(SessionCommand(CMD_TOGGLE_SHUFFLE, Bundle.EMPTY))
-            .build()
-        val repeat = CommandButton.Builder(
-            when (player.repeatMode) {
-                Player.REPEAT_MODE_ONE -> CommandButton.ICON_REPEAT_ONE
-                Player.REPEAT_MODE_ALL -> CommandButton.ICON_REPEAT_ALL
-                else -> CommandButton.ICON_REPEAT_OFF
-            }
-        )
-            .setDisplayName(
-                getString(
-                    when (player.repeatMode) {
-                        Player.REPEAT_MODE_ONE -> R.string.notification_repeat_one
-                        Player.REPEAT_MODE_ALL -> R.string.notification_repeat_all
-                        else -> R.string.notification_repeat_off
-                    }
+        }
+        buttons.add(
+            CommandButton.Builder(
+                when (player.repeatMode) {
+                    Player.REPEAT_MODE_ONE -> CommandButton.ICON_REPEAT_ONE
+                    Player.REPEAT_MODE_ALL -> CommandButton.ICON_REPEAT_ALL
+                    else -> CommandButton.ICON_REPEAT_OFF
+                }
+            )
+                .setDisplayName(
+                    getString(
+                        when (player.repeatMode) {
+                            Player.REPEAT_MODE_ONE -> R.string.notification_repeat_one
+                            Player.REPEAT_MODE_ALL -> R.string.notification_repeat_all
+                            else -> R.string.notification_repeat_off
+                        }
+                    )
                 )
-            )
-            .setSessionCommand(SessionCommand(CMD_CYCLE_REPEAT, Bundle.EMPTY))
-            .build()
-        val like = CommandButton.Builder(
-            if (liked) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED
+                .setSessionCommand(SessionCommand(CMD_CYCLE_REPEAT, Bundle.EMPTY))
+                .build()
         )
-            .setDisplayName(
-                getString(if (liked) R.string.notification_unlike else R.string.notification_like)
+        buttons.add(
+            CommandButton.Builder(
+                if (liked) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED
             )
-            .setSessionCommand(SessionCommand(CMD_TOGGLE_LIKE, Bundle.EMPTY))
-            .setEnabled(songId != null)
-            .build()
-        session.setMediaButtonPreferences(ImmutableList.of(shuffle, repeat, like))
+                .setDisplayName(
+                    getString(if (liked) R.string.notification_unlike else R.string.notification_like)
+                )
+                .setSessionCommand(SessionCommand(CMD_TOGGLE_LIKE, Bundle.EMPTY))
+                .setEnabled(songId != null)
+                .build()
+        )
+        session.setMediaButtonPreferences(ImmutableList.copyOf(buttons))
     }
 
     private fun cycleRepeatMode(player: Player) {
@@ -2244,8 +2261,10 @@ class MusicService : MediaLibraryService() {
                 return serviceScope.future {
                     val queue = buildAutoDjQueue()
                     val prepared = queue.mapTo(mutableListOf()) { song ->
-                        preparePlaybackItem(mapSongToMediaItem(song))
+                        preparePlaybackItem(tagDjMixItem(mapSongToMediaItem(song)))
                     }
+                    // DJ mixes are strictly ordered: no shuffle, ever.
+                    session.player.shuffleModeEnabled = false
                     if (prepared.isEmpty()) {
                         // Fall back to liked songs rather than playing nothing.
                         likedSongsRepository.likedSongs.value
@@ -2886,6 +2905,20 @@ class MusicService : MediaLibraryService() {
                 .setIsPlayable(true)
                 .build())
             .build()
+
+    /**
+     * Tag a MediaItem as part of a curated AI DJ mix. DJ mixes are strictly
+     * ordered: the service forces shuffle off and hides the shuffle button.
+     */
+    private fun tagDjMixItem(item: MediaItem): MediaItem {
+        val meta = item.mediaMetadata
+        val extras = (meta.extras ?: Bundle()).apply {
+            putBoolean(EXTRA_DJ_MIX, true)
+        }
+        return item.buildUpon()
+            .setMediaMetadata(meta.buildUpon().setExtras(extras).build())
+            .build()
+    }
 
     private fun mapSongToMediaItem(song: Song): MediaItem {
         val builder = MediaItem.Builder()

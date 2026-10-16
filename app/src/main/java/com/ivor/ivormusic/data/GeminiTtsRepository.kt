@@ -80,7 +80,7 @@ class GeminiTtsRepository(context: Context) {
                 )
                 .toString()
             // Try TTS models in order; the 2.5 preview may be retired.
-            for (model in TTS_MODELS) {
+            for (model in orderedModels()) {
                 try {
                     val request = Request.Builder()
                         .url("$TTS_URL_BASE/$model:generateContent")
@@ -116,6 +116,111 @@ class GeminiTtsRepository(context: Context) {
             }
             return@withContext false
         }
+
+    /**
+     * Result of testing a single TTS model. Used by the Settings voice tester
+     * so the user can see exactly which model produces audio.
+     */
+    data class TtsTestResult(
+        val model: String,
+        val success: Boolean,
+        val httpCode: Int,
+        val detail: String,
+        val audioBytes: Int = 0,
+    )
+
+    /**
+     * Test [model] with a short phrase in [voiceName]. Returns full diagnostics;
+     * never throws. Writes a WAV sample to [outputFile] on success.
+     */
+    suspend fun testModel(
+        model: String,
+        voiceName: String,
+        outputFile: File,
+    ): TtsTestResult = withContext(Dispatchers.IO) {
+        val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
+            .ifEmpty {
+                appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
+                    .getString(KEY_API_KEY, null)?.trim().orEmpty()
+            }
+        if (apiKey.isEmpty()) {
+            return@withContext TtsTestResult(model, false, 0, "No API key saved")
+        }
+        val body = JSONObject()
+            .put("contents", JSONArray().put(
+                JSONObject().put("parts", JSONArray().put(
+                    JSONObject().put("text", "This is a voice test for the Koda AI DJ.")
+                ))
+            ))
+            .put("generationConfig", JSONObject()
+                .put("responseModalities", JSONArray().put("AUDIO"))
+                .put("speechConfig", JSONObject()
+                    .put("voiceConfig", JSONObject()
+                        .put("prebuiltVoiceConfig", JSONObject()
+                            .put("voiceName", voiceName)
+                        )
+                    )
+                )
+            )
+            .toString()
+        try {
+            val request = Request.Builder()
+                .url("$TTS_URL_BASE/$model:generateContent")
+                .header("x-goog-api-key", apiKey)
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val err = runCatching {
+                        JSONObject(responseBody).getJSONObject("error").optString("message")
+                    }.getOrNull().takeIf { !it.isNullOrBlank() }
+                        ?: responseBody.take(200)
+                    KLog.w(TAG, "TTS test ($model): HTTP ${response.code} $err")
+                    return@withContext TtsTestResult(
+                        model, false, response.code,
+                        "HTTP ${response.code}: $err",
+                    )
+                }
+                val pcmBase64 = runCatching {
+                    JSONObject(responseBody)
+                        .getJSONArray("candidates")
+                        .getJSONObject(0)
+                        .getJSONObject("content")
+                        .getJSONArray("parts")
+                        .getJSONObject(0)
+                        .getJSONObject("inlineData")
+                        .getString("data")
+                }.getOrNull()
+                if (pcmBase64.isNullOrBlank()) {
+                    KLog.w(TAG, "TTS test ($model): 200 but no audio in response")
+                    return@withContext TtsTestResult(
+                        model, false, 200,
+                        "OK but no audio data in response",
+                    )
+                }
+                val pcm = Base64.decode(pcmBase64, Base64.DEFAULT)
+                writeWav(outputFile, pcm)
+                // Remember the working model so synthesize() tries it first.
+                prefs.edit().putString(KEY_WORKING_MODEL, model).apply()
+                TtsTestResult(model, true, 200, "Voice ready", pcm.size)
+            }
+        } catch (e: Exception) {
+            KLog.w(TAG, "TTS test ($model) failed", e)
+            TtsTestResult(model, false, -1, "Error: ${e.message}")
+        }
+    }
+
+    /** All TTS models available for testing, in default try-order. */
+    fun allModels(): List<String> = TTS_MODELS
+
+    /** Models to try, working model first when known. */
+    fun orderedModels(): List<String> {
+        val working = prefs.getString(KEY_WORKING_MODEL, null)
+        return if (working != null && TTS_MODELS.contains(working)) {
+            listOf(working) + TTS_MODELS.filter { it != working }
+        } else TTS_MODELS
+    }
 
     /**
      * Wrap 24kHz 16-bit mono PCM in a WAV header.
@@ -168,9 +273,12 @@ class GeminiTtsRepository(context: Context) {
         private const val DJ_PREFS_NAME = "ivor_music_ai_dj"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_VOICE = "tts_voice"
+        private const val KEY_WORKING_MODEL = "tts_working_model"
         private const val TTS_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-        /** TTS models to try in order; the 2.5 preview is the fallback. */
+        /** TTS models to try in order; 3.8 is current, older previews as fallback. */
         private val TTS_MODELS = listOf(
+            "gemini-3.8-flash-tts",
+            "gemini-3.8-flash-lite-tts",
             "gemini-3.1-flash-tts-preview",
             "gemini-2.5-flash-preview-tts",
         )

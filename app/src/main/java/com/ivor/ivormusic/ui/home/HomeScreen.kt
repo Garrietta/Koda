@@ -1591,6 +1591,10 @@ fun HomeScreen(
                                     playerViewModel.playQueue(songs, selectedSong)
                                     showPlayerSheet = true
                                 },
+                                onPlayDjMix = { songs: List<Song> ->
+                                    playerViewModel.playDjMix(songs)
+                                    showPlayerSheet = true
+                                },
                                 onShuffleQueue = { songs: List<Song> ->
                                     playerViewModel.playQueueShuffled(songs)
                                     showPlayerSheet = true

@@ -51,6 +51,9 @@
     <string name="aidj_home_card_loading">The DJ is building your mix\u2026</string>
     <string name="aidj_voice_label">DJ voice</string>
     <string name="aidj_voice_note">Natural AI voices use your Google AI key. Without one, the device voice is used instead.</string>
+    <string name="aidj_voice_test_title">Test voice models</string>
+    <string name="aidj_voice_test_sub">Tap Test on each model to see which one actually produces audio with your key.</string>
+    <string name="aidj_voice_test_button">Test</string>
     <string name="aidj_needs_key_title">The DJ needs a key</string>
     <string name="aidj_needs_key_body">Add your Google AI API key in Settings to start generating mixes.</string>
     <string name="aidj_open_settings">Open Settings</string>

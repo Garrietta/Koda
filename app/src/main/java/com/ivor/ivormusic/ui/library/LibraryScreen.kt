@@ -165,6 +165,8 @@ fun LibraryContent(
     onPlayQueue: (List<Song>, Song?) -> Unit,
     /** Play a collection with shuffle mode on; see PlayerViewModel.playQueueShuffled. */
     onShuffleQueue: (List<Song>) -> Unit,
+    /** Play a curated AI DJ mix: strictly ordered, shuffle unavailable. */
+    onPlayDjMix: (List<Song>) -> Unit,
     contentPadding: PaddingValues,
     viewModel: HomeViewModel,
     isDarkMode: Boolean,
@@ -603,6 +605,7 @@ fun LibraryContent(
                     viewModel = viewModel,
                     onBack = { back() },
                     onPlayQueue = { songs, song -> onPlayQueue(songs, song) },
+                    onPlayDjMix = onPlayDjMix,
                     onOpenSettings = onOpenAiDjSettings,
                     contentPadding = contentPadding,
                 )

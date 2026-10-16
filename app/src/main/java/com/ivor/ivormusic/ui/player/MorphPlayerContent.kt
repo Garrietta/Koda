@@ -136,6 +136,7 @@ fun MorphPlayerSheetContent(
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
     val shuffleModeEnabled by viewModel.shuffleModeEnabled.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
     val currentQueue by viewModel.playOrderQueue.collectAsState()
     val currentQueueItemId by viewModel.currentQueueItemId.collectAsState()
@@ -432,11 +433,14 @@ fun MorphPlayerSheetContent(
                                     }
                                 },
                                 content = {
-                                    IconToggleButton(
-                                        checked = shuffleModeEnabled,
-                                        onCheckedChange = { viewModel.toggleShuffle() }
-                                    ) {
-                                        Icon(Icons.Default.Shuffle, "Shuffle")
+                                    // DJ mixes are strictly ordered: no shuffle option.
+                                    if (!isDjMixPlaying) {
+                                        IconToggleButton(
+                                            checked = shuffleModeEnabled,
+                                            onCheckedChange = { viewModel.toggleShuffle() }
+                                        ) {
+                                            Icon(Icons.Default.Shuffle, "Shuffle")
+                                        }
                                     }
                                     androidx.compose.material3.IconButton(
                                         onClick = { playerHaptics.skip(); viewModel.skipToPrevious() }
