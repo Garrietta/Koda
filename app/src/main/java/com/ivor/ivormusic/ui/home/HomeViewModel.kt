@@ -1470,6 +1470,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val cached = libraryCache.loadCachedLikedSongs()
             if (cached.isNotEmpty()) {
                 _likedSongs.value = cached
+                likedSongsRepository.setYoutubeLikedIds(cached.map { it.id }.toSet())
             }
         }
     }
@@ -3058,6 +3059,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (fresh.isNotEmpty()) {
                 _likedSongs.value = fresh
                 libraryCache.saveLikedSongs(fresh)
+                // Let the like store know about YouTube likes so the heart
+                // renders correctly for songs liked on YouTube Music.
+                likedSongsRepository.setYoutubeLikedIds(fresh.map { it.id }.toSet())
             }
             _youtubePlaylists.value = youtubeRepository.getUserPlaylists()
             accountLoadedAtMs = System.currentTimeMillis()

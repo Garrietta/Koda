@@ -32,6 +32,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -59,9 +60,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ivor.ivormusic.R
 import com.ivor.ivormusic.data.AiDjRepository
+import com.ivor.ivormusic.data.GeminiTtsRepository
 
 class AiDjSettingsViewModel(application: Application) : AndroidViewModel(application) {
     val repository = AiDjRepository(application)
+    private val ttsRepository = GeminiTtsRepository(application)
     val hasApiKey = repository.hasApiKey
     val prompt = repository.prompt
     val trackCount = repository.trackCount
@@ -69,6 +72,13 @@ class AiDjSettingsViewModel(application: Application) : AndroidViewModel(applica
     val safeTokenMode = repository.safeTokenMode
     val djVoiceEnabled = repository.djVoiceEnabled
     val tokenUsage = repository.tokenUsage
+    var ttsVoice by mutableStateOf(ttsRepository.voice)
+        private set
+
+    fun setTtsVoice(voice: String) {
+        ttsRepository.voice = voice
+        ttsVoice = voice
+    }
 }
 
 @Composable
@@ -188,6 +198,48 @@ internal fun AiDjSettingsPage(
                     checked = djVoiceEnabled,
                     onCheckedChange = { repository.setDjVoiceEnabled(it) },
                 )
+                if (djVoiceEnabled) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(R.string.aidj_voice_label),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    GeminiTtsRepository.VOICES.forEach { (voiceName, description) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { model.setTtsVoice(voiceName) }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            RadioButton(
+                                selected = model.ttsVoice == voiceName,
+                                onClick = { model.setTtsVoice(voiceName) },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    voiceName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.aidj_voice_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // Credentials.

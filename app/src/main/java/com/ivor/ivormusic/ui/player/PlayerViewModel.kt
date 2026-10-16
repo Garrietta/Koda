@@ -1683,6 +1683,27 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
         // Liked Songs list needs it to display YouTube songs without a login.
         val isNowLiked = likedSongsRepository.toggleLike(song)
         _isCurrentSongLiked.value = isNowLiked
+        syncLikeToYouTube(song, isNowLiked)
+    }
+
+    /**
+     * Mirror a Koda like to YouTube Music so the liked state (and count)
+     * stays in sync across apps. Local-only for non-YouTube songs; silent
+     * when logged out or offline — the local like always wins.
+     */
+    private fun syncLikeToYouTube(song: Song, liked: Boolean) {
+        if (song.source != com.ivor.ivormusic.data.SongSource.YOUTUBE) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                youTubeRepository.rateVideo(
+                    song.id,
+                    if (liked) com.ivor.ivormusic.data.LikeStatus.LIKE
+                    else com.ivor.ivormusic.data.LikeStatus.INDIFFERENT,
+                )
+            } catch (e: Exception) {
+                KLog.w(TAG, "YouTube like sync failed", e)
+            }
+        }
     }
 
     /**
@@ -1703,6 +1724,7 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     fun toggleLike(song: Song): Boolean {
         val isNowLiked = likedSongsRepository.toggleLike(song)
         if (song.id == _currentSong.value?.id) _isCurrentSongLiked.value = isNowLiked
+        syncLikeToYouTube(song, isNowLiked)
         return isNowLiked
     }
 

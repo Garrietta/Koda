@@ -47,6 +47,8 @@
     <string name="aidj_voice_intro_title">AI DJ</string>
     <string name="aidj_home_card_sub">Your mix, introduced track by track. Tap the emblem for a fresh one.</string>
     <string name="aidj_home_card_loading">The DJ is building your mix\u2026</string>
+    <string name="aidj_voice_label">DJ voice</string>
+    <string name="aidj_voice_note">Natural AI voices use your Google AI key. Without one, the device voice is used instead.</string>
     <string name="aidj_needs_key_title">The DJ needs a key</string>
     <string name="aidj_needs_key_body">Add your Google AI API key in Settings to start generating mixes.</string>
     <string name="aidj_open_settings">Open Settings</string>

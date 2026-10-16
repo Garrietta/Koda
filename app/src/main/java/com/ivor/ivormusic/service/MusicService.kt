@@ -50,6 +50,7 @@ import com.ivor.ivormusic.data.NotificationArtworkLoader
 import com.ivor.ivormusic.data.AudioProfileStore
 import com.ivor.ivormusic.data.AudioProfiler
 import com.ivor.ivormusic.data.TrackLoudnessStore
+import com.ivor.ivormusic.data.LikeStatus
 import com.ivor.ivormusic.data.LikedSongsRepository
 import com.ivor.ivormusic.data.PlaylistDisplayItem
 import com.ivor.ivormusic.data.MusicQueueItem
@@ -966,7 +967,20 @@ class MusicService : MediaLibraryService() {
      */
     private fun toggleCurrentSongLike(player: Player) {
         val song = player.currentMediaItem?.toQueueSong() ?: return
-        likedSongsRepository.toggleLike(song)
+        val isNowLiked = likedSongsRepository.toggleLike(song)
+        // Mirror to YouTube Music so the like (and count) syncs across apps.
+        if (song.source == SongSource.YOUTUBE) {
+            serviceScope.launch {
+                try {
+                    youtubeRepository.rateVideo(
+                        song.id,
+                        if (isNowLiked) LikeStatus.LIKE else LikeStatus.INDIFFERENT,
+                    )
+                } catch (e: Exception) {
+                    KLog.w(TAG, "YouTube like sync failed", e)
+                }
+            }
+        }
         // The store's flow calls refreshMediaButtons too; this just skips the wait.
         refreshMediaButtons()
     }

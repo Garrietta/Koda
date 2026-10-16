@@ -108,6 +108,17 @@ class DjVoiceRepository(context: Context) {
      * without a line play straight through. Reports progress 0..1 via
      * [onProgress].
      */
+    private val geminiTts by lazy { GeminiTtsRepository(appContext) }
+
+    /**
+     * Synthesize with the natural Gemini voice, falling back to the on-device
+     * TTS when Gemini is unavailable (no key, offline, API error).
+     */
+    private suspend fun synthesizeNatural(line: String, wavFile: java.io.File, mp3File: java.io.File): java.io.File? {
+        if (geminiTts.synthesize(line, wavFile)) return wavFile
+        return if (synthesize(line, mp3File)) mp3File else null
+    }
+
     suspend fun buildQueueWithIntros(
         mix: AiDjMix,
         onProgress: (Float) -> Unit = {},
@@ -118,13 +129,14 @@ class DjVoiceRepository(context: Context) {
         mix.tracks.forEachIndexed { index, track ->
             val line = track.djLine?.takeIf { it.isNotBlank() }
             if (line != null) {
-                val file = java.io.File(voiceDir, "intro_${mixKey}_$index.mp3")
-                val synthesized = if (file.exists() && file.length() > 0) {
-                    true
-                } else {
-                    synthesize(line, file)
+                val wavFile = java.io.File(voiceDir, "intro_${mixKey}_$index.wav")
+                val mp3File = java.io.File(voiceDir, "intro_${mixKey}_$index.mp3")
+                val file: java.io.File? = when {
+                    wavFile.exists() && wavFile.length() > 0 -> wavFile
+                    mp3File.exists() && mp3File.length() > 0 -> mp3File
+                    else -> synthesizeNatural(line, wavFile, mp3File)
                 }
-                if (synthesized) {
+                if (file != null) {
                     queue += Song(
                         id = "${StatsRepository.DJ_INTRO_ID_PREFIX}${mixKey}_$index",
                         title = "AI DJ",
