@@ -40,6 +40,21 @@ class GeminiTtsRepository(context: Context) {
         appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_API_KEY, null)?.trim().orEmpty()
 
+    /**
+     * Diagnostic: reports what the tester sees (without exposing the key value).
+     * Returns "prefs=ivor_music_ai_dj key_len=39" or "prefs=... key=MISSING".
+     */
+    fun keyDiagnostic(): String {
+        val prefsFile = DJ_PREFS_NAME
+        val key = appContext.getSharedPreferences(prefsFile, Context.MODE_PRIVATE)
+            .getString(KEY_API_KEY, null)?.trim().orEmpty()
+        return if (key.isEmpty()) {
+            "prefs=$prefsFile key=MISSING"
+        } else {
+            "prefs=$prefsFile key_len=${key.length}"
+        }
+    }
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)

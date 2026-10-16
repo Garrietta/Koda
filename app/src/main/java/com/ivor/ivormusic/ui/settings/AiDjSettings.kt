@@ -264,6 +264,13 @@ internal fun AiDjSettingsPage(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.height(4.dp))
+                    // Diagnostic: shows what prefs/key the tester sees (no key value).
+                    Text(
+                        "Key check: " + model.ttsRepository.keyDiagnostic(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Spacer(Modifier.height(8.dp))
                     val testScope = rememberCoroutineScope()
                     var testResults by remember {
