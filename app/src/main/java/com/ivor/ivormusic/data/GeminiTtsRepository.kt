@@ -25,33 +25,31 @@ import com.ivor.ivormusic.util.KLog
  * The API returns 24kHz 16-bit mono PCM; we wrap it in a WAV header so the
  * player can play the file directly.
  */
-class GeminiTtsRepository(context: Context) {
-
-    private val appContext = context.applicationContext
+/**
+ * @param aiDjRepository The single source of truth for the Google AI API key.
+ * TTS uses the exact same key variable as the DJ generator — no separate storage.
+ */
+class GeminiTtsRepository(
+    private val aiDjRepository: AiDjRepository,
+) {
+    private val appContext: Context = aiDjRepository.appContext
     private val prefs: SharedPreferences = appContext.getSharedPreferences(
         PREFS_NAME, Context.MODE_PRIVATE
     )
 
-    /**
-     * The API key: always the DJ's key from the shared DJ prefs. TTS has no
-     * separate key storage — one key for all Gemini features.
-     */
-    private fun apiKey(): String =
-        appContext.getSharedPreferences(DJ_PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_API_KEY, null)?.trim().orEmpty()
+    /** The API key: directly from the DJ repository — the same variable. */
+    private fun apiKey(): String = aiDjRepository.getApiKey()
 
     /**
      * Diagnostic: reports what the tester sees (without exposing the key value).
      * Returns "prefs=ivor_music_ai_dj key_len=39" or "prefs=... key=MISSING".
      */
     fun keyDiagnostic(): String {
-        val prefsFile = DJ_PREFS_NAME
-        val key = appContext.getSharedPreferences(prefsFile, Context.MODE_PRIVATE)
-            .getString(KEY_API_KEY, null)?.trim().orEmpty()
+        val key = aiDjRepository.getApiKey()
         return if (key.isEmpty()) {
-            "prefs=$prefsFile key=MISSING"
+            "key=MISSING (via AiDjRepository)"
         } else {
-            "prefs=$prefsFile key_len=${key.length}"
+            "key_len=${key.length} (via AiDjRepository)"
         }
     }
 

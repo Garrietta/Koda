@@ -68,7 +68,7 @@ import com.ivor.ivormusic.data.GeminiTtsRepository
 
 class AiDjSettingsViewModel(application: Application) : AndroidViewModel(application) {
     val repository = AiDjRepository(application)
-    val ttsRepository = GeminiTtsRepository(application)
+    val ttsRepository = GeminiTtsRepository(repository)
     val hasApiKey = repository.hasApiKey
     val prompt = repository.prompt
     val trackCount = repository.trackCount

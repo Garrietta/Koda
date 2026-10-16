@@ -74,7 +74,7 @@ data class SubgenreSuggestion(
  */
 class AiDjRepository(context: Context) {
 
-    private val appContext = context.applicationContext
+    val appContext: Context = context.applicationContext
     private val prefs: SharedPreferences = appContext.getSharedPreferences(
         PREFS_NAME, Context.MODE_PRIVATE
     )
@@ -175,6 +175,14 @@ class AiDjRepository(context: Context) {
         val persisted = prefs.getString(KEY_API_KEY, null)?.isNotBlank() == true
         _hasApiKey.value = ok && persisted
     }
+
+    /**
+     * Returns the saved API key (or empty if none). This is the single source
+     * of truth — TTS and all other Gemini features must use this, not their
+     * own separate storage.
+     */
+    fun getApiKey(): String =
+        prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
 
     fun clearApiKey() {
         prefs.edit().remove(KEY_API_KEY).commit()

@@ -108,7 +108,8 @@ class DjVoiceRepository(context: Context) {
      * without a line play straight through. Reports progress 0..1 via
      * [onProgress].
      */
-    private val geminiTts by lazy { GeminiTtsRepository(appContext) }
+    private val aiDjRepository by lazy { AiDjRepository(appContext) }
+    private val geminiTts by lazy { GeminiTtsRepository(aiDjRepository) }
 
     /**
      * Synthesize with the natural Gemini voice, falling back to the on-device
