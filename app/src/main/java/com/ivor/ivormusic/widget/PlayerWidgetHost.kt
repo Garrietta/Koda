@@ -43,11 +43,9 @@ import kotlinx.coroutines.sync.withLock
 internal data class PlayerWidgetUi(
     val snapshot: PlayerWidgetSnapshot,
     val artwork: Bitmap?,
-    /** Vibrant color extracted from the artwork, for song-themed accents. */
-    val accentColor: Int?,
 ) {
     companion object {
-        val Empty = PlayerWidgetUi(PlayerWidgetSnapshot.empty(), null, null)
+        val Empty = PlayerWidgetUi(PlayerWidgetSnapshot.empty(), null)
     }
 }
 
@@ -79,8 +77,7 @@ internal object PlayerWidgetHost {
             val snapshot = stored ?: withController(context) { it.toSnapshot() }
             if (snapshot != null) {
                 if (stored == null) PlayerWidgetStore.write(context, snapshot)
-                val art = loadArtwork(context, snapshot)
-                _state.value = PlayerWidgetUi(snapshot, art, extractAccent(art))
+                _state.value = PlayerWidgetUi(snapshot, loadArtwork(context, snapshot))
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
@@ -96,26 +93,8 @@ internal object PlayerWidgetHost {
         // long as the song plays.
         val sameCover = current.snapshot.artworkUri == snapshot.artworkUri && current.artwork != null
         val artwork = if (sameCover) current.artwork else loadArtwork(context, snapshot)
-        val accent = if (sameCover) current.accentColor else extractAccent(artwork)
-        _state.value = PlayerWidgetUi(snapshot, artwork, accent)
+        _state.value = PlayerWidgetUi(snapshot, artwork)
         seeded = true
-    }
-
-    /**
-     * Extract a vibrant accent color from the artwork for song-themed widget
-     * accents. Null when the artwork is missing or has no vibrant swatch.
-     */
-    private fun extractAccent(artwork: Bitmap?): Int? {
-        if (artwork == null) return null
-        return try {
-            val palette = androidx.palette.graphics.Palette.from(artwork).generate()
-            (palette.vibrantSwatch
-                ?: palette.lightVibrantSwatch
-                ?: palette.darkVibrantSwatch
-                ?: palette.dominantSwatch)?.rgb
-        } catch (e: Exception) {
-            null
-        }
     }
 
     private suspend fun loadArtwork(context: Context, snapshot: PlayerWidgetSnapshot): Bitmap? {

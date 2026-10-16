@@ -95,12 +95,6 @@ private fun VinylContent(ui: PlayerWidgetUi) {
         return
     }
 
-    // Song-themed accent: the artwork's vibrant color, falling back to the
-    // theme primary when the artwork has none.
-    val songAccent: ColorProvider = ui.accentColor?.let {
-        ColorProvider(androidx.compose.ui.graphics.Color(it))
-    } ?: GlanceTheme.colors.primary
-
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
     // Measured against the actual cell, like every layout that can clip: the sleeve
@@ -158,12 +152,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     modifier = GlanceModifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    VinylArm(
-                        width = record + armReach,
-                        height = record,
-                        onRecord = playing,
-                        accent = songAccent,
-                    )
+                    VinylArm(width = record + armReach, height = record, onRecord = playing)
                 }
             }
             Spacer(modifier = GlanceModifier.width(10.dp))
@@ -187,25 +176,20 @@ private fun VinylContent(ui: PlayerWidgetUi) {
  * cap in the accent colour.
  */
 @Composable
-private fun VinylArm(
-    width: Dp,
-    height: Dp,
-    onRecord: Boolean,
-    accent: ColorProvider,
-) {
+private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean) {
     val colors = GlanceTheme.colors
     val dark = KodaWidgetTheme.isDark(LocalContext.current)
     val layers = if (onRecord) {
         listOf(
             R.drawable.vinyl_arm_on_shadow to recordColor(),
             R.drawable.vinyl_arm_on_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_on_accent to accent,
+            R.drawable.vinyl_arm_on_accent to colors.primary,
         )
     } else {
         listOf(
             R.drawable.vinyl_arm_off_shadow to recordColor(),
             R.drawable.vinyl_arm_off_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_off_accent to accent,
+            R.drawable.vinyl_arm_off_accent to colors.primary,
         )
     }
     Box(modifier = GlanceModifier.width(width).height(height)) {
