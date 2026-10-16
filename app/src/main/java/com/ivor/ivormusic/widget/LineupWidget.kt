@@ -134,7 +134,6 @@ private fun LineupRow(entry: UpNextEntry) {
             .cornerRadius(12.dp)
             .clickable(
                 widgetTransportActionWithIndex(
-                    LocalContext.current,
                     WidgetActionActivity.ACTION_PLAY_INDEX,
                     entry.index
                 )
