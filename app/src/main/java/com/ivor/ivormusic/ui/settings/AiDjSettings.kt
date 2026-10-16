@@ -76,7 +76,7 @@ class AiDjSettingsViewModel(application: Application) : AndroidViewModel(applica
     var ttsVoice by mutableStateOf(ttsRepository.voice)
         private set
 
-    fun setTtsVoice(voice: String) {
+    fun updateTtsVoice(voice: String) {
         ttsRepository.voice = voice
         ttsVoice = voice
     }
@@ -213,12 +213,12 @@ internal fun AiDjSettingsPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable { model.setTtsVoice(voiceName) }
+                                .clickable { model.updateTtsVoice(voiceName) }
                                 .padding(vertical = 8.dp),
                         ) {
                             RadioButton(
                                 selected = model.ttsVoice == voiceName,
-                                onClick = { model.setTtsVoice(voiceName) },
+                                onClick = { model.updateTtsVoice(voiceName) },
                             )
                             Spacer(Modifier.width(8.dp))
                             Column {
