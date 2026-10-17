@@ -688,6 +688,50 @@ fun HomeScreen(
     // Failures fall back to the DJ screen, which explains what went wrong.
     var djInstantLoading by remember { mutableStateOf(false) }
     val djContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    // Background DJ cache: pre-computes the mix and voice intros on launch,
+    // so the FAB plays instantly from cache.
+    val djCacheManager = remember(djContext) {
+        com.ivor.ivormusic.data.DjCacheManager(djContext)
+    }
+    // Start pre-computation on launch (background, non-blocking).
+    androidx.compose.runtime.LaunchedEffect(djCacheManager) {
+        djCacheManager.startPrecompute(
+            getRecent = { viewModel.getLastPlayedSongs(30) },
+            getLiked = { viewModel.likedSongs.value },
+        )
+    }
+    // Cleanup on dispose.
+    androidx.compose.runtime.DisposableEffect(djCacheManager) {
+        onDispose { djCacheManager.shutdown() }
+    }
+    /**
+     * Play the DJ mix instantly from cache, bypassing the config screen.
+     * If no cached mix exists, falls back to regenerateDj().
+     */
+    fun playDjFromCache() {
+        if (djInstantLoading) return
+        val cached = djCacheManager.getCachedMix()
+        if (cached == null) {
+            regenerateDj()
+            return
+        }
+        djInstantLoading = true
+        scope.launch {
+            try {
+                val queue = djCacheManager.buildQueueFromCache(cached)
+                if (queue.isNotEmpty()) {
+                    playerViewModel.playQueue(queue, queue.first())
+                    showPlayerSheet = true
+                    // Keep caching upcoming intros ahead of playback.
+                    djCacheManager.startAheadCaching(cached)
+                } else {
+                    regenerateDj()
+                }
+            } finally {
+                djInstantLoading = false
+            }
+        }
+    }
     fun regenerateDj() {
         if (djInstantLoading) return
         djInstantLoading = true
@@ -2044,6 +2088,29 @@ fun HomeScreen(
                     }
                 }
             )
+        }
+
+        // AI DJ floating action button: circular, headphones emblem, bottom-right
+        // next to the nav pill. Matches the pill bar height, visibility bound to
+        // the pill bar. Tap plays instantly from cache, bypassing config.
+        if (!useRail && !nonExpressiveNavigationBar) {
+            androidx.compose.material3.FloatingActionButton(
+                onClick = { playDjFromCache() },
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(bottom = 20.dp, end = 20.dp)
+                    .size(64.dp),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
+            ) {
+                DjEmblem(
+                    emblemSize = 40.dp,
+                    // DjEmblem handles its own click; we want the FAB's.
+                    onClick = null,
+                )
+            }
         }
 
         // Published for the video overlay, which is drawn above the NavHost and

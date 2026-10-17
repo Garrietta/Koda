@@ -220,15 +220,8 @@ fun SpotlightHomeContent(
                 SpotlightFilterChips(selected = filter, onSelect = { filter = it })
             }
 
-            // The AI DJ sits at the top of Home: tap for the playlist page,
-            // tap the emblem to regenerate.
-            item(key = "ai_dj_card") {
-                AiDjHomeCard(
-                    onOpen = onOpenAiDj,
-                    onRegenerate = onRegenerateDj,
-                    loading = djLoading,
-                )
-            }
+            // AI DJ moved to a floating action button next to the nav pill
+            // (see HomeScreen) — no banner on Home anymore.
 
             // The shortcut grid only makes sense unfiltered - a two-column grid
             // of "your most reached-for things" is not a thing you scope.
@@ -1173,61 +1166,3 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
  * The emblem is drawn in code so it follows the dynamic theme.
  */
 @Composable
-private fun AiDjHomeCard(
-    onOpen: () -> Unit,
-    onRegenerate: () -> Unit,
-    loading: Boolean,
-) {
-    Card(
-        onClick = onOpen,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(top = 4.dp, bottom = 4.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(40.dp),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    strokeWidth = 3.dp,
-                )
-            } else {
-                DjEmblem(
-                    emblemSize = 40.dp,
-                    onClick = onRegenerate,
-                )
-            }
-            Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.aidj_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                Text(
-                    if (loading) stringResource(R.string.aidj_home_card_loading)
-                    else stringResource(R.string.aidj_home_card_sub),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Icon(
-                Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}

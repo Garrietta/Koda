@@ -120,6 +120,16 @@ class DjVoiceRepository(context: Context) {
         return if (synthesize(line, mp3File)) mp3File else null
     }
 
+    /**
+     * Public: synthesize a single intro line, caching to the given files.
+     * Used by DjCacheManager for background pre-caching.
+     */
+    suspend fun synthesizeIntro(line: String, wavFile: java.io.File, mp3File: java.io.File): java.io.File? =
+        synthesizeNatural(line, wavFile, mp3File)
+
+    /** Public: the voice key used in cached file names (must match buildQueueWithIntros). */
+    fun currentVoiceKey(): String = geminiTts.voice.hashCode().toString(36)
+
     suspend fun buildQueueWithIntros(
         mix: AiDjMix,
         onProgress: (Float) -> Unit = {},
