@@ -2119,21 +2119,22 @@ fun HomeScreen(
         }
 
         // AI DJ floating action button: circular, headphones emblem, bottom-right
-        // next to the nav pill. Matches the pill bar height, visibility bound to
-        // the pill bar. Tap plays instantly from cache (or toggles pause/play if
-        // the DJ mix is already running); long-press opens the DJ screen.
+        // next to the nav pill (or in the rail layout's content corner).
+        // 56dp to match the pill bar height; 32dp emblem for better proportions.
+        // Tap plays instantly from cache (or toggles pause/play if the DJ mix is
+        // already running); long-press opens the DJ screen.
         // Follows the floating toolbar's hide-on-scroll offset so it slides down
         // with the pill bar instead of sitting stagnant under the mini-player.
-        if (!useRail && !nonExpressiveNavigationBar) {
+        if (!nonExpressiveNavigationBar) {
             androidx.compose.material3.Surface(
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(bottom = 20.dp, end = 20.dp)
-                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) {
+                    .offset(y = if (useRail) 0.dp else with(androidx.compose.ui.platform.LocalDensity.current) {
                         floatingToolbarState.offset.dp
                     })
-                    .size(64.dp)
+                    .size(56.dp)
                     .combinedClickable(
                         onClick = { playDjFromCache() },
                         onLongClick = {
@@ -2148,7 +2149,7 @@ fun HomeScreen(
                 shadowElevation = 6.dp,
             ) {
                 DjEmblem(
-                    emblemSize = 40.dp,
+                    emblemSize = 32.dp,
                     // DjEmblem handles its own click; we want the FAB's.
                     onClick = null,
                 )
