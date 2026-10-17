@@ -1159,10 +1159,3 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
         )
     }
 }
-
-/**
- * The AI DJ card at the top of Home. Slim, matching the shortcut buttons
- * below: tap the card for the playlist page, tap the emblem to regenerate.
- * The emblem is drawn in code so it follows the dynamic theme.
- */
-@Composable

@@ -704,34 +704,6 @@ fun HomeScreen(
     androidx.compose.runtime.DisposableEffect(djCacheManager) {
         onDispose { djCacheManager.shutdown() }
     }
-    /**
-     * Play the DJ mix instantly from cache, bypassing the config screen.
-     * If no cached mix exists, falls back to regenerateDj().
-     */
-    fun playDjFromCache() {
-        if (djInstantLoading) return
-        val cached = djCacheManager.getCachedMix()
-        if (cached == null) {
-            regenerateDj()
-            return
-        }
-        djInstantLoading = true
-        scope.launch {
-            try {
-                val queue = djCacheManager.buildQueueFromCache(cached)
-                if (queue.isNotEmpty()) {
-                    playerViewModel.playQueue(queue, queue.first())
-                    showPlayerSheet = true
-                    // Keep caching upcoming intros ahead of playback.
-                    djCacheManager.startAheadCaching(cached)
-                } else {
-                    regenerateDj()
-                }
-            } finally {
-                djInstantLoading = false
-            }
-        }
-    }
     fun regenerateDj() {
         if (djInstantLoading) return
         djInstantLoading = true
@@ -764,6 +736,34 @@ fun HomeScreen(
                         goToTab(3)
                     },
                 )
+            } finally {
+                djInstantLoading = false
+            }
+        }
+    }
+    /**
+     * Play the DJ mix instantly from cache, bypassing the config screen.
+     * If no cached mix exists, falls back to regenerateDj().
+     */
+    fun playDjFromCache() {
+        if (djInstantLoading) return
+        val cached = djCacheManager.getCachedMix()
+        if (cached == null) {
+            regenerateDj()
+            return
+        }
+        djInstantLoading = true
+        scope.launch {
+            try {
+                val queue = djCacheManager.buildQueueFromCache(cached)
+                if (queue.isNotEmpty()) {
+                    playerViewModel.playQueue(queue, queue.first())
+                    showPlayerSheet = true
+                    // Keep caching upcoming intros ahead of playback.
+                    djCacheManager.startAheadCaching(cached)
+                } else {
+                    regenerateDj()
+                }
             } finally {
                 djInstantLoading = false
             }
