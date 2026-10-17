@@ -562,9 +562,6 @@ internal fun SettingsHubRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // When selected, expand to fill the card's content inset so the
-            // highlight covers the full button area without a gap.
-            .padding(horizontal = if (selected) -6.dp else 0.dp)
             .scale(scale)
             .clip(RoundedCornerShape(18.dp))
             .background(selectedFill)
