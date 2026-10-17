@@ -154,7 +154,13 @@ object PlayerWidgets {
      */
     fun publish(context: Context, snapshot: PlayerWidgetSnapshot) {
         val appContext = context.applicationContext
-        PlayerWidgetStore.write(appContext, snapshot)
+        // Don't let an empty snapshot (app closing, session destroyed) erase
+        // the last known good state. The widget should show the last song,
+        // not go blank, when the app is swiped away.
+        val stored = PlayerWidgetStore.read(appContext)
+        if (snapshot.hasMedia || stored == null || !stored.hasMedia) {
+            PlayerWidgetStore.write(appContext, snapshot)
+        }
         if (!anyInstalled(appContext)) return
         pushJob?.cancel()
         pushJob = scope.launch {
