@@ -898,13 +898,25 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     }
 
     /**
+     * Get the current queue index (position of current item in play order).
+     * Used for saving DJ mix resume position.
+     */
+    fun getCurrentQueueIndex(): Int {
+        val currentId = _currentQueueItemId.value ?: return 0
+        val queue = _playOrderQueue.value
+        return queue.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+    }
+
+    /**
      * Play a curated AI DJ mix: strictly ordered, shuffle forced off and
      * unavailable while the mix plays.
+     * @param startIndex Queue position to start from (for resume). Defaults to 0.
      */
-    fun playDjMix(songs: List<Song>) {
+    fun playDjMix(songs: List<Song>, startIndex: Int = 0) {
         _isDjMixPlaying.value = true
         setShuffleEnabled(false)
-        playQueueAtPosition(songs, songs.firstOrNull(), 0L)
+        val startSong = songs.getOrNull(startIndex.coerceIn(0, songs.size - 1))
+        playQueueAtPosition(songs, startSong, 0L)
     }
 
     /**

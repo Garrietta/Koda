@@ -705,6 +705,21 @@ fun HomeScreen(
     androidx.compose.runtime.DisposableEffect(djCacheManager) {
         onDispose { djCacheManager.shutdown() }
     }
+    // Save DJ position when the mix stops being the active queue.
+    // This enables resume-from-nearest-intro on next FAB press.
+    val isDjMixPlayingState by playerViewModel.isDjMixPlaying.collectAsState()
+    var wasDjMixPlaying by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(isDjMixPlayingState) {
+        if (wasDjMixPlaying && !isDjMixPlayingState) {
+            // DJ just stopped — save the position
+            val cached = djCacheManager.getCachedMix()
+            if (cached != null) {
+                val index = playerViewModel.getCurrentQueueIndex()
+                djCacheManager.saveDjPosition(cached, index)
+            }
+        }
+        wasDjMixPlaying = isDjMixPlayingState
+    }
     fun regenerateDj() {
         if (djInstantLoading) return
         djInstantLoading = true
@@ -764,7 +779,14 @@ fun HomeScreen(
             try {
                 val queue = djCacheManager.buildQueueFromCache(cached)
                 if (queue.isNotEmpty()) {
-                    playerViewModel.playQueue(queue, queue.first())
+                    // Resume from nearest DJ intro before last position, if available.
+                    val savedPos = djCacheManager.getSavedDjPosition(cached)
+                    val startIndex = if (savedPos != null && savedPos < queue.size) {
+                        djCacheManager.findResumeIntroIndex(queue, savedPos)
+                    } else {
+                        0
+                    }
+                    playerViewModel.playDjMix(queue, startIndex)
                     showPlayerSheet = true
                     // Keep caching upcoming intros ahead of playback.
                     djCacheManager.startAheadCaching(cached)

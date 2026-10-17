@@ -129,8 +129,9 @@ class QueueReorderState internal constructor(
     /**
      * When false, drag-to-reorder is disabled. Used for DJ mixes where the
      * voice intros must stay locked in order with their songs.
+     * Observable so the queue recomposes when the DJ mix starts/stops.
      */
-    var dragEnabled: Boolean = true
+    var dragEnabled: Boolean by androidx.compose.runtime.mutableStateOf(true)
     /** Key of the row being dragged, or null when nothing is. */
     var draggingKey: Any? by mutableStateOf(null)
         private set

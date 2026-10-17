@@ -35,6 +35,46 @@ class DjCacheManager(context: Context) {
     var isReady: Boolean = false
         private set
 
+    private val positionPrefs = appContext.getSharedPreferences("dj_position", android.content.Context.MODE_PRIVATE)
+
+    /**
+     * Save the last played queue index for a mix. Called when the DJ mix
+     * stops being the active queue.
+     */
+    fun saveDjPosition(mix: AiDjMix, queueIndex: Int) {
+        val mixId = mixKeyFor(mix)
+        positionPrefs.edit().putInt("pos_$mixId", queueIndex).apply()
+    }
+
+    /**
+     * Get the saved queue index for a mix, or null if none.
+     */
+    fun getSavedDjPosition(mix: AiDjMix): Int? {
+        val mixId = mixKeyFor(mix)
+        val pos = positionPrefs.getInt("pos_$mixId", -1)
+        return if (pos >= 0) pos else null
+    }
+
+    /**
+     * Find the nearest DJ intro at or before the given queue index.
+     * Returns the intro index, or 0 if none found.
+     */
+    fun findResumeIntroIndex(queue: List<Song>, fromIndex: Int): Int {
+        val prefix = com.ivor.ivormusic.data.StatsRepository.DJ_INTRO_ID_PREFIX
+        // Walk backwards from fromIndex to find the nearest intro
+        for (i in fromIndex downTo 0) {
+            if (i < queue.size && queue[i].id.startsWith(prefix)) {
+                return i
+            }
+        }
+        return 0
+    }
+
+    private fun mixKeyFor(mix: AiDjMix): String {
+        // Use the same key as voice file caching for consistency
+        return mix.title.hashCode().toString(36) + "_" + mix.tracks.size
+    }
+
     /**
      * Start background pre-computation. Call on app launch.
      * Generates the mix (if stale/missing) and synthesizes the first
