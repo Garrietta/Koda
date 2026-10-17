@@ -466,7 +466,7 @@ class AiDjRepository(context: Context) {
                         )
                     )
                 }
-                return@withContext parseMixWithDiscoveries(responseBody, pool)
+                return@withContext parseMixWithDiscoveries(responseBody, shuffledRecent + shuffledLiked)
             }
         } catch (e: Exception) {
             KLog.w(TAG, "AI DJ instant mix failed", e)
