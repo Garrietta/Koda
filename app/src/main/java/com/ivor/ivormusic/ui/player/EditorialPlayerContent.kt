@@ -387,7 +387,7 @@ private fun EditorialNowPlayingView(
                         }
                     ) {
                         EditorialDieCutArt(
-                        EditorialDieCutArt(
+                            currentSong = currentSong,
                             isPlaying = isPlaying,
                             onTap = onPlayPause,
                             accent = accent,

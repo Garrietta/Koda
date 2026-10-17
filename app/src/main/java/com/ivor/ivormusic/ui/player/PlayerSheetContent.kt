@@ -95,6 +95,7 @@ fun PlayerSheetContent(
     
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val isBuffering by viewModel.isBuffering.collectAsState()
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
