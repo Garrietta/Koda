@@ -323,7 +323,8 @@ internal fun PlayerQueuePane(
         listState = listState,
         keys = rowKeys,
         onMove = { from, to -> viewModel.movePlayOrderItem(from, to, persist = false) },
-        onSettle = { viewModel.commitQueueOrder() }
+        onSettle = { viewModel.commitQueueOrder() },
+        dragEnabled = !isDjMixPlaying,
     )
     val removal = rememberQueueRemoval(onUndo = { viewModel.undoQueueRemoval() })
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -398,10 +399,7 @@ internal fun PlayerQueuePane(
                                     tint = LocalContentColor.current.copy(alpha = 0.7f)
                                 )
                             },
-                            modifier = Modifier.then(
-                                if (isDjMixPlaying) Modifier
-                                else Modifier.queueDragLongPress(reorder, key)
-                            )
+                            modifier = Modifier.queueDragLongPress(reorder, key)
                         )
                     }
                 }

@@ -196,6 +196,7 @@ fun EditorialPlayerSheetContent(
         Crossfade(targetState = showQueue, label = "EditorialQueueTransition") { queueVisible ->
             if (queueVisible) {
                 EditorialQueueView(
+                    isDjMixPlaying = isDjMixPlaying,
                     queue = currentQueue,
                     currentQueueItemId = currentQueueItemId,
                     onQueueItemClick = { item -> viewModel.skipToQueueItem(item.id) },
@@ -215,7 +216,6 @@ fun EditorialPlayerSheetContent(
                 )
             } else {
                 EditorialNowPlayingView(
-                    isDjMixPlaying = isDjMixPlaying,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
                     isBuffering = isBuffering,
@@ -274,7 +274,6 @@ fun EditorialPlayerSheetContent(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EditorialNowPlayingView(
-    isDjMixPlaying: Boolean,
     currentSong: Song?,
     isPlaying: Boolean,
     isBuffering: Boolean,
@@ -389,7 +388,6 @@ private fun EditorialNowPlayingView(
                     ) {
                         EditorialDieCutArt(
                         EditorialDieCutArt(
-                            isDjMixPlaying = isDjMixPlaying,
                             isPlaying = isPlaying,
                             onTap = onPlayPause,
                             accent = accent,
@@ -692,7 +690,6 @@ private fun EditorialNowPlayingView(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EditorialDieCutArt(
-    isDjMixPlaying: Boolean,
     currentSong: Song?,
     isPlaying: Boolean,
     onTap: () -> Unit,
@@ -844,6 +841,7 @@ internal fun EditorialChip(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun EditorialQueueView(
+    isDjMixPlaying: Boolean = false,
     queue: List<MusicQueueItem>,
     currentQueueItemId: String?,
     onQueueItemClick: (MusicQueueItem) -> Unit,
@@ -868,7 +866,8 @@ internal fun EditorialQueueView(
         listState = listState,
         keys = rowKeys,
         onMove = onMoveSong,
-        onSettle = onCommitOrder
+        onSettle = onCommitOrder,
+        dragEnabled = !isDjMixPlaying,
     )
     val removal = rememberQueueRemoval(onUndo = onUndoRemove)
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -978,10 +977,7 @@ internal fun EditorialQueueView(
                             contentColor = if (isCurrent) field else accent,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(
-                                    if (isDjMixPlaying) Modifier
-                                    else Modifier.queueDragLongPress(reorder, key)
-                                )
+                                .queueDragLongPress(reorder, key)
                         ) {
                             Row(
                                 modifier = Modifier

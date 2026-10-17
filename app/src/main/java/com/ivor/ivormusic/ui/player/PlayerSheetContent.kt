@@ -864,7 +864,7 @@ private fun ExpressiveNowPlayingView(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ExpressiveQueueView(
-    isDjMixPlaying: Boolean,
+    isDjMixPlaying: Boolean = false,
     queue: List<MusicQueueItem>,
     currentQueueItemId: String?,
     onQueueItemClick: (MusicQueueItem) -> Unit,
@@ -899,7 +899,8 @@ private fun ExpressiveQueueView(
         listState = listState,
         keys = rowKeys,
         onMove = onMoveSong,
-        onSettle = onCommitOrder
+        onSettle = onCommitOrder,
+        dragEnabled = !isDjMixPlaying,
     )
     val removal = rememberQueueRemoval(onUndo = onUndoRemove)
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -1168,12 +1169,7 @@ private fun ExpressiveQueueView(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(
-                                    // DJ mixes lock the queue order: the voice
-                                    // intros must stay aligned with their songs.
-                                    if (isDjMixPlaying) Modifier
-                                    else Modifier.queueDragLongPress(reorder, key)
-                                ),
+                                .queueDragLongPress(reorder, key),
                             shape = RoundedCornerShape(20.dp),
                             color = if (isCurrent) primaryColor.copy(alpha = 0.12f)
                                    else MaterialTheme.colorScheme.surfaceContainerLow,

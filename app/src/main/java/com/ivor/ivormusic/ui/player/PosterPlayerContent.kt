@@ -180,6 +180,7 @@ fun PosterPlayerSheetContent(
         Crossfade(targetState = showQueue, label = "CanvasQueueTransition") { queueVisible ->
             if (queueVisible) {
                 EditorialQueueView(
+                    isDjMixPlaying = viewModel.isDjMixPlaying.collectAsState().value,
                     queue = currentQueue,
                     currentQueueItemId = currentQueueItemId,
                     onQueueItemClick = { item -> viewModel.skipToQueueItem(item.id) },
