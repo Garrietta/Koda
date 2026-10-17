@@ -2122,12 +2122,17 @@ fun HomeScreen(
         // next to the nav pill. Matches the pill bar height, visibility bound to
         // the pill bar. Tap plays instantly from cache (or toggles pause/play if
         // the DJ mix is already running); long-press opens the DJ screen.
+        // Follows the floating toolbar's hide-on-scroll offset so it slides down
+        // with the pill bar instead of sitting stagnant under the mini-player.
         if (!useRail && !nonExpressiveNavigationBar) {
             androidx.compose.material3.Surface(
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(bottom = 20.dp, end = 20.dp)
+                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        floatingToolbarState.offset.dp
+                    })
                     .size(64.dp)
                     .combinedClickable(
                         onClick = { playDjFromCache() },

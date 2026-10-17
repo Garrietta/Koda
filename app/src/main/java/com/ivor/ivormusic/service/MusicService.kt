@@ -2293,6 +2293,26 @@ class MusicService : MediaLibraryService() {
                 withTimeout(10_000L) {
                     val generation = browseGeneration
                     val resolved = mutableListOf<MediaItem>()
+                    // If a single song was tapped from a browse list (e.g. Liked Songs),
+                    // expand to the full list so Next/Previous work through the
+                    // playlist instead of falling back to a radio station.
+                    // We detect this by matching the song against known collections.
+                    if (mediaItems.size == 1 && mediaItems[0].localConfiguration == null) {
+                        val tappedId = mediaItems[0].mediaId
+                        val liked = likedSongsRepository.likedSongs.value
+                        val likedIndex = liked.indexOfFirst { song ->
+                            mapSongToMediaItem(song).mediaId == tappedId
+                        }
+                        if (likedIndex >= 0) {
+                            // Build queue: tapped song first, then the rest of liked
+                            // in order (wrapping around).
+                            val ordered = (likedIndex until liked.size) + (0 until likedIndex)
+                            for (i in ordered) {
+                                resolved.add(preparePlaybackItem(mapSongToMediaItem(liked[i])))
+                            }
+                            return@withTimeout resolved
+                        }
+                    }
                     for (item in mediaItems) {
                         val query = item.requestMetadata.searchQuery?.trim()?.takeIf { it.isNotEmpty() }
                         if (item.mediaId.isNotBlank() || query == null) {
@@ -2836,6 +2856,15 @@ class MusicService : MediaLibraryService() {
      */
     private suspend fun buildAutoDjQueue(): List<Song> {
         return try {
+            // Prefer the cached mix (pre-computed on app launch) for instant playback.
+            // Falls back to generating a new one if the cache is empty.
+            val cacheManager = com.ivor.ivormusic.data.DjCacheManager(this)
+            val cached = cacheManager.getCachedMix()
+            if (cached != null) {
+                val queue = cacheManager.buildQueueFromCache(cached)
+                if (queue.isNotEmpty()) return queue
+            }
+            // Cache miss: generate a new mix.
             val seen = mutableSetOf<String>()
             val recent = mutableListOf<Song>()
             for (entry in statsRepository.loadHistory()) {
