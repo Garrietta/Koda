@@ -141,6 +141,7 @@ fun PlayerSheetContent(
                 val isLoadingMore by viewModel.isLoadingMore.collectAsState()
                 
                 ExpressiveQueueView(
+                        isDjMixPlaying = isDjMixPlaying,
                     queue = currentQueue,
                     currentQueueItemId = currentQueueItemId,
                     onQueueItemClick = { item -> viewModel.skipToQueueItem(item.id) },
@@ -863,6 +864,7 @@ private fun ExpressiveNowPlayingView(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ExpressiveQueueView(
+    isDjMixPlaying: Boolean,
     queue: List<MusicQueueItem>,
     currentQueueItemId: String?,
     onQueueItemClick: (MusicQueueItem) -> Unit,

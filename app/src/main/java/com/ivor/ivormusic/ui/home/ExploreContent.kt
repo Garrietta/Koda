@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
@@ -133,7 +135,7 @@ fun ExploreContent(
                 placeholder = { Text(stringResource(R.string.search_hint)) },
                 leadingIcon = {
                     Icon(
-                        androidx.compose.material.icons.Icons.Filled.Search,
+                        Icons.Filled.Search,
                         contentDescription = null,
                     )
                 },
@@ -143,7 +145,7 @@ fun ExploreContent(
                             onClick = { searchQuery = "" }
                         ) {
                             Icon(
-                                androidx.compose.material.icons.Icons.Filled.Clear,
+                                Icons.Filled.Clear,
                                 contentDescription = null,
                             )
                         }

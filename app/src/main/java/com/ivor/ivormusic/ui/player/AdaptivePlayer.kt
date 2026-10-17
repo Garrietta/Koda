@@ -311,6 +311,7 @@ internal fun PlayerQueuePane(
 ) {
     val queue by viewModel.playOrderQueue.collectAsState()
     val currentQueueItemId by viewModel.currentQueueItemId.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val currentIndex = remember(queue, currentQueueItemId) {
         queue.indexOfFirst { it.id == currentQueueItemId }

@@ -215,6 +215,7 @@ fun EditorialPlayerSheetContent(
                 )
             } else {
                 EditorialNowPlayingView(
+                    isDjMixPlaying = isDjMixPlaying,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
                     isBuffering = isBuffering,
@@ -273,6 +274,7 @@ fun EditorialPlayerSheetContent(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EditorialNowPlayingView(
+    isDjMixPlaying: Boolean,
     currentSong: Song?,
     isPlaying: Boolean,
     isBuffering: Boolean,
@@ -386,7 +388,8 @@ private fun EditorialNowPlayingView(
                         }
                     ) {
                         EditorialDieCutArt(
-                            currentSong = currentSong,
+                        EditorialDieCutArt(
+                            isDjMixPlaying = isDjMixPlaying,
                             isPlaying = isPlaying,
                             onTap = onPlayPause,
                             accent = accent,
@@ -689,6 +692,7 @@ private fun EditorialNowPlayingView(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EditorialDieCutArt(
+    isDjMixPlaying: Boolean,
     currentSong: Song?,
     isPlaying: Boolean,
     onTap: () -> Unit,

@@ -150,6 +150,7 @@ fun GesturePlayerSheetContent(
         Crossfade(targetState = showQueue, label = "GesturePlayerQueueTransition") { isQueueVisible ->
             if (isQueueVisible) {
                 GestureQueueView(
+                    isDjMixPlaying = isDjMixPlaying,
                     queue = currentQueue,
                     currentQueueItemId = currentQueueItemId,
                     onQueueItemClick = { item -> viewModel.skipToQueueItem(item.id) },
@@ -1121,6 +1122,7 @@ private fun SingleAlbumArt(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun GestureQueueView(
+    isDjMixPlaying: Boolean,
     queue: List<MusicQueueItem>,
     currentQueueItemId: String?,
     onQueueItemClick: (MusicQueueItem) -> Unit,

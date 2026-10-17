@@ -261,7 +261,7 @@ private class PolygonShape(private val polygon: RoundedPolygon) : Shape {
  * per category would mean repeating the whole list eleven times. The Home tab
  * system solves the same problem the same way.
  */
-internal enum class SettingsPage {
+enum class SettingsPage {
     HUB,
     ACCOUNT,
     APPEARANCE,

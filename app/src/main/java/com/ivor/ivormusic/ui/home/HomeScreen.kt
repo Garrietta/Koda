@@ -3484,7 +3484,6 @@ fun SearchContent(
         previewable = listOfNotNull(viewedVideoPlaylist, viewedPlaylist, viewedArtist).size == 1,
         background = {
             com.ivor.ivormusic.ui.search.SearchScreen(
-                requestInitialFocus = false,
                 songs = songs,
                 onSongClick = onSongClick,
                 onPlayQueue = onPlayQueue,
@@ -3506,7 +3505,7 @@ fun SearchContent(
                 isDarkMode = isDarkMode,
                 videoMode = videoMode,
                 localOnly = localOnly,
-                requestInitialFocus = requestInitialFocus,
+                requestInitialFocus = false,
                 listState = listState
             )
         }
