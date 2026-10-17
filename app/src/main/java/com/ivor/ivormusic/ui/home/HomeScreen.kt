@@ -108,6 +108,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -2118,22 +2119,26 @@ fun HomeScreen(
             )
         }
 
-        // AI DJ floating action button: circular, headphones emblem, bottom-right
+        // AI DJ floating action button: squircle, headphones emblem, bottom-right
         // next to the nav pill (or in the rail layout's content corner).
         // 56dp to match the pill bar height; 32dp emblem for better proportions.
         // Tap plays instantly from cache (or toggles pause/play if the DJ mix is
         // already running); long-press opens the DJ screen.
-        // Follows the floating toolbar's hide-on-scroll offset so it slides down
-        // with the pill bar instead of sitting stagnant under the mini-player.
+        // Hides with the pill bar on scroll: fades and slides down using the
+        // toolbar's hidden fraction, so it never overlaps content.
         if (!nonExpressiveNavigationBar) {
+            val djHiddenFraction = if (useRail) 0f else floatingToolbarState.hiddenFraction()
             androidx.compose.material3.Surface(
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(bottom = 20.dp, end = 20.dp)
-                    .offset(y = if (useRail) 0.dp else with(androidx.compose.ui.platform.LocalDensity.current) {
-                        floatingToolbarState.offset.dp
+                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        // Slide down with the toolbar, plus extra to fully clear
+                        // the 56dp button off-screen when fully hidden.
+                        (floatingToolbarState.offset + 80.dp.toPx() * djHiddenFraction).toDp()
                     })
+                    .alpha(1f - djHiddenFraction)
                     .size(56.dp)
                     .combinedClickable(
                         onClick = { playDjFromCache() },
