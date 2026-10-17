@@ -912,7 +912,7 @@ class MusicService : MediaLibraryService() {
     }
 
     /** What the extra buttons last showed, so an unchanged state posts nothing. */
-    private var mediaButtonsState: Triple<Int, Boolean, Boolean>? = null
+    private var mediaButtonsState: Pair<Triple<Int, Boolean, Boolean>, Boolean>? = null
 
     /**
      * Repeat and like, in the two slots the system media controls keep after
@@ -931,7 +931,10 @@ class MusicService : MediaLibraryService() {
         if (isDjMix && shuffleOn) {
             player.shuffleModeEnabled = false
         }
-        val state = Triple(player.repeatMode, liked, shuffleOn)
+        // Include isDjMix in the cache key: leaving a DJ mix for a regular
+        // playlist must rebuild the buttons to restore the shuffle button,
+        // even if repeat/liked/shuffle are otherwise unchanged.
+        val state = Triple(player.repeatMode, liked, shuffleOn) to isDjMix
         if (state == mediaButtonsState) return
         mediaButtonsState = state
 
@@ -2254,6 +2257,16 @@ class MusicService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
+            // Android Auto "Shuffle Liked": play all liked songs in random order.
+            if (mediaItems.any { it.mediaId == "LIKED_SHUFFLE" }) {
+                return serviceScope.future {
+                    val songs = likedSongsRepository.likedSongs.value.shuffled()
+                    mediaSession.player.shuffleModeEnabled = false
+                    songs.mapTo(mutableListOf()) { song ->
+                        preparePlaybackItem(mapSongToMediaItem(song))
+                    }
+                }
+            }
             // The Android Auto "AI DJ" root item: tapping it generates the
             // one-press instant mix (last plays + liked, transitions at mood
             // shifts) and plays it. Generation runs async; the car waits.
@@ -2717,7 +2730,16 @@ class MusicService : MediaLibraryService() {
             }
         }
         "DOWNLOADS" -> downloadRepository.downloadedSongs.value.map(::mapSongToMediaItem)
-        "LIKED" -> likedSongsRepository.likedSongs.value.map(::mapSongToMediaItem)
+        "LIKED" -> {
+            val songs = likedSongsRepository.likedSongs.value
+            val items = mutableListOf<MediaItem>()
+            // Shuffle action at the top: plays all liked songs in random order.
+            if (songs.isNotEmpty()) {
+                items.add(playableActionItem("LIKED_SHUFFLE", "Shuffle", "Play liked songs shuffled"))
+            }
+            items.addAll(songs.map(::mapSongToMediaItem))
+            items
+        }
         "RECENT" -> localBrowseSongs.get(parentId) { recentlyPlayedSongs() }.map(::mapSongToMediaItem)
         "LOCAL_SONGS" -> localBrowseSongs.get(parentId) { localDeviceSongs() }.map(::mapSongToMediaItem)
         "HOME_EPISODES" -> {
