@@ -78,6 +78,18 @@ fun ExploreContent(
     listState: LazyListState = rememberLazyListState(),
 ) {
     var filter by rememberSaveable { mutableStateOf(ExploreFilter.All) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // When searching, filter the library; otherwise show Explore content.
+    val searchResults = remember(searchQuery, songs) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) emptyList()
+        else songs.filter {
+            it.title.contains(q, ignoreCase = true) ||
+            it.artist.contains(q, ignoreCase = true) ||
+            it.album.contains(q, ignoreCase = true)
+        }.distinctBy { it.id }.take(50)
+    }
 
     val quickPicks = remember(filter, songs, likedSongs, downloadedSongs, recentlyPlayed) {
         when (filter) {
@@ -110,6 +122,38 @@ fun ExploreContent(
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp),
+            )
+        }
+
+        // Search bar: no auto-focus, keyboard only opens on tap.
+        item(key = "explore_search") {
+            androidx.compose.material3.OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(R.string.search_hint)) },
+                leadingIcon = {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Filled.Search,
+                        contentDescription = null,
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        androidx.compose.material3.IconButton(
+                            onClick = { searchQuery = "" }
+                        ) {
+                            Icon(
+                                androidx.compose.material.icons.Icons.Filled.Clear,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
             )
         }
 
@@ -374,6 +418,48 @@ fun ExploreContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
                 )
+            }
+        } else {
+            // Search results: songs matching the query.
+            if (searchResults.isEmpty()) {
+                item(key = "search_empty") {
+                    Text(
+                        stringResource(R.string.search_no_results),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
+                    )
+                }
+            } else {
+                items(
+                    items = searchResults,
+                    key = { it.id },
+                ) { song ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPlaySongs(searchResults, song) }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                song.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                song.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -243,6 +243,7 @@ fun HomeScreen(
     isDarkMode: Boolean = true,
     onThemeToggle: (Boolean) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToAiDjSettings: () -> Unit = {},
     onNavigateToDownloads: () -> Unit = {},
     onNavigateToStats: () -> Unit = {},
     onNavigateToSubscriptions: () -> Unit = {},
@@ -453,7 +454,7 @@ fun HomeScreen(
     val visualTabOrder = if (videoMode) {
         videoHomeConfiguration.destinationOrder.map(VideoHomeDestination::tabId)
     } else {
-        listOf(TAB_HOME, TAB_EXPLORE, TAB_SEARCH, TAB_LIBRARY)
+        listOf(TAB_HOME, TAB_EXPLORE, TAB_LIBRARY)
     }
 
     // A destination can be hidden while it is selected (including from the
@@ -747,6 +748,12 @@ fun HomeScreen(
      */
     fun playDjFromCache() {
         if (djInstantLoading) return
+        // If the DJ mix is already playing, the FAB is a pause/play toggle —
+        // never restart the playlist.
+        if (playerViewModel.isDjMixPlaying.value) {
+            playerViewModel.togglePlayPause()
+            return
+        }
         val cached = djCacheManager.getCachedMix()
         if (cached == null) {
             regenerateDj()
@@ -1660,7 +1667,7 @@ fun HomeScreen(
                                 initialAlbum = viewedAlbumFromPlayer,
                                 onInitialAlbumConsumed = { viewedAlbumFromPlayer = null },
                                 onStatsClick = onNavigateToStats,
-                                onOpenAiDjSettings = onNavigateToSettings,
+                                onOpenAiDjSettings = onNavigateToAiDjSettings,
                                 initialAiDj = openAiDjFromHome,
                                 onInitialAiDjConsumed = { openAiDjFromHome = false },
                                 onOpenChannel = onOpenChannel,
@@ -1908,7 +1915,6 @@ fun HomeScreen(
         } else listOf(
             Triple(TAB_HOME, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
             Triple(TAB_EXPLORE, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore)),
-            Triple(TAB_SEARCH, stringResource(R.string.tab_search), Pair(Icons.Filled.Search, Icons.Outlined.Search)),
             Triple(TAB_LIBRARY, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic))
         )
         val selectNavTab: (Int) -> Unit = { index ->
@@ -2092,18 +2098,27 @@ fun HomeScreen(
 
         // AI DJ floating action button: circular, headphones emblem, bottom-right
         // next to the nav pill. Matches the pill bar height, visibility bound to
-        // the pill bar. Tap plays instantly from cache, bypassing config.
+        // the pill bar. Tap plays instantly from cache (or toggles pause/play if
+        // the DJ mix is already running); long-press opens the DJ screen.
         if (!useRail && !nonExpressiveNavigationBar) {
-            androidx.compose.material3.FloatingActionButton(
-                onClick = { playDjFromCache() },
+            androidx.compose.material3.Surface(
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(bottom = 20.dp, end = 20.dp)
-                    .size(64.dp),
+                    .size(64.dp)
+                    .combinedClickable(
+                        onClick = { playDjFromCache() },
+                        onLongClick = {
+                            noteLibraryReturn()
+                            openAiDjFromHome = true
+                            goToTab(TAB_LIBRARY)
+                        },
+                    ),
                 shape = androidx.compose.foundation.shape.CircleShape,
-                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
+                shadowElevation = 6.dp,
             ) {
                 DjEmblem(
                     emblemSize = 40.dp,
@@ -3469,6 +3484,7 @@ fun SearchContent(
         previewable = listOfNotNull(viewedVideoPlaylist, viewedPlaylist, viewedArtist).size == 1,
         background = {
             com.ivor.ivormusic.ui.search.SearchScreen(
+                requestInitialFocus = false,
                 songs = songs,
                 onSongClick = onSongClick,
                 onPlayQueue = onPlayQueue,

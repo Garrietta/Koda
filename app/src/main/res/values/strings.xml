@@ -100,6 +100,7 @@
     <!-- Bottom navigation tabs. Doubles as each tab icon's contentDescription. -->
     <string name="tab_home">Home</string>
     <string name="tab_search">Search</string>
+    <string name="search_hint">Search songs, artists, albums</string>
     <string name="tab_subs">Subs</string>
     <string name="tab_library">Library</string>
     <string name="tab_explore">Explore</string>

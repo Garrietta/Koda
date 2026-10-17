@@ -311,6 +311,7 @@ internal enum class SettingsPage {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
+    initialPage: SettingsPage = SettingsPage.HUB,
     currentThemeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     amoledTheme: Boolean,
@@ -532,7 +533,7 @@ fun SettingsScreen(
     }
 
     // Which category page is open, and what is typed in the hub's search box.
-    var page by remember { mutableStateOf(SettingsPage.HUB) }
+    var page by remember(initialPage) { mutableStateOf(initialPage) }
     var searchQuery by remember { mutableStateOf("") }
 
     // Backup and restore is a page like the others, so on a wide window it

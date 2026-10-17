@@ -105,6 +105,7 @@ fun GesturePlayerSheetContent(
     // would be registered later and silently win.
     
     val currentSong by viewModel.currentSong.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playerHaptics = rememberPlayerHaptics()
     val isBuffering by viewModel.isBuffering.collectAsState()
@@ -1397,7 +1398,10 @@ private fun GestureQueueView(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .queueDragLongPress(reorder, key),
+                                .then(
+                                    if (isDjMixPlaying) Modifier
+                                    else Modifier.queueDragLongPress(reorder, key)
+                                ),
                             shape = RoundedCornerShape(20.dp),
                             color = if (isCurrent) primaryColor.copy(alpha = 0.12f) 
                                    else MaterialTheme.colorScheme.surfaceContainerLow,

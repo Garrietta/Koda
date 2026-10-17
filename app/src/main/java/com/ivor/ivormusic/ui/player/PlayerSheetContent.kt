@@ -1166,7 +1166,12 @@ private fun ExpressiveQueueView(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .queueDragLongPress(reorder, key),
+                                .then(
+                                    // DJ mixes lock the queue order: the voice
+                                    // intros must stay aligned with their songs.
+                                    if (isDjMixPlaying) Modifier
+                                    else Modifier.queueDragLongPress(reorder, key)
+                                ),
                             shape = RoundedCornerShape(20.dp),
                             color = if (isCurrent) primaryColor.copy(alpha = 0.12f)
                                    else MaterialTheme.colorScheme.surfaceContainerLow,

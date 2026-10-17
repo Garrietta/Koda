@@ -397,7 +397,10 @@ internal fun PlayerQueuePane(
                                     tint = LocalContentColor.current.copy(alpha = 0.7f)
                                 )
                             },
-                            modifier = Modifier.queueDragLongPress(reorder, key)
+                            modifier = Modifier.then(
+                                if (isDjMixPlaying) Modifier
+                                else Modifier.queueDragLongPress(reorder, key)
+                            )
                         )
                     }
                 }

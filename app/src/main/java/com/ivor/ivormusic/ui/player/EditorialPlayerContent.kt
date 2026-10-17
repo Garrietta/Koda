@@ -155,6 +155,7 @@ fun EditorialPlayerSheetContent(
     // would be registered later and silently win.
 
     val currentSong by viewModel.currentSong.collectAsState()
+    val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playerHaptics = rememberPlayerHaptics()
     val isBuffering by viewModel.isBuffering.collectAsState()
@@ -973,7 +974,10 @@ internal fun EditorialQueueView(
                             contentColor = if (isCurrent) field else accent,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .queueDragLongPress(reorder, key)
+                                .then(
+                                    if (isDjMixPlaying) Modifier
+                                    else Modifier.queueDragLongPress(reorder, key)
+                                )
                         ) {
                             Row(
                                 modifier = Modifier
