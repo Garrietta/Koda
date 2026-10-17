@@ -61,7 +61,13 @@ class DjUserProfile(context: Context) {
     suspend fun recordSave(song: Song) = withContext(Dispatchers.IO) {
         val saves = getSaves().toMutableSet()
         saves.add(song.id)
-        prefs.edit().putStringSet(KEY_SAVES, saves.takeLast(MAX_SAVES).toSet()).apply()
+        // takeLast is List-only; convert for trimming.
+        val trimmed = if (saves.size > MAX_SAVES) {
+            saves.toList().takeLast(MAX_SAVES).toSet()
+        } else {
+            saves
+        }
+        prefs.edit().putStringSet(KEY_SAVES, trimmed).apply()
     }
 
     /**
