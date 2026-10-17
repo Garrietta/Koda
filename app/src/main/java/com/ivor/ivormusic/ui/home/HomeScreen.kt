@@ -2143,7 +2143,7 @@ fun HomeScreen(
                             goToTab(TAB_LIBRARY)
                         },
                     ),
-                shape = androidx.compose.foundation.shape.CircleShape,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                 color = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
                 shadowElevation = 6.dp,

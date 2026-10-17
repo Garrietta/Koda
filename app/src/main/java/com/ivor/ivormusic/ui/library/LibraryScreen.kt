@@ -984,7 +984,7 @@ fun LibraryMainScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier.weight(1f)
                 )
 
                 // New playlist sits in the header, not in a floating button.
