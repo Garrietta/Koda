@@ -284,11 +284,12 @@ private fun PuffyNextButton(size: Dp) {
         filledPath(WidgetShapes.puffy(px.toFloat()), px, 0xFFFFFFFF.toInt())
     }
     val dark = ColorProvider(Color(0xFF1A1A1A.toInt()))
+    val nextDesc = widgetString(R.string.widget_action_next)
     Box(
         modifier = GlanceModifier
             .size(size)
             .clickable(widgetTransportAction(WidgetActionActivity.ACTION_NEXT))
-            .semantics { contentDescription = widgetString(R.string.widget_action_next) },
+            .semantics { contentDescription = nextDesc },
         contentAlignment = Alignment.Center,
     ) {
         Image(
