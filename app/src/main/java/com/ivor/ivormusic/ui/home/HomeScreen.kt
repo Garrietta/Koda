@@ -760,7 +760,8 @@ fun HomeScreen(
     }
     /**
      * Play the DJ mix instantly from cache, bypassing the config screen.
-     * If no cached mix exists, falls back to regenerateDj().
+     * Tapping the button NEVER regenerates: with no cached mix it opens the
+     * AI DJ screen, where a fresh mix is built only from the explicit button.
      */
     fun playDjFromCache() {
         if (djInstantLoading) return
@@ -770,9 +771,16 @@ fun HomeScreen(
             playerViewModel.togglePlayPause()
             return
         }
+        // No cached mix: open the AI DJ screen so one can be built
+        // explicitly. A tap never regenerates on its own.
+        fun openDjScreenForNewMix() {
+            noteLibraryReturn()
+            openAiDjFromHome = true
+            goToTab(TAB_LIBRARY)
+        }
         val cached = djCacheManager.getCachedMix()
         if (cached == null) {
-            regenerateDj()
+            openDjScreenForNewMix()
             return
         }
         djInstantLoading = true
@@ -792,7 +800,7 @@ fun HomeScreen(
                     // Keep caching upcoming intros ahead of playback.
                     djCacheManager.startAheadCaching(cached)
                 } else {
-                    regenerateDj()
+                    openDjScreenForNewMix()
                 }
             } finally {
                 djInstantLoading = false
