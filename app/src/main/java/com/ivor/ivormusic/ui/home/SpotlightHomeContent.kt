@@ -232,6 +232,7 @@ fun SpotlightHomeContent(
                         onClick = { shortcut ->
                             when (shortcut) {
                                 is Shortcut.Liked -> onOpenLiked()
+                                is Shortcut.AiDj -> onOpenAiDj()
                                 is Shortcut.Playlist -> onPlaylistClick(shortcut.playlist)
                                 is Shortcut.Track -> onRecentClick(shortcut.song)
                             }
@@ -622,6 +623,16 @@ internal sealed interface Shortcut {
         override val title = "Liked songs"
     }
 
+    /**
+     * The AI DJ: locked to grid position 2, right after Liked songs. A
+     * single tap goes straight to the AI DJ overview — never moves, never
+     * disappears, no press-and-hold needed.
+     */
+    data object AiDj : Shortcut {
+        override val key = "aidj"
+        override val title = "AI DJ"
+    }
+
     data class Playlist(val playlist: PlaylistDisplayItem) : Shortcut {
         override val key = "pl-${playlist.id}"
         override val title = playlist.name
@@ -635,15 +646,19 @@ internal sealed interface Shortcut {
 
 /**
  * Liked songs first when there are any - it is the one destination every music
- * app puts in this position - then playlists and recent tracks interleaved, so
- * the grid is not six of the same thing.
+ * app puts in this position - then the AI DJ locked to position 2, then
+ * playlists and recent tracks interleaved, so the grid is not six of the same
+ * thing.
  */
 private fun buildShortcuts(
     liked: List<Song>,
     recent: List<Song>,
     playlists: List<PlaylistDisplayItem>,
 ): List<Shortcut> = buildList {
-    if (liked.isNotEmpty()) add(Shortcut.Liked(liked.size))
+    // Position 1 is always Liked songs and position 2 is always the AI DJ:
+    // both are locked and never move or disappear, even with an empty library.
+    add(Shortcut.Liked(liked.size))
+    add(Shortcut.AiDj)
     val tracks = recent.map { Shortcut.Track(it) }
     val lists = playlists.map { Shortcut.Playlist(it) }
     var t = 0
@@ -718,6 +733,19 @@ private fun SpotlightShortcutTile(
                             imageVector = Icons.Rounded.Favorite,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    is Shortcut.AiDj -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.tertiaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.size(24.dp),
                         )
                     }
