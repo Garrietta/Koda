@@ -132,18 +132,8 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     modifier = GlanceModifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
-                            WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE4SIDED)
-                        }
-                        // The sleeve's shadow on the record beside it.
-                        Image(
-                            provider = ImageProvider(R.drawable.vinyl_sleeve_shadow),
-                            contentDescription = null,
-                            contentScale = ContentScale.FillBounds,
-                            colorFilter = ColorFilter.tint(recordColor()),
-                            modifier = GlanceModifier.width(10.dp).height(record - 8.dp),
-                        )
+                    Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
+                        WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE4SIDED)
                     }
                 }
                 // Last, so the arm lies over the record: on the grooves while
