@@ -91,10 +91,9 @@ private val VINYL_PADDING = 8.dp
 
 @Composable
 private fun VinylContent(ui: PlayerWidgetUi) {
-    if (!ui.snapshot.hasMedia) {
-        WidgetSurface { WidgetEmptyState() }
-        return
-    }
+    // The vinyl is the widget's only state: it renders even with no media
+    // (placeholder sleeve, parked arm), backed by the last-played snapshot
+    // the store persists. There is no "Tap to listen" fallback.
 
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
@@ -135,7 +134,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
-                            WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.ROUNDED)
+                            WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE)
                         }
                         // The sleeve's shadow on the record beside it.
                         Image(
@@ -147,63 +146,162 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                         )
                     }
                 }
-                // Last, so the arm lies over the record: on the grooves while
-                // it plays, parked beside the disc when it does not.
+                // Last, so the arm lies over the record: the curved tonearm,
+                // needle on the grooves while it plays, parked beside the
+                // disc when it does not.
                 Box(
                     modifier = GlanceModifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    val accent = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
-                        ?: GlanceTheme.colors.primary
-                    VinylArm(
+                    CurvedTonearm(
                         width = record + armReach,
                         height = record,
                         onRecord = playing,
-                        accentColor = accent
                     )
                 }
             }
             Spacer(modifier = GlanceModifier.width(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val playBg = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
-                    ?: GlanceTheme.colors.primary
-                HeroPlayButton(isPlaying = playing, size = hero, background = playBg)
-                Spacer(modifier = GlanceModifier.height(4.dp))
-                WidgetSquareButton(
-                    iconRes = R.drawable.ic_media_next,
-                    description = widgetString(R.string.widget_action_next),
-                    action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
-                    size = side,
-                )
+                StarburstPlayButton(isPlaying = playing, size = hero)
+                Spacer(modifier = GlanceModifier.height(6.dp))
+                PuffyNextButton(size = side)
             }
         }
     }
 }
 
 /**
- * The tonearm, in one of its two poses. Three masks: a soft shadow that also
- * gives it an edge on any wallpaper, the metal, and the headshell and pivot
- * cap in the accent colour.
+ * The curved tonearm: a pivot dot, a single curved line, and a needle dot —
+ * the expressive redesign. Two poses: the needle rests on the record while
+ * playing, parked off to the side when paused. Drawn as a bitmap (white, like
+ * the mockup) rather than layered masks.
  */
 @Composable
-private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: ColorProvider) {
-    val colors = GlanceTheme.colors
-    val dark = KodaWidgetTheme.isDark(LocalContext.current)
-    val layers = if (onRecord) {
-        listOf(
-            R.drawable.vinyl_arm_on_shadow to recordColor(),
-            R.drawable.vinyl_arm_on_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_on_accent to accentColor,
+private fun CurvedTonearm(width: Dp, height: Dp, onRecord: Boolean) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val wPx = (width.value * density).toInt().coerceAtLeast(1)
+    val hPx = (height.value * density).toInt().coerceAtLeast(1)
+    val arm = androidx.compose.runtime.remember(wPx, hPx, onRecord) {
+        drawCurvedTonearm(wPx, hPx, onRecord, 0xFFFFFFFF.toInt())
+    }
+    Image(
+        provider = ImageProvider(arm),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.width(width).height(height),
+    )
+}
+
+/** Draw the curved tonearm bitmap: pivot dot, curved line, needle dot. */
+private fun drawCurvedTonearm(widthPx: Int, heightPx: Int, onRecord: Boolean, color: Int): android.graphics.Bitmap {
+    val out = android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(out)
+    val w = widthPx.toFloat()
+    val h = heightPx.toFloat()
+
+    val linePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = w * 0.030f
+        strokeCap = android.graphics.Paint.Cap.ROUND
+    }
+    val dotPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    // Pivot housing at the top.
+    val pivotX = w * 0.70f
+    val pivotY = h * 0.07f
+    // Needle: on the record's grooves while playing, parked beside the disc
+    // when paused.
+    val needleX = if (onRecord) w * 0.36f else w * 0.86f
+    val needleY = if (onRecord) h * 0.52f else h * 0.38f
+    // Control point bows the curve outward, like a real tonearm's arc.
+    val cx = if (onRecord) w * 0.80f else w * 0.98f
+    val cy = if (onRecord) h * 0.40f else h * 0.18f
+
+    val path = android.graphics.Path().apply {
+        moveTo(pivotX, pivotY)
+        quadTo(cx, cy, needleX, needleY)
+    }
+    canvas.drawPath(path, linePaint)
+    // Pivot dot, larger like a pivot housing.
+    canvas.drawCircle(pivotX, pivotY, w * 0.048f, dotPaint)
+    // Needle dot.
+    canvas.drawCircle(needleX, needleY, w * 0.034f, dotPaint)
+    return out
+}
+
+/**
+ * Expressive transport buttons: a starburst play/pause in amber, a puffy
+ * next in white — per the M3E mockup. The shape is baked into a bitmap
+ * background with the icon drawn over it; the whole thing is the tap target.
+ */
+@Composable
+private fun StarburstPlayButton(isPlaying: Boolean, size: Dp) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val px = (size.value * density).toInt().coerceAtLeast(1)
+    val bg = androidx.compose.runtime.remember(px) {
+        filledPath(WidgetShapes.starburst(px.toFloat(), points = 12), px, 0xFFFFB300.toInt())
+    }
+    val dark = ColorProvider(Color(0xFF1A1A1A.toInt()))
+    Box(
+        modifier = GlanceModifier
+            .size(size)
+            .clickable(widgetTransportAction(WidgetActionActivity.ACTION_TOGGLE))
+            .semantics {
+                contentDescription = context.getString(
+                    if (isPlaying) R.string.widget_action_pause else R.string.widget_action_play
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(bg),
+            contentDescription = null,
+            modifier = GlanceModifier.fillMaxSize(),
         )
-    } else {
-        listOf(
-            R.drawable.vinyl_arm_off_shadow to recordColor(),
-            R.drawable.vinyl_arm_off_metal to (if (dark) colors.onSurface else colors.surface),
-            R.drawable.vinyl_arm_off_accent to accentColor,
+        Image(
+            provider = ImageProvider(
+                if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play
+            ),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(dark),
+            modifier = GlanceModifier.size(size * 0.42f),
         )
     }
-    Box(modifier = GlanceModifier.width(width).height(height)) {
-        layers.forEach { (mask, color) -> VinylLayer(mask, color, ContentScale.FillBounds) }
+}
+
+@Composable
+private fun PuffyNextButton(size: Dp) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val px = (size.value * density).toInt().coerceAtLeast(1)
+    val bg = androidx.compose.runtime.remember(px) {
+        filledPath(WidgetShapes.puffy(px.toFloat()), px, 0xFFFFFFFF.toInt())
+    }
+    val dark = ColorProvider(Color(0xFF1A1A1A.toInt()))
+    Box(
+        modifier = GlanceModifier
+            .size(size)
+            .clickable(widgetTransportAction(WidgetActionActivity.ACTION_NEXT))
+            .semantics { contentDescription = widgetString(R.string.widget_action_next) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(bg),
+            contentDescription = null,
+            modifier = GlanceModifier.fillMaxSize(),
+        )
+        Image(
+            provider = ImageProvider(R.drawable.ic_media_next),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(dark),
+            modifier = GlanceModifier.size(size * 0.42f),
+        )
     }
 }
 
@@ -222,6 +320,21 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
     // The light on the grooves is light in both themes, for the same reason.
     val sheen = if (dark) colors.onSurface else colors.surface
     val print = colors.onPrimaryContainer
+    // The label goes expressive: a starburst cut from the primary container,
+    // generated at the record's pixel size and cached per size/color. The
+    // label is ~36% of the record diameter, centred, like the mask it replaces.
+    val density = context.resources.displayMetrics.density
+    val px = (size.value * density).toInt().coerceAtLeast(1)
+    val labelColor = colors.primaryContainer.read().toArgb()
+    val starburstLabel = androidx.compose.runtime.remember(px, labelColor) {
+        val labelPx = (px * 0.36f).toInt().coerceAtLeast(1)
+        val label = filledPath(WidgetShapes.starburst(labelPx.toFloat(), points = 16), labelPx, labelColor)
+        val out = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(out)
+        val left = (px - labelPx) / 2f
+        canvas.drawBitmap(label, left, left, null)
+        out
+    }
 
     Box(
         modifier = GlanceModifier
@@ -236,7 +349,12 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
     ) {
         VinylLayer(R.drawable.vinyl_disc, recordColor())
         VinylLayer(R.drawable.vinyl_grooves, sheen)
-        VinylLayer(R.drawable.vinyl_label, colors.primaryContainer)
+        Image(
+            provider = ImageProvider(starburstLabel),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = GlanceModifier.fillMaxSize(),
+        )
         if (playing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val tint = ColorStateList.valueOf(print.read().toArgb())
             val spin = RemoteViews(context.packageName, R.layout.widget_vinyl_spin).apply {

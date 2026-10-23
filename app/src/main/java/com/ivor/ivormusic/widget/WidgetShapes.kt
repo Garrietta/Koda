@@ -46,6 +46,24 @@ internal object WidgetShapes {
     fun clover(size: Float, amplitude: Float = 0.13f): Path =
         polar(size) { angle -> (1f + amplitude * cos(4.0 * angle)).toFloat() }
 
+    /**
+     * A starburst: [points] sharp-ish points with softly rounded valleys. The
+     * expressive hero shape - play buttons, labels, anything that should pop.
+     */
+    fun starburst(size: Float, points: Int = 12, amplitude: Float = 0.16f): Path =
+        polar(size) { angle ->
+            // Rounded valleys, pointed tips: bias the cosine so the outer
+            // peaks are sharper than the inner valleys.
+            val c = cos(points * angle)
+            (1f + amplitude * (if (c > 0) c * c else c)).toFloat()
+        }
+
+    /**
+     * Puffy: a superellipse blown out - corners so round the shape feels
+     * inflated. For secondary controls that should feel soft, not sharp.
+     */
+    fun puffy(size: Float, exponent: Float = 6f): Path = squircle(size, exponent)
+
     /** A superellipse - squarer than a rounded rect, with no corner to catch. */
     fun squircle(size: Float, exponent: Float = 4f): Path {
         val radius = size / 2f
@@ -156,5 +174,15 @@ internal fun shapeTile(shape: ArtworkShape, sizePx: Int, color: Int): Bitmap {
     val canvas = Canvas(out)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
     canvas.drawPath(shape.path(side.toFloat()), paint)
+    return out
+}
+
+/** Fill an arbitrary [Path] (authored at [sizePx]) in one flat colour. For expressive button shapes. */
+internal fun filledPath(path: Path, sizePx: Int, color: Int): Bitmap {
+    val side = sizePx.coerceAtLeast(1)
+    val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
+    canvas.drawPath(path, paint)
     return out
 }
