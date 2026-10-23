@@ -19,17 +19,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -84,6 +86,7 @@ fun AiDjScreen(
     onBack: () -> Unit,
     onPlayQueue: (List<Song>, Song?) -> Unit,
     onPlayDjMix: (List<Song>) -> Unit,
+    onShuffleQueue: (List<Song>) -> Unit = {},
     onOpenSettings: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -172,6 +175,30 @@ fun AiDjScreen(
         }
     }
 
+    /**
+     * Save the mix as a local playlist. Hoisted so the TopAppBar overflow
+     * menu can reach it as well as the body.
+     */
+    fun saveAsPlaylist(mix: AiDjMix) {
+        if (saving) return
+        saving = true
+        scope.launch {
+            try {
+                val date = SimpleDateFormat(
+                    "MMM d", Locale.getDefault()
+                ).format(Date())
+                viewModel.createLocalPlaylistWithSongs(
+                    name = "${mix.title} • $date",
+                    description = mix.tracks.mapNotNull { it.djLine }
+                        .take(3).joinToString(" / "),
+                    songs = mix.tracks.map { it.song },
+                )
+            } finally {
+                saving = false
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -185,6 +212,34 @@ fun AiDjScreen(
                     }
                 },
                 actions = {
+                    if (mix != null) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more_options),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.aidj_save_playlist)) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    mix?.let { saveAsPlaylist(it) }
+                                },
+                                enabled = !saving,
+                            )
+                        }
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             Icons.Rounded.Settings,
@@ -273,10 +328,30 @@ fun AiDjScreen(
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Playlist page layout: Row 1 is Play all /
+                            // Shuffle, Row 2 is the new-mix button under Play
+                            // all and Download under Shuffle.
+                            if (currentMix != null) {
+                                CollectionPlaybackActions(
+                                    onPlay = { playMix(currentMix) },
+                                    // Shuffle plays the mix's tracks as a plain
+                                    // shuffled queue; the DJ mix itself (Play
+                                    // all) always stays strictly ordered.
+                                    onShuffle = {
+                                        onShuffleQueue(currentMix.tracks.map { it.song })
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Button(
                                     onClick = ::generate,
                                     enabled = library.isNotEmpty(),
+                                    modifier = Modifier.weight(1f),
                                 ) {
                                     Icon(
                                         if (currentMix == null) Icons.Rounded.AutoAwesome
@@ -287,51 +362,16 @@ fun AiDjScreen(
                                     Spacer(Modifier.size(8.dp))
                                     Text(
                                         if (currentMix == null) stringResource(R.string.aidj_generate)
-                                        else stringResource(R.string.aidj_regenerate)
+                                        else stringResource(R.string.aidj_new_mix)
                                     )
                                 }
                                 if (currentMix != null) {
-                                    OutlinedButton(
-                                        onClick = { playMix(currentMix) },
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.PlayArrow,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.size(8.dp))
-                                        Text(stringResource(R.string.aidj_play))
-                                    }
-                                    OutlinedButton(
-                                        onClick = {
-                                            if (saving) return@OutlinedButton
-                                            saving = true
-                                            scope.launch {
-                                                try {
-                                                    val date = SimpleDateFormat(
-                                                        "MMM d", Locale.getDefault()
-                                                    ).format(Date())
-                                                    viewModel.createLocalPlaylistWithSongs(
-                                                        name = "${currentMix.title} • $date",
-                                                        description = currentMix.tracks.mapNotNull { it.djLine }
-                                                            .take(3).joinToString(" / "),
-                                                        songs = currentMix.tracks.map { it.song },
-                                                    )
-                                                } finally {
-                                                    saving = false
-                                                }
-                                            }
-                                        },
-                                        enabled = !saving,
-                                    ) {
-                                        Icon(
-                                            Icons.AutoMirrored.Rounded.PlaylistAdd,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.size(8.dp))
-                                        Text(stringResource(R.string.aidj_save_playlist))
-                                    }
+                                    com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction(
+                                        playlistId = "aidj-mix",
+                                        playlistTitle = currentMix.title,
+                                        songs = currentMix.tracks.map { it.song },
+                                        modifier = Modifier.weight(1f),
+                                    )
                                 }
                             }
                             if (currentError != null) {

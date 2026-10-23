@@ -606,6 +606,7 @@ fun LibraryContent(
                     onBack = { back() },
                     onPlayQueue = { songs, song -> onPlayQueue(songs, song) },
                     onPlayDjMix = onPlayDjMix,
+                    onShuffleQueue = onShuffleQueue,
                     onOpenSettings = onOpenAiDjSettings,
                     contentPadding = contentPadding,
                 )

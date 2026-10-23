@@ -21,6 +21,7 @@
     <string name="aidj_generating">The DJ is digging through your crates\u2026</string>
     <string name="aidj_generate">Generate mix</string>
     <string name="aidj_regenerate">Regenerate</string>
+    <string name="aidj_new_mix">New mix</string>
     <string name="aidj_pool_size">%1$d songs in the crates</string>
     <string name="aidj_play">Play</string>
     <string name="aidj_save_playlist">Save as playlist</string>
