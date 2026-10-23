@@ -109,7 +109,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     val armReach = record / 4
     val stage = sleeve + record / 2 + armReach
     val hero = (sleeve * 0.42f).coerceIn(44.dp, 72.dp)
-    val side = (sleeve * 0.36f).coerceIn(36.dp, 64.dp)
+    val side = (sleeve * 0.42f).coerceIn(42.dp, 70.dp)
 
     // No card, like Bloom: the sleeve, the record and the buttons are all
     // opaque and stand on the wallpaper by themselves. That is also why there
@@ -134,7 +134,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
-                            WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE)
+                            WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE4SIDED)
                         }
                         // The sleeve's shadow on the record beside it.
                         Image(
@@ -146,17 +146,19 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                         )
                     }
                 }
-                // Last, so the arm lies over the record: the curved tonearm,
-                // needle on the grooves while it plays, parked beside the
-                // disc when it does not.
+                // Last, so the arm lies over the record: on the grooves while
+                // it plays, parked beside the disc when it does not.
                 Box(
                     modifier = GlanceModifier.fillMaxSize(),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    CurvedTonearm(
+                    val accent = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
+                        ?: GlanceTheme.colors.primary
+                    VinylArm(
                         width = record + armReach,
                         height = record,
                         onRecord = playing,
+                        accentColor = accent
                     )
                 }
             }
@@ -171,236 +173,30 @@ private fun VinylContent(ui: PlayerWidgetUi) {
 }
 
 /**
- * The tonearm, drawn like a real one: a pivot housing with a counterweight
- * stub, a tapered metallic arm tube on a gentle S-curve, and an angled
- * headshell with a cartridge and stylus tip. Two poses: the stylus rests on
- * the record's grooves while playing, parked off the disc when paused.
- * Rendered as a bitmap rather than layered masks.
+ * The tonearm, in one of its two poses. Three masks: a soft shadow that also
+ * gives it an edge on any wallpaper, the metal, and the headshell and pivot
+ * cap in the accent colour.
  */
 @Composable
-private fun CurvedTonearm(width: Dp, height: Dp, onRecord: Boolean) {
-    val context = LocalContext.current
-    val density = context.resources.displayMetrics.density
-    val wPx = (width.value * density).toInt().coerceAtLeast(1)
-    val hPx = (height.value * density).toInt().coerceAtLeast(1)
-    val arm = androidx.compose.runtime.remember(wPx, hPx, onRecord) {
-        drawTonearm(wPx, hPx, onRecord)
-    }
-    Image(
-        provider = ImageProvider(arm),
-        contentDescription = null,
-        contentScale = ContentScale.FillBounds,
-        modifier = GlanceModifier.width(width).height(height),
-    )
-}
-
-/**
- * Draw a realistic tonearm bitmap, top-down.
- *
- * The bitmap is [widthPx] = record + arm reach wide and [heightPx] = record
- * tall; the record disc occupies x in [0, heightPx], centred vertically.
- */
-private fun drawTonearm(widthPx: Int, heightPx: Int, onRecord: Boolean): android.graphics.Bitmap {
-    val out = android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(out)
-    val w = widthPx.toFloat()
-    val h = heightPx.toFloat()
-
-    // Record geometry, in this bitmap's coordinates.
-    val recordR = h / 2f
-    val recordCx = recordR
-    val recordCy = h / 2f
-
-    // Pivot housing, back-right like a real deck.
-    val px = w * 0.88f
-    val py = h * 0.14f
-    // Stylus contact: mid-grooves while playing, parked off the disc when paused.
-    val grooveR = recordR * 0.62f
-    val contactX: Float
-    val contactY: Float
-    val ctrlX: Float
-    val ctrlY: Float
-    if (onRecord) {
-        contactX = recordCx + grooveR * 0.906f
-        contactY = recordCy + grooveR * 0.423f
-        ctrlX = w * 0.97f
-        ctrlY = h * 0.40f
+private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: ColorProvider) {
+    val colors = GlanceTheme.colors
+    val dark = KodaWidgetTheme.isDark(LocalContext.current)
+    val layers = if (onRecord) {
+        listOf(
+            R.drawable.vinyl_arm_on_shadow to recordColor(),
+            R.drawable.vinyl_arm_on_metal to (if (dark) colors.onSurface else colors.surface),
+            R.drawable.vinyl_arm_on_accent to accentColor,
+        )
     } else {
-        contactX = w * 0.94f
-        contactY = h * 0.38f
-        ctrlX = w * 1.02f
-        ctrlY = h * 0.14f
-    }
-
-    // --- Arm tube: a tapered ribbon along the quadratic bezier P -> Q -> N.
-    val samples = 28
-    val leftPts = FloatArray((samples + 1) * 2)
-    val rightPts = FloatArray((samples + 1) * 2)
-    var endTx = 1f
-    var endTy = 0f
-    for (i in 0..samples) {
-        val t = i.toFloat() / samples
-        val mt = 1f - t
-        val bx = mt * mt * px + 2f * mt * t * ctrlX + t * t * contactX
-        val by = mt * mt * py + 2f * mt * t * ctrlY + t * t * contactY
-        // Tangent of the quadratic at t.
-        var tx = 2f * mt * (ctrlX - px) + 2f * t * (contactX - ctrlX)
-        var ty = 2f * mt * (ctrlY - py) + 2f * t * (contactY - ctrlY)
-        val len = kotlin.math.sqrt(tx * tx + ty * ty).coerceAtLeast(1e-6f)
-        tx /= len
-        ty /= len
-        if (i == samples) {
-            endTx = tx
-            endTy = ty
-        }
-        // Normal, and a half-width that tapers from pivot to headshell.
-        val nx = -ty
-        val ny = tx
-        val half = w * (0.034f + (0.020f - 0.034f) * t)
-        leftPts[i * 2] = bx + nx * half
-        leftPts[i * 2 + 1] = by + ny * half
-        rightPts[i * 2] = bx - nx * half
-        rightPts[i * 2 + 1] = by - ny * half
-    }
-    val tubePath = android.graphics.Path().apply {
-        moveTo(leftPts[0], leftPts[1])
-        for (i in 1..samples) lineTo(leftPts[i * 2], leftPts[i * 2 + 1])
-        for (i in samples downTo 0) lineTo(rightPts[i * 2], rightPts[i * 2 + 1])
-        close()
-    }
-
-    // Soft shadow so the arm sits on the record instead of floating.
-    val shadowPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x55000000
-        maskFilter = android.graphics.BlurMaskFilter(w * 0.018f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-    }
-    canvas.save()
-    canvas.translate(w * 0.010f, h * 0.016f)
-    canvas.drawPath(tubePath, shadowPaint)
-    canvas.restore()
-
-    // --- Counterweight: short stub up-right of the pivot with a weight disc.
-    val cwDirX = 0.5f
-    val cwDirY = -0.866f
-    val stubPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF3A3F45.toInt()
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = w * 0.034f
-        strokeCap = android.graphics.Paint.Cap.ROUND
-    }
-    val cwX = px + cwDirX * w * 0.14f
-    val cwY = py + cwDirY * w * 0.14f
-    canvas.drawLine(px, py, cwX, cwY, stubPaint)
-    val cwPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        shader = android.graphics.RadialGradient(
-            cwX, cwY, w * 0.052f,
-            intArrayOf(0xFF7A828C.toInt(), 0xFF33373D.toInt()),
-            floatArrayOf(0f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
+        listOf(
+            R.drawable.vinyl_arm_off_shadow to recordColor(),
+            R.drawable.vinyl_arm_off_metal to (if (dark) colors.onSurface else colors.surface),
+            R.drawable.vinyl_arm_off_accent to accentColor,
         )
     }
-    canvas.drawCircle(cwX, cwY, w * 0.052f, cwPaint)
-    val cwRim = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF22262B.toInt()
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = w * 0.006f
+    Box(modifier = GlanceModifier.width(width).height(height)) {
+        layers.forEach { (mask, color) -> VinylLayer(mask, color, ContentScale.FillBounds) }
     }
-    canvas.drawCircle(cwX, cwY, w * 0.052f, cwRim)
-
-    // --- Pivot housing: base disc, column, cap.
-    val basePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        shader = android.graphics.RadialGradient(
-            px - w * 0.02f, py - w * 0.02f, w * 0.085f,
-            intArrayOf(0xFF9AA2AB.toInt(), 0xFF4E545C.toInt()),
-            floatArrayOf(0f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-    }
-    canvas.drawCircle(px, py, w * 0.085f, basePaint)
-    val baseRim = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF2E3339.toInt()
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = w * 0.008f
-    }
-    canvas.drawCircle(px, py, w * 0.085f, baseRim)
-    val columnPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        shader = android.graphics.RadialGradient(
-            px, py, w * 0.045f,
-            intArrayOf(0xFFC3C9D0.toInt(), 0xFF5F666E.toInt()),
-            floatArrayOf(0f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-    }
-    canvas.drawCircle(px, py, w * 0.045f, columnPaint)
-    val capPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF2E3339.toInt()
-    }
-    canvas.drawCircle(px, py, w * 0.016f, capPaint)
-
-    // --- Arm tube with a cylindrical metallic sheen across its width.
-    val chordDx = contactX - px
-    val chordDy = contactY - py
-    val chordLen = kotlin.math.sqrt(chordDx * chordDx + chordDy * chordDy).coerceAtLeast(1e-6f)
-    val perpX = -chordDy / chordLen
-    val perpY = chordDx / chordLen
-    val halfMax = w * 0.034f
-    val tubePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        shader = android.graphics.LinearGradient(
-            px + perpX * halfMax, py + perpY * halfMax,
-            px - perpX * halfMax, py - perpY * halfMax,
-            intArrayOf(
-                0xFF6E747C.toInt(),
-                0xFFDDE2E7.toInt(),
-                0xFFFFFFFF.toInt(),
-                0xFFC3C9D0.toInt(),
-                0xFF6E747C.toInt(),
-            ),
-            floatArrayOf(0f, 0.3f, 0.5f, 0.7f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-    }
-    canvas.drawPath(tubePath, tubePaint)
-
-    // --- Headshell: angled black shell at the tip, with cartridge + stylus.
-    val hsLen = w * 0.16f
-    val hsHalf = w * 0.030f
-    val angleDeg = Math.toDegrees(kotlin.math.atan2(endTy.toDouble(), endTx.toDouble())).toFloat()
-    canvas.save()
-    canvas.rotate(angleDeg, contactX, contactY)
-    val shellPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF17191C.toInt()
-    }
-    canvas.drawRoundRect(
-        contactX - hsLen, contactY - hsHalf,
-        contactX + w * 0.012f, contactY + hsHalf,
-        hsHalf, hsHalf, shellPaint,
-    )
-    // Cartridge block at the tip.
-    val cartPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF2A2E33.toInt()
-    }
-    canvas.drawRoundRect(
-        contactX - w * 0.055f, contactY - w * 0.020f,
-        contactX + w * 0.006f, contactY + w * 0.020f,
-        w * 0.008f, w * 0.008f, cartPaint,
-    )
-    // Top highlight along the shell.
-    val hlPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF3A3F45.toInt()
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = w * 0.006f
-        strokeCap = android.graphics.Paint.Cap.ROUND
-    }
-    canvas.drawLine(contactX - hsLen + hsHalf, contactY - hsHalf + w * 0.008f,
-        contactX - w * 0.02f, contactY - hsHalf + w * 0.008f, hlPaint)
-    canvas.restore()
-    // Stylus glint exactly at the contact point.
-    val stylusPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFF2F5F7.toInt()
-    }
-    canvas.drawCircle(contactX, contactY, w * 0.007f, stylusPaint)
-
-    return out
 }
 
 /**

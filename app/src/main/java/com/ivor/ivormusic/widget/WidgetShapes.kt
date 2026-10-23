@@ -63,6 +63,13 @@ internal object WidgetShapes {
      */
     fun cookie(size: Float): Path = official(MaterialShapes.Cookie12Sided, size)
 
+    /**
+     * The official M3E 4-sided cookie - the squarish expressive shape: four
+     * soft lobes reading as a rounded square. For the vinyl sleeve, where a
+     * rounder cut would uncover the sleeve's shadow strip in the scallops.
+     */
+    fun cookie4Sided(size: Float): Path = official(MaterialShapes.Cookie4Sided, size)
+
     /** Four fat lobes. Used small, where a subtle scallop would read as a circle. */
     fun clover(size: Float, amplitude: Float = 0.13f): Path =
         polar(size) { angle -> (1f + amplitude * cos(4.0 * angle)).toFloat() }
@@ -143,6 +150,7 @@ internal object WidgetShapes {
  */
 internal enum class ArtworkShape {
     COOKIE,
+    COOKIE4SIDED,
     CLOVER,
     SQUIRCLE,
     CIRCLE,
@@ -150,6 +158,7 @@ internal enum class ArtworkShape {
 
     fun path(size: Float): Path = when (this) {
         COOKIE -> WidgetShapes.cookie(size)
+        COOKIE4SIDED -> WidgetShapes.cookie4Sided(size)
         CLOVER -> WidgetShapes.clover(size)
         SQUIRCLE -> WidgetShapes.squircle(size)
         CIRCLE -> WidgetShapes.circle(size)
