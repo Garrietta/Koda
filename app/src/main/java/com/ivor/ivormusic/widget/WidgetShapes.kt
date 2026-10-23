@@ -3,17 +3,27 @@ package com.ivor.ivormusic.widget
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialShapes
+import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.toPath
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * The expressive half of the widget shape story.
+ * The expressive shapes in this file are the real Material 3 Expressive shape
+ * definitions, pulled from the official catalog: [MaterialShapes] as published
+ * in androidx.compose.material3 (the M3E shape sheet - Cookie, Sunny,
+ * SoftBurst, Puffy and friends), each a [RoundedPolygon] converted to an
+ * android [Path] for bitmap masking. No hand-rolled approximations: the
+ * geometry here is exactly what the M3E catalog ships.
  *
  * M3 Expressive puts its most adventurous shapes where they cost nothing:
  * "photography cropping, personalized avatar masking, and other non-interactive
@@ -29,40 +39,51 @@ import kotlin.math.sin
  * they are used to mask bitmaps, not only to fill backgrounds, and a path that
  * defines both keeps the cover and its placeholder identical.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object WidgetShapes {
 
     /** Points per revolution. Plenty for a cover that is at most ~200dp wide. */
     private const val SAMPLES = 360
 
     /**
-     * A cookie: a circle with [lobes] soft scallops. The house shape for album
-     * art - it reads as deliberate at a glance and still shows the whole cover,
+     * Render an official M3E [RoundedPolygon] as an android [Path] at [size]
+     * pixels. The catalog shapes are normalized to the (0,0)-(1,1) square, so
+     * this is a straight scale.
+     */
+    private fun official(polygon: RoundedPolygon, size: Float): Path {
+        val path = polygon.toPath(Path())
+        path.transform(Matrix().apply { setScale(size, size) })
+        return path
+    }
+
+    /**
+     * The official M3E Cookie (12 soft scallops) - the house shape for album
+     * art. It reads as deliberate at a glance and still shows the whole cover,
      * which a heavy crop would not.
      */
-    fun cookie(size: Float, lobes: Int = 12, amplitude: Float = 0.055f): Path =
-        polar(size) { angle -> (1f + amplitude * cos(lobes * angle)).toFloat() }
+    fun cookie(size: Float): Path = official(MaterialShapes.Cookie12Sided, size)
 
     /** Four fat lobes. Used small, where a subtle scallop would read as a circle. */
     fun clover(size: Float, amplitude: Float = 0.13f): Path =
         polar(size) { angle -> (1f + amplitude * cos(4.0 * angle)).toFloat() }
 
     /**
-     * A starburst: [points] sharp-ish points with softly rounded valleys. The
-     * expressive hero shape - play buttons, labels, anything that should pop.
+     * The official M3E Sunny - the catalog's 8-point sun with rounded points.
+     * The expressive hero shape: play buttons, anything that should pop.
      */
-    fun starburst(size: Float, points: Int = 12, amplitude: Float = 0.16f): Path =
-        polar(size) { angle ->
-            // Rounded valleys, pointed tips: bias the cosine so the outer
-            // peaks are sharper than the inner valleys.
-            val c = cos(points * angle)
-            (1f + amplitude * (if (c > 0) c * c else c)).toFloat()
-        }
+    fun sunny(size: Float): Path = official(MaterialShapes.Sunny, size)
 
     /**
-     * Puffy: a superellipse blown out - corners so round the shape feels
-     * inflated. For secondary controls that should feel soft, not sharp.
+     * The official M3E SoftBurst - a 10-point softly rounded starburst. For
+     * the record's center label.
      */
-    fun puffy(size: Float, exponent: Float = 6f): Path = squircle(size, exponent)
+    fun softBurst(size: Float): Path = official(MaterialShapes.SoftBurst, size)
+
+    /**
+     * The official M3E Puffy - the catalog's inflated, bulging-sided shape.
+     * For secondary controls that should feel soft, not sharp.
+     */
+    fun puffy(size: Float): Path = official(MaterialShapes.Puffy, size)
 
     /** A superellipse - squarer than a rounded rect, with no corner to catch. */
     fun squircle(size: Float, exponent: Float = 4f): Path {
