@@ -141,7 +141,10 @@ class DjVoiceRepository(context: Context) {
         val mixKey = (mix.title.hashCode().toString(36) + mix.tracks.size + voiceKey)
         val queue = mutableListOf<Song>()
         mix.tracks.forEachIndexed { index, track ->
-            val line = track.djLine?.takeIf { it.isNotBlank() }
+            // Safety net: a line that somehow still carries a session number
+            // (e.g. from an old cache or a future prompt change) is stripped
+            // here too, so it is never spoken or shown as an intro title.
+            val line = track.djLine?.let(::stripSessionNumberFromLine)
             if (line != null) {
                 val wavFile = java.io.File(voiceDir, "intro_${mixKey}_$index.wav")
                 val mp3File = java.io.File(voiceDir, "intro_${mixKey}_$index.mp3")

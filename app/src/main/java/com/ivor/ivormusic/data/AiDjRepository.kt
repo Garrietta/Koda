@@ -61,6 +61,36 @@ data class SubgenreSuggestion(
 )
 
 /**
+ * The user never sees or hears a session number: Gemini used to echo the
+ * "Session #NNNN" seed from the generation prompts into mix titles
+ * ("Session 21761: ...") and spoken lines ("Kicking off session 21761 ...").
+ * These strip that phrasing wherever a title or line surfaces — at parse
+ * time, at cache load (so old caches stop showing it), and at playback.
+ */
+internal fun stripSessionNumberFromTitle(title: String): String {
+    val stripped = title
+        .replace(Regex("""^\s*session\s*#?\d+\s*[:\-–—]\s*""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""^\s*session\s*#?\d+\s+""", RegexOption.IGNORE_CASE), "")
+        .trim()
+    return stripped.ifBlank { "AI DJ Mix" }
+}
+
+internal fun stripSessionNumberFromLine(line: String): String? {
+    val cleaned = line
+        .replace(Regex("""\bsession\s*#?\d+\b""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s+([,.!?;:])"""), "$1")
+        .replace(Regex("""\s+"""), " ")
+        .replace(Regex("""^[,;:]\s*"""), "")
+        .trim()
+    return cleaned.takeIf { it.isNotBlank() }
+}
+
+internal fun sanitizeAiDjMix(mix: AiDjMix): AiDjMix = AiDjMix(
+    title = stripSessionNumberFromTitle(mix.title),
+    tracks = mix.tracks.map { it.copy(djLine = it.djLine?.let(::stripSessionNumberFromLine)) },
+)
+
+/**
  * The AI DJ: crafts a playlist from the user's library via the Google AI
  * (Gemini) API, guided by a custom prompt the user writes in Settings.
  *
@@ -120,14 +150,17 @@ class AiDjRepository(context: Context) {
 
     /** Persist [mix] as the cached DJ playlist. */
     fun cacheMix(mix: AiDjMix) {
-        _cachedMix.value = mix
+        // Sanitize on the way in so persisted titles/lines never carry a
+        // session number, even if a caller hands us an unsanitized mix.
+        val clean = sanitizeAiDjMix(mix)
+        _cachedMix.value = clean
         try {
             val json = kotlinx.serialization.json.Json.encodeToString(
                 kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
-                mix.tracks,
+                clean.tracks,
             )
             prefs.edit()
-                .putString(KEY_CACHED_MIX_TITLE, mix.title)
+                .putString(KEY_CACHED_MIX_TITLE, clean.title)
                 .putString(KEY_CACHED_MIX_TRACKS, json)
                 .putLong(KEY_CACHED_MIX_TIME, System.currentTimeMillis())
                 .apply()
@@ -159,7 +192,7 @@ class AiDjRepository(context: Context) {
                 kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
                 json,
             )
-            if (tracks.isEmpty()) null else AiDjMix(title, tracks)
+            if (tracks.isEmpty()) null else sanitizeAiDjMix(AiDjMix(title, tracks))
         } catch (e: Exception) {
             KLog.w(TAG, "Failed to load cached DJ mix", e)
             null
@@ -271,9 +304,11 @@ class AiDjRepository(context: Context) {
             "${i + 1}. ${song.title} — ${song.artist}"
         }.joinToString("\n")
 
-        // Per-generation seed: guarantees no two generations get the same prompt.
-        val sessionSeed = (1..100000).random()
         // Random mix angle for the library portion (rotates every generation).
+        // The shuffled library order and this angle already make every
+        // generation's prompt unique — never seed it with a "session" number:
+        // the model echoes that number into titles and spoken lines, and the
+        // user never sees or hears one.
         val mixAngles = listOf(
             "open with an unexpected deep cut, then build",
             "front-load the energy, peak early, coast out",
@@ -289,8 +324,7 @@ class AiDjRepository(context: Context) {
         val userText = buildString {
             appendLine(_prompt.value.trim().ifEmpty { DEFAULT_PROMPT })
             appendLine()
-            appendLine("Session #$sessionSeed — make this mix unlike any other.")
-            appendLine("Mix angle for this session: $mixAngle.")
+            appendLine("Mix angle: $mixAngle.")
             appendLine()
             appendLine("The listener's library (numbered as \"title — artist\"):")
             appendLine(numbered)
@@ -300,6 +334,8 @@ class AiDjRepository(context: Context) {
             append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY for a genuine ")
             append("shift worth announcing (new genre, big energy change, different era). NO MORE than ")
             append("1 in 4 tracks may have a line. When in doubt, leave it off. ")
+            append("NEVER mention a session number, episode number, or anything like 'session 21761' ")
+            append("in the title or in any line — the listener never hears one. ")
             append("Respond with ONLY this JSON object and no other text: ")
             append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 7}, {\"n\": 12, \"line\": \"short spoken DJ intro\"}]}")
         }
@@ -389,8 +425,10 @@ class AiDjRepository(context: Context) {
                 }
             }
         }
-        // Per-generation seed so no two mixes share a prompt.
-        val sessionSeed = (1..100000).random()
+        // No "session" seed here: the daily angle, the shuffled recent/liked
+        // order, and temperature already make every generation unique, and a
+        // session number in the prompt gets echoed into titles and spoken
+        // lines — which the user never sees or hears.
 
         val libraryCount = (INSTANT_MIX_TRACKS * 0.6).toInt()
         val discoveryCount = INSTANT_MIX_TRACKS - libraryCount
@@ -414,7 +452,7 @@ class AiDjRepository(context: Context) {
             appendLine()
             append("Today is $today. Build a $INSTANT_MIX_TRACKS-song DJ set in play order, ")
             append("flowing from what they have been playing lately through their liked favorites. ")
-            append("Session #$sessionSeed. Today's discovery angle: $dailyAngle. ")
+            append("Today's discovery angle: $dailyAngle. ")
             append("$libraryCount tracks: pick by their 1-based numbers from the lists above. ")
             append("$discoveryCount tracks: NEW discoveries NOT in the lists above — songs they have ")
             append("never heard that match their taste, from popular charts or deep cuts. ")
@@ -424,6 +462,8 @@ class AiDjRepository(context: Context) {
             append("next track is a genuine shift worth announcing: a new genre, a big energy change, ")
             append("a different era, or a discovery that needs context. NO MORE than 1 in 4 tracks may ")
             append("have a line. When in doubt, leave it off. A line marks a moment, not every song. ")
+            append("NEVER mention a session number, episode number, or anything like 'session 21761' ")
+            append("in the title or in any line — the listener never hears one. ")
             append("Respond with ONLY this JSON object and no other text: ")
             append("{\"title\": \"mix title\", \"tracks\": [{\"n\": 3}, {\"n\": 7}, {\"n\": 12, \"line\": \"spoken transition\"}, ")
             append("{\"new\": {\"title\": \"...\", \"artist\": \"...\"}}]}")
@@ -514,12 +554,12 @@ class AiDjRepository(context: Context) {
             }
             val jsonText = text.substring(start, end + 1)
             val mix = JSONObject(jsonText)
-            val mixTitle = mix.optString("title").ifBlank { "AI DJ Mix" }
+            val mixTitle = stripSessionNumberFromTitle(mix.optString("title").ifBlank { "AI DJ Mix" })
             val tracksJson = mix.getJSONArray("tracks")
             val seen = HashSet<Int>()
             val parsedItems = (0 until tracksJson.length()).mapNotNull { i ->
                 val entry = tracksJson.getJSONObject(i)
-                val line = entry.optString("line").takeIf { it.isNotBlank() }
+                val line = entry.optString("line").takeIf { it.isNotBlank() }?.let(::stripSessionNumberFromLine)
                 val n = entry.optInt("n", -1)
                 if (n >= 1 && n <= pool.size && seen.add(n)) {
                     ParsedItem(libraryIndex = n, discovery = null, line = line)
@@ -706,7 +746,7 @@ class AiDjRepository(context: Context) {
             }
             val jsonText = text.substring(start, end + 1)
             val mix = JSONObject(jsonText)
-            val title = mix.optString("title").ifBlank { "AI DJ Mix" }
+            val title = stripSessionNumberFromTitle(mix.optString("title").ifBlank { "AI DJ Mix" })
             val tracksJson = mix.getJSONArray("tracks")
             val seen = HashSet<Int>()
             val tracks = (0 until tracksJson.length()).mapNotNull { i ->
@@ -715,7 +755,7 @@ class AiDjRepository(context: Context) {
                 if (n < 1 || n > pool.size || !seen.add(n)) return@mapNotNull null
                 AiDjTrack(
                     song = pool[n - 1],
-                    djLine = entry.optString("line").takeIf { it.isNotBlank() },
+                    djLine = entry.optString("line").takeIf { it.isNotBlank() }?.let(::stripSessionNumberFromLine),
                 )
             }
             if (tracks.isEmpty()) {
