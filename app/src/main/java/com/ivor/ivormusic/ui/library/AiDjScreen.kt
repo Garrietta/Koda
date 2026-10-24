@@ -356,197 +356,181 @@ fun AiDjScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    // Hero: abstract code-drawn artwork fills the top edge to
-                    // edge under the status bar, then dissolves into the
-                    // page's ground - the playlist page's immersive top, for
-                    // the DJ. The title sits below the art on the ground, so
-                    // it reads in both themes on every palette.
-                    item(key = "dj_hero") {
-                        val windowHeight = windowDpSize().height
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                                val heroHeight = (maxWidth * 0.72f)
-                                    .coerceAtMost(windowHeight * 0.34f)
-                                    .coerceAtLeast(200.dp)
+                    // Header: the abstract artwork draws behind the title, the
+                    // subtitle AND the action buttons - the playlist page's
+                    // immersive top, 1:1. On scroll it dissolves into the
+                    // page's ground, which matches the art's background.
+                    item(key = "dj_header") {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            // Artwork background, full-bleed behind the content.
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clipToBounds()
+                                    .graphicsLayer {
+                                        // Scroll-driven, not time-driven:
+                                        // the art trails the list.
+                                        val collapse = headerCollapse.value
+                                        translationY = collapse * size.height * 0.24f
+                                        alpha = 1f - collapse * 0.55f
+                                    }
+                            ) {
+                                AiDjHeroArtwork(modifier = Modifier.fillMaxSize())
+                                // Where the art hands the page over: a plain
+                                // fade in the page's ground color.
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to ground.copy(alpha = 0f),
+                                                0.70f to ground.copy(alpha = 0f),
+                                                0.92f to ground.copy(alpha = 0.85f),
+                                                1f to ground
+                                            )
+                                        )
+                                )
+                            }
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                // Top fade: the app bar needs ground to sit on
+                                // whatever the art is. Faded to the same color
+                                // at zero alpha rather than to Transparent,
+                                // which is transparent black and greys the
+                                // band in a light theme.
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(heroHeight)
-                                        .clipToBounds()
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .graphicsLayer {
-                                                // Scroll-driven, not time-driven:
-                                                // the art trails the list.
-                                                val collapse = headerCollapse.value
-                                                translationY = collapse * size.height * 0.24f
-                                                alpha = 1f - collapse * 0.55f
-                                            }
-                                    ) {
-                                        AiDjHeroArtwork(modifier = Modifier.fillMaxSize())
-                                    }
-                                    // Where the art hands the page over: a
-                                    // plain fade in the page's ground color.
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    0f to ground.copy(alpha = 0f),
-                                                    0.58f to ground.copy(alpha = 0f),
-                                                    0.86f to ground.copy(alpha = 0.85f),
-                                                    1f to ground
+                                        .height(132.dp)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    ground.copy(alpha = 0.55f),
+                                                    ground.copy(alpha = 0f)
                                                 )
                                             )
-                                    )
-                                    // Top fade: back and the actions need
-                                    // ground to sit on whatever the art is.
-                                    // Faded to the same color at zero alpha
-                                    // rather than to Transparent, which is
-                                    // transparent black and greys the band in
-                                    // a light theme.
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(132.dp)
-                                            .align(Alignment.TopCenter)
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(
-                                                        ground.copy(alpha = 0.55f),
-                                                        ground.copy(alpha = 0f)
-                                                    )
-                                                )
-                                            )
-                                    )
-                                }
-                            }
-                            // Title and subtitle, centered on the ground.
-                            Text(
-                                text = currentMix?.title ?: stringResource(R.string.aidj_title),
-                                style = MaterialTheme.typography.displaySmall.copy(
-                                    fontFamily = MontserratFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.02).em,
-                                    lineHeight = 1.08.em
-                                ),
-                                color = groundInk,
-                                textAlign = TextAlign.Center,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp)
-                                    .padding(top = 14.dp),
-                            )
-                            Text(
-                                text = stringResource(R.string.aidj_pool_size, trackCount),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = groundInk.copy(alpha = 0.8f),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp)
-                                    .padding(top = 8.dp),
-                            )
-                        }
-                    }
-                    // Controls: DJ voice toggle, then the playlist page's
-                    // playback rows - Play all / Shuffle, then New mix /
-                    // Download.
-                    item(key = "dj_controls") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .padding(top = 18.dp),
-                        ) {
-                            if (currentMix == null) {
+                                        )
+                                )
+                                // Title and subtitle, centered on the art.
                                 Text(
-                                    stringResource(R.string.aidj_intro),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = groundInk.copy(alpha = 0.8f),
+                                    text = currentMix?.title ?: stringResource(R.string.aidj_title),
+                                    style = MaterialTheme.typography.displaySmall.copy(
+                                        fontFamily = MontserratFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = (-0.02).em,
+                                        lineHeight = 1.08.em
+                                    ),
+                                    color = groundInk,
                                     textAlign = TextAlign.Center,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 12.dp),
+                                        .padding(horizontal = 24.dp),
                                 )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
                                 Text(
-                                    stringResource(R.string.aidj_dj_voice_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = groundInk,
+                                    text = stringResource(R.string.aidj_pool_size, trackCount),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = groundInk.copy(alpha = 0.8f),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp)
+                                        .padding(top = 8.dp),
                                 )
-                                Switch(
-                                    checked = djVoiceEnabled,
-                                    onCheckedChange = { repository.setDjVoiceEnabled(it) },
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            // Playlist page layout: Row 1 is Play all /
-                            // Shuffle, Row 2 is the new-mix button under Play
-                            // all and Download under Shuffle.
-                            if (currentMix != null) {
-                                CollectionPlaybackActions(
-                                    onPlay = { playMix(currentMix) },
-                                    // Shuffle plays the mix's tracks as a plain
-                                    // shuffled queue; the DJ mix itself (Play
-                                    // all) always stays strictly ordered.
-                                    onShuffle = {
-                                        onShuffleQueue(currentMix.tracks.map { it.song })
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(Modifier.height(8.dp))
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Button(
-                                    onClick = ::generate,
-                                    enabled = library.isNotEmpty(),
-                                    modifier = Modifier.weight(1f),
+                                // Controls on the art: DJ voice toggle, then
+                                // the playlist page's playback rows - Play all
+                                // / Shuffle, then New mix / Download.
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp)
+                                        .padding(top = 18.dp, bottom = 12.dp),
                                 ) {
-                                    Icon(
-                                        if (currentMix == null) Icons.Rounded.AutoAwesome
-                                        else Icons.Rounded.Refresh,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.size(8.dp))
-                                    Text(
-                                        if (currentMix == null) stringResource(R.string.aidj_generate)
-                                        else stringResource(R.string.aidj_new_mix)
-                                    )
-                                }
-                                if (currentMix != null) {
-                                    com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction(
-                                        playlistId = "aidj-mix",
-                                        playlistTitle = currentMix.title,
-                                        songs = currentMix.tracks.map { it.song },
-                                        modifier = Modifier.weight(1f),
-                                    )
+                                    if (currentMix == null) {
+                                        Text(
+                                            stringResource(R.string.aidj_intro),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = groundInk.copy(alpha = 0.8f),
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 12.dp),
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.aidj_dj_voice_title),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = groundInk,
+                                        )
+                                        Switch(
+                                            checked = djVoiceEnabled,
+                                            onCheckedChange = { repository.setDjVoiceEnabled(it) },
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    // Playlist page layout: Row 1 is Play all /
+                                    // Shuffle, Row 2 is the new-mix button under Play
+                                    // all and Download under Shuffle.
+                                    if (currentMix != null) {
+                                        CollectionPlaybackActions(
+                                            onPlay = { playMix(currentMix) },
+                                            // Shuffle plays the mix's tracks as a plain
+                                            // shuffled queue; the DJ mix itself (Play
+                                            // all) always stays strictly ordered.
+                                            onShuffle = {
+                                                onShuffleQueue(currentMix.tracks.map { it.song })
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Button(
+                                            onClick = ::generate,
+                                            enabled = library.isNotEmpty(),
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Icon(
+                                                if (currentMix == null) Icons.Rounded.AutoAwesome
+                                                else Icons.Rounded.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                            Spacer(Modifier.size(8.dp))
+                                            Text(
+                                                if (currentMix == null) stringResource(R.string.aidj_generate)
+                                                else stringResource(R.string.aidj_new_mix)
+                                            )
+                                        }
+                                        if (currentMix != null) {
+                                            com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction(
+                                                playlistId = "aidj-mix",
+                                                playlistTitle = currentMix.title,
+                                                songs = currentMix.tracks.map { it.song },
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                    }
+                                    if (currentError != null) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            currentError,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
                                 }
                             }
-                            if (currentError != null) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    currentError,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
                         }
                     }
                     if (currentMix != null) {
@@ -575,15 +559,16 @@ fun AiDjScreen(
 }
 
 /**
- * The AI DJ page's ground: the tertiary equivalent of the playlist page's
- * ground - left alone in a dark scheme, deepened toward tertiary in a light
- * one, so onTertiaryContainer stays readable on it by M3 construction.
+ * The AI DJ page's ground: matches the header artwork's background so the
+ * art dissolves into it seamlessly and the title + buttons sit on the art
+ * itself, like the playlist page. A rich tertiary tone - never the
+ * near-black tertiaryContainer some dark themes ship, which read as a hard
+ * black band under the art.
  */
 @Composable
 private fun aidjPageGround(): Color {
     val scheme = MaterialTheme.colorScheme
-    if (scheme.background.luminance() < 0.5f) return scheme.tertiaryContainer
-    return lerp(scheme.tertiaryContainer, scheme.tertiary, 0.3f)
+    return lerp(scheme.tertiary, scheme.tertiaryContainer, 0.4f)
 }
 
 /**
@@ -595,13 +580,15 @@ private fun aidjPageGround(): Color {
 @Composable
 private fun AiDjHeroArtwork(modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
+    val ground = aidjPageGround()
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        // Base wash, tertiary deep at the top-left dissolving to container.
+        // Base wash, tertiary deep at the top-left dissolving to the page's
+        // ground at the bottom, so the art hands off seamlessly.
         drawRect(
             brush = Brush.linearGradient(
-                colors = listOf(scheme.tertiary, scheme.tertiaryContainer),
+                colors = listOf(scheme.tertiary, ground),
                 start = Offset(0f, 0f),
                 end = Offset(w * 0.35f, h),
             )
