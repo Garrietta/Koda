@@ -201,9 +201,16 @@ object PlayerWidgets {
                 128 // Small size is enough for color extraction
             ) ?: return snapshot
             val palette = Palette.from(bitmap).generate()
+            // The same swatch chain the app's own seed extraction uses
+            // (extractArtworkSeeds): vibrant, light vibrant, dark vibrant,
+            // dominant. The old chain skipped the two middle swatches, so
+            // the widget's cover colour could already differ from the seed
+            // the app theme builds from - and the buttons follow that seed.
             val vibrant = snapshot.artworkColor ?: run {
-                val v = palette.getVibrantColor(0)
-                if (v != 0) v else palette.getDominantColor(0).takeIf { it != 0 }
+                palette.vibrantSwatch?.rgb
+                    ?: palette.lightVibrantSwatch?.rgb
+                    ?: palette.darkVibrantSwatch?.rgb
+                    ?: palette.dominantSwatch?.rgb
             } ?: return snapshot
             val label = snapshot.artworkLabelColor ?: pickLabelColor(palette, vibrant)
             snapshot.copy(artworkColor = vibrant, artworkLabelColor = label)

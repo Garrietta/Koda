@@ -2,11 +2,13 @@ package com.ivor.ivormusic.widget
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.glance.color.ColorProviders
 import androidx.glance.material3.ColorProviders
 import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.ui.theme.ThemeMode
+import com.ivor.ivormusic.ui.theme.buildSeedColorScheme
 import com.ivor.ivormusic.ui.theme.kodaColorScheme
 
 /**
@@ -48,20 +50,33 @@ internal object KodaWidgetTheme {
     }
 
     /**
-     * The app palette's primary for the host's current mode, as an ARGB int
+     * The primary the app UI is actually wearing right now, as an ARGB int
      * - for surfaces that need a raw color, like the vinyl widget's baked
      * button bitmaps. Glance's own [GlanceTheme.colors] roles are
-     * ColorProviders, not raw colors, so they cannot feed a bitmap; this
-     * resolves the same scheme [colors] hands Glance, in the same mode.
+     * ColorProviders, not raw colors, so they cannot feed a bitmap.
+     *
+     * That is NOT always the chosen palette: with album colours set to
+     * whole-app, MainActivity builds the app scheme from the playing
+     * cover (buildSeedColorScheme) instead of the palette, so resolving
+     * the palette here painted the buttons navy while the app wore the
+     * cover's olive. Mirror MainActivity's choice exactly: the cover seed
+     * when whole-app album colours are on and the snapshot carries a cover
+     * colour, the chosen palette otherwise. AMOLED and tinted pages never
+     * touch primary, so they need no handling here.
      */
-    fun palettePrimaryArgb(context: Context): Int {
+    fun vinylButtonArgb(context: Context, artworkColor: Int?): Int {
         val prefs = ThemePreferences(context)
+        val dark = isDark(context)
+        val style = prefs.paletteStyle.value
+        if (prefs.playerArtworkColors.value && prefs.artworkColorsWholeApp.value && artworkColor != null) {
+            return buildSeedColorScheme(Color(artworkColor), dark, style).primary.toArgb()
+        }
         return kodaColorScheme(
             context,
-            isDark(context),
+            dark,
             prefs.colorPalette.value,
             prefs.amoledTheme.value,
-            prefs.paletteStyle.value,
+            style,
         ).primary.toArgb()
     }
 

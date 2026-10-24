@@ -150,6 +150,11 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPlayerArtworkColors(enabled: Boolean) {
         themePreferences.setPlayerArtworkColors(enabled)
+        // The vinyl buttons follow the effective app primary, which flips
+        // between palette and cover seed with this switch (and with the
+        // whole-app scope toggle that routes through here) - redraw now
+        // instead of waiting for the next playback push.
+        com.ivor.ivormusic.widget.PlayerWidgets.pushAll(getApplication())
     }
     
     fun toggleAmbientBackground() {

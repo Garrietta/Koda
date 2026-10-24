@@ -69,17 +69,19 @@ import kotlin.math.pow
  * SoftBurst sticker with its type knocked out and a scuff on the grooves, all
  * off-centre so the rotation reads. Paused, the same artwork is drawn still.
  *
- * **Every size is proportional to the window.** SizeMode.Exact hands this
- * composition the launcher's true bounding box, and nothing here is clamped
- * to a fixed size: the transport column is sized by the height it has to
- * fill, the stage takes the width that is left, and the record takes the
- * smaller of its height-bound and width-bound size - so the widget scales to
- * whatever cell it is resized into instead of one designed size. The
- * transport buttons are capped by width as well as height, so resizing
- * taller grows the record instead of shrinking it: a height-only button cap
- * ate the stage's width as the window grew, leaving dead space below art
- * that could have filled the window. The row fills the window and centers
- * its content, so any leftover is shared, never all below.
+ * **Every size is proportional to the window, and the arrangement follows
+ * its aspect.** SizeMode.Exact hands this composition the launcher's
+ * bounding box, and nothing here is clamped to a fixed size - but a
+ * side-by-side stage cannot fill a squarish window: the stage is about
+ * 1.8 record-widths wide for one record-height tall, so on a window
+ * narrower than about 2.2 heights the width binds first and the record
+ * shrinks, leaving dead bands top and bottom no matter how the buttons
+ * are capped. That was the "still room to grow" complaint on every round.
+ * So the layout switches: wide windows keep the transport column beside
+ * the stage with the record filling the height; squarer windows move the
+ * buttons below the stage, and stage plus buttons together fill the height
+ * exactly. Either way the block spans the window, with any unavoidable
+ * leftover split evenly by centering, never all below or all beside.
  *
  * **Color comes from two places, never mixed.** The buttons take the app's
  * selected palette - the same scheme the app UI draws in, so changing the
@@ -128,40 +130,24 @@ private fun VinylContent(ui: PlayerWidgetUi) {
 
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
-    // Proportional to the window, start to finish. The transport column is
-    // sized by the height it has to fill (two buttons plus the gap), the
-    // stage takes the width that is left, and the record takes the smaller
-    // of its height-bound and width-bound size. Nothing is clamped to a
-    // fixed dp, so a resized cell rescales the whole widget instead of
-    // leaving small buttons beside a large record (or the reverse). The
-    // cookie's lobes don't fill their box, so the sleeve box is the record
-    // over the shape's true visual fill fraction, and the arm stands a
-    // quarter of a record further out.
     val availWidth = size.width - VINYL_PADDING * 2
     val availHeight = size.height - VINYL_PADDING * 2
     val gap = (availHeight * 0.04f).coerceAtLeast(4.dp)
-    // Capped by width as well as height: with a height-only cap, resizing
-    // taller grew the buttons, which ate the stage's width and shrank the
-    // record - the widget got taller and its art got smaller.
-    val playSize = minOf(availHeight * 0.46f, availWidth * 0.20f).coerceAtLeast(24.dp)
-    val nextSize = playSize * 0.95f
+    // The cookie's lobes don't fill their box, so the sleeve box is the
+    // record over the shape's true visual fill fraction, and the arm stands
+    // a quarter of a record further out. The stage's width per unit of
+    // record is therefore sleeve box + protrusion + arm reach.
     val cookieFill = WidgetShapes.cookie4SidedFillFraction()
-    val record = minOf(
-        availHeight * cookieFill,
-        (availWidth - gap - playSize) / (1f / cookieFill + 0.75f),
-    ).coerceAtLeast(1.dp)
-    val sleeve = record / cookieFill
-    val armReach = record / 4
-    val stage = sleeve + record / 2 + armReach
+    val stageFactor = 1f / cookieFill + 0.75f
 
-    // The buttons take the app palette's primary - the same scheme the app
-    // UI draws in, resolved from the palette style in Settings, so they
-    // follow a palette change (the palette setters push a widget redraw).
-    // Resolved here, not from GlanceTheme: Glance roles are ColorProviders,
-    // and a baked bitmap needs a raw ARGB int.
-    // The record keeps album colors: a second album swatch for the label,
-    // the darkened vibrant translucent for the disc.
-    val buttonColor = KodaWidgetTheme.palettePrimaryArgb(LocalContext.current)
+    // The buttons take the primary the app UI is actually wearing - the
+    // cover seed under whole-app album colours, the chosen palette
+    // otherwise (see KodaWidgetTheme.vinylButtonArgb). Resolved here, not
+    // from GlanceTheme: Glance roles are ColorProviders, and a baked bitmap
+    // needs a raw ARGB int. The record keeps album colors: a second album
+    // swatch for the label, the darkened vibrant translucent for the disc.
+    val buttonColor =
+        KodaWidgetTheme.vinylButtonArgb(LocalContext.current, ui.snapshot.artworkColor)
     val labelColor = ui.snapshot.artworkLabelColor?.let { ColorProvider(Color(it)) }
         ?: GlanceTheme.colors.primaryContainer
 
@@ -172,52 +158,114 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     // could not supply its own contrast, and the cover on the sleeve already
     // says what is playing.
     WidgetSurface(background = null, openAppOnTap = false) {
-        Row(
-            modifier = GlanceModifier.fillMaxSize().padding(VINYL_PADDING),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = GlanceModifier.width(stage).height(sleeve)) {
-                Box(
-                    modifier = GlanceModifier.fillMaxSize().padding(end = armReach),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    VinylRecord(
-                        size = record,
-                        playing = playing,
-                        discColor = discColor(ui.snapshot.artworkColor),
-                        labelColor = labelColor,
-                    )
-                }
-                Box(
-                    modifier = GlanceModifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
-                        WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE4SIDED)
-                    }
-                }
-                // Last, so the arm lies over the record: on the grooves while
-                // it plays, parked beside the disc when it does not.
-                Box(
-                    modifier = GlanceModifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    val accent = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
-                        ?: GlanceTheme.colors.primary
-                    VinylArm(
-                        width = record + armReach,
-                        height = record,
-                        onRecord = playing,
-                        accentColor = accent
-                    )
+        // Side column only when it can fill the height: the side layout is
+        // height-bound when the record that fills the height still fits
+        // the width beside the buttons. The column is sized to fill the
+        // height exactly (two buttons plus the gap), capped by width so a
+        // very wide window doesn't grow absurd buttons.
+        val playSide =
+            minOf((availHeight - gap) / 1.95f, availWidth * 0.20f).coerceAtLeast(24.dp)
+        val useSide = availHeight * cookieFill <=
+            (availWidth - gap - playSide) / stageFactor
+        if (useSide) {
+            val record = availHeight * cookieFill
+            val sleeve = availHeight
+            val stage = record * stageFactor
+            Row(
+                modifier = GlanceModifier.fillMaxSize().padding(VINYL_PADDING),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                VinylStage(ui, playing, stage, sleeve, record, labelColor)
+                Spacer(modifier = GlanceModifier.width(gap))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    SunnyPlayButton(isPlaying = playing, size = playSide, color = buttonColor)
+                    Spacer(modifier = GlanceModifier.height(gap))
+                    FlowerNextButton(size = playSide * 0.95f, color = buttonColor)
                 }
             }
-            Spacer(modifier = GlanceModifier.width(gap))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                SunnyPlayButton(isPlaying = playing, size = playSize, color = buttonColor)
+        } else {
+            // Buttons below the stage: the stage takes the width-bound
+            // record, and the buttons take exactly the height that is left
+            // (at least 48dp, carved out of the record when the window is
+            // short), capped at 96dp with any further leftover as space
+            // between stage and buttons - so the block always spans the
+            // window instead of sitting in its upper half.
+            val record = minOf(
+                availWidth / stageFactor,
+                (availHeight - gap - 48.dp) * cookieFill,
+            ).coerceAtLeast(1.dp)
+            val sleeve = record / cookieFill
+            val stage = record * stageFactor
+            val buttonsHeight = (availHeight - gap - sleeve).coerceAtLeast(24.dp)
+            val buttonSize = minOf(buttonsHeight, 96.dp)
+            val slack = buttonsHeight - buttonSize
+            Column(
+                modifier = GlanceModifier.fillMaxSize().padding(VINYL_PADDING),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                VinylStage(ui, playing, stage, sleeve, record, labelColor)
                 Spacer(modifier = GlanceModifier.height(gap))
-                FlowerNextButton(size = nextSize, color = buttonColor)
+                if (slack > 0.dp) Spacer(modifier = GlanceModifier.height(slack))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SunnyPlayButton(isPlaying = playing, size = buttonSize, color = buttonColor)
+                    Spacer(modifier = GlanceModifier.width(gap))
+                    FlowerNextButton(size = buttonSize * 0.95f, color = buttonColor)
+                }
             }
+        }
+    }
+}
+
+/**
+ * The sleeve, the record half out of it, and the tonearm over both - one
+ * composition shared by the side-column and below-buttons arrangements, so
+ * the two cannot drift apart.
+ */
+@Composable
+private fun VinylStage(
+    ui: PlayerWidgetUi,
+    playing: Boolean,
+    stage: Dp,
+    sleeve: Dp,
+    record: Dp,
+    labelColor: ColorProvider,
+) {
+    val armReach = record / 4
+    Box(modifier = GlanceModifier.width(stage).height(sleeve)) {
+        Box(
+            modifier = GlanceModifier.fillMaxSize().padding(end = armReach),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            VinylRecord(
+                size = record,
+                playing = playing,
+                discColor = discColor(ui.snapshot.artworkColor),
+                labelColor = labelColor,
+            )
+        }
+        Box(
+            modifier = GlanceModifier.fillMaxSize(),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())) {
+                WidgetArtwork(ui.artwork, size = sleeve, shape = ArtworkShape.COOKIE4SIDED)
+            }
+        }
+        // Last, so the arm lies over the record: on the grooves while
+        // it plays, parked beside the disc when it does not.
+        Box(
+            modifier = GlanceModifier.fillMaxSize(),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            val accent = ui.snapshot.artworkColor?.let { ColorProvider(Color(it)) }
+                ?: GlanceTheme.colors.primary
+            VinylArm(
+                width = record + armReach,
+                height = record,
+                onRecord = playing,
+                accentColor = accent
+            )
         }
     }
 }
