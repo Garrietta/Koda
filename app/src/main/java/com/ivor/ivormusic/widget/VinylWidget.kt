@@ -2,9 +2,13 @@ package com.ivor.ivormusic.widget
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Build
 import android.widget.RemoteViews
 import androidx.annotation.DrawableRes
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,6 +48,7 @@ import androidx.glance.semantics.semantics
 import androidx.glance.unit.ColorProvider
 import com.ivor.ivormusic.MainActivity
 import com.ivor.ivormusic.R
+import kotlin.math.pow
 
 /**
  * Vinyl: a record half out of its sleeve, turning while the music plays, with
@@ -69,15 +74,26 @@ import com.ivor.ivormusic.R
  * to a fixed size: the transport column is sized by the height it has to
  * fill, the stage takes the width that is left, and the record takes the
  * smaller of its height-bound and width-bound size - so the widget scales to
- * whatever cell it is resized into instead of one designed size.
+ * whatever cell it is resized into instead of one designed size. The
+ * transport buttons are capped by width as well as height, so resizing
+ * taller grows the record instead of shrinking it: a height-only button cap
+ * ate the stage's width as the window grew, leaving dead space below art
+ * that could have filled the window. The row fills the window and centers
+ * its content, so any leftover is shared, never all below.
  *
  * **Color comes from the album, in two different roles.** The buttons take
  * the vibrant swatch; the center-label sticker takes a second, different
  * swatch, so the two never share one tint. The disc itself is that vibrant
- * tinted translucent, like a fancy coloured vinyl - but the sticker stays
- * fully opaque, so its print stays solid and legible over the see-through
- * disc. The rotation's tint needs API 31; on 30 the record is drawn still
- * rather than turning in the wrong colour.
+ * darkened and translucent, like a fancy coloured vinyl - the translucency
+ * is unchanged, the darker pick keeps real contrast against the wallpaper -
+ * but the sticker stays fully opaque, so its print stays solid and legible
+ * over the see-through disc. The rotation's tint needs API 31; on 30 the
+ * record is drawn still rather than turning in the wrong colour.
+ *
+ * **The glyph ink is baked, not tinted.** The play/pause/next glyph is drawn
+ * into the button bitmap itself in black or white, whichever contrasts
+ * better with that button's album color - so it reads on any album color,
+ * on any launcher, instead of trusting a runtime tint over a vector.
  */
 class VinylWidget : GlanceAppWidget() {
 
@@ -122,7 +138,10 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     val availWidth = size.width - VINYL_PADDING * 2
     val availHeight = size.height - VINYL_PADDING * 2
     val gap = (availHeight * 0.04f).coerceAtLeast(4.dp)
-    val playSize = (availHeight * 0.46f).coerceAtLeast(24.dp)
+    // Capped by width as well as height: with a height-only cap, resizing
+    // taller grew the buttons, which ate the stage's width and shrank the
+    // record - the widget got taller and its art got smaller.
+    val playSize = minOf(availHeight * 0.46f, availWidth * 0.20f).coerceAtLeast(24.dp)
     val nextSize = playSize * 0.95f
     val cookieFill = WidgetShapes.cookie4SidedFillFraction()
     val record = minOf(
@@ -148,7 +167,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     // says what is playing.
     WidgetSurface(background = null, openAppOnTap = false) {
         Row(
-            modifier = GlanceModifier.padding(VINYL_PADDING),
+            modifier = GlanceModifier.fillMaxSize().padding(VINYL_PADDING),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = GlanceModifier.width(stage).height(sleeve)) {
@@ -191,7 +210,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 SunnyPlayButton(isPlaying = playing, size = playSize, color = buttonColor)
                 Spacer(modifier = GlanceModifier.height(gap))
-                BunNextButton(size = nextSize, color = buttonColor)
+                FlowerNextButton(size = nextSize, color = buttonColor)
             }
         }
     }
@@ -227,11 +246,12 @@ private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: Colo
 /**
  * Expressive transport buttons, deliberately different shapes: the official
  * M3E Sunny for play - points, unmistakable at a glance - against the
- * official M3E Bun for next, a smooth blob. Both tinted by the dynamic
+ * official M3E Flower for next, rounded petals. Both tinted by the dynamic
  * vibrant color plucked from the album art (falling back to the fixed
- * amber/white when there is none). The shape is baked into a bitmap
- * background with the icon drawn over it; the whole thing is the tap target.
- * The icon tint follows the button's luminance so it always reads.
+ * amber/white when there is none). The shape AND the glyph are baked into
+ * one bitmap, so the glyph ink is exactly the contrast color for that
+ * button's color - no runtime tint for a launcher to drop. The whole
+ * bitmap is the tap target.
  */
 @Composable
 private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
@@ -239,10 +259,10 @@ private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
     val bgColor = color ?: 0xFFFFB300.toInt()
-    val bg = androidx.compose.runtime.remember(px, bgColor) {
-        filledPath(WidgetShapes.sunny(px.toFloat()), px, bgColor)
+    val glyphRes = if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play
+    val bg = androidx.compose.runtime.remember(px, bgColor, glyphRes) {
+        transportButtonBitmap(context, WidgetShapes.sunny(px.toFloat()), px, bgColor, glyphRes)
     }
-    val iconTint = ColorProvider(Color(if (isLight(bgColor)) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()))
     Box(
         modifier = GlanceModifier
             .size(size)
@@ -259,27 +279,18 @@ private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
             contentDescription = null,
             modifier = GlanceModifier.fillMaxSize(),
         )
-        Image(
-            provider = ImageProvider(
-                if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play
-            ),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(iconTint),
-            modifier = GlanceModifier.size(size * 0.42f),
-        )
     }
 }
 
 @Composable
-private fun BunNextButton(size: Dp, color: Int?) {
+private fun FlowerNextButton(size: Dp, color: Int?) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
     val bgColor = color ?: 0xFFFFFFFF.toInt()
     val bg = androidx.compose.runtime.remember(px, bgColor) {
-        filledPath(WidgetShapes.bun(px.toFloat()), px, bgColor)
+        transportButtonBitmap(context, WidgetShapes.flower(px.toFloat()), px, bgColor, R.drawable.ic_media_next)
     }
-    val iconTint = ColorProvider(Color(if (isLight(bgColor)) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()))
     val nextDesc = widgetString(R.string.widget_action_next)
     Box(
         modifier = GlanceModifier
@@ -293,21 +304,59 @@ private fun BunNextButton(size: Dp, color: Int?) {
             contentDescription = null,
             modifier = GlanceModifier.fillMaxSize(),
         )
-        Image(
-            provider = ImageProvider(R.drawable.ic_media_next),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(iconTint),
-            modifier = GlanceModifier.size(size * 0.42f),
-        )
     }
 }
 
-/** True when [color] is light enough for a dark icon to read on it. */
-private fun isLight(color: Int): Boolean {
-    val r = (color shr 16) and 0xFF
-    val g = (color shr 8) and 0xFF
-    val b = color and 0xFF
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
+/**
+ * One transport button as a single bitmap: the expressive shape filled with
+ * [bgColor], the glyph drawn over it in the ink that contrasts best with
+ * that color. Baking the glyph in - instead of overlaying a tinted vector -
+ * is what makes the contrast hold on every launcher: nothing downstream can
+ * drop or ignore the tint.
+ */
+private fun transportButtonBitmap(
+    context: Context,
+    shape: android.graphics.Path,
+    sizePx: Int,
+    bgColor: Int,
+    @DrawableRes glyphRes: Int,
+): Bitmap {
+    val side = sizePx.coerceAtLeast(1)
+    val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
+    canvas.drawPath(shape, paint)
+    val glyph = context.getDrawable(glyphRes)?.mutate()
+    if (glyph != null) {
+        DrawableCompat.setTint(glyph, glyphInk(bgColor))
+        val g = (side * 0.42f).toInt().coerceAtLeast(1)
+        val left = (side - g) / 2
+        glyph.setBounds(left, left, left + g, left + g)
+        glyph.draw(canvas)
+    }
+    return out
+}
+
+/**
+ * The glyph ink for a button color: near-black or white, whichever has the
+ * higher WCAG contrast ratio against it. Relative luminance, sRGB
+ * linearized - a plain brightness threshold misreads saturated album colors
+ * (a vivid green is bright but still needs a dark glyph; a deep red is dark
+ * but a threshold can call it light).
+ */
+private fun glyphInk(bgColor: Int): Int {
+    fun lin(channel: Int): Double {
+        val s = channel / 255.0
+        return if (s <= 0.03928) s / 12.92 else ((s + 0.055) / 1.055).pow(2.4)
+    }
+    val r = (bgColor shr 16) and 0xFF
+    val g = (bgColor shr 8) and 0xFF
+    val b = bgColor and 0xFF
+    val lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    // Contrast against white (luminance 1) and against near-black ink (~0.01).
+    val contrastWhite = 1.05 / (lum + 0.05)
+    val contrastDark = (lum + 0.05) / 0.06
+    return if (contrastDark >= contrastWhite) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()
 }
 
 /** A record is dark whichever way the theme faces. */
@@ -318,17 +367,29 @@ private fun recordColor(): ColorProvider {
 }
 
 /**
- * The disc, translucent like a fancy coloured vinyl: the album's vibrant at
- * [VINYL_DISC_ALPHA], falling back to the dark record colour at the same
- * alpha when there is no artwork color. The tint's alpha is what makes the
- * wallpaper show through the disc - the label tint below stays fully opaque,
- * and nothing here touches it.
+ * The disc, translucent like a fancy coloured vinyl: the album's vibrant,
+ * darkened, at [VINYL_DISC_ALPHA], falling back to the dark record colour
+ * at the same alpha when there is no artwork color. The translucency is
+ * unchanged - what changed is the pick: the raw vibrant came out too light
+ * and washed out at 64% alpha, so the disc color is darkened (same hue and
+ * saturation, value scaled down) to keep real contrast against the
+ * wallpaper. The tint's alpha is what makes the wallpaper show through the
+ * disc - the label tint below stays fully opaque, and nothing here touches
+ * it.
  */
 @Composable
 private fun discColor(artworkColor: Int?): ColorProvider {
     val base = recordColor().read()
-    val solid = artworkColor?.let { Color(it) } ?: base
+    val solid = artworkColor?.let { darken(Color(it)) } ?: base
     return ColorProvider(solid.copy(alpha = VINYL_DISC_ALPHA))
+}
+
+/** Same hue and saturation, darker value: a translucent disc that still reads. */
+private fun darken(color: Color): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(color.toArgb(), hsv)
+    hsv[2] = (hsv[2] * 0.75f).coerceIn(0f, 1f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 @Composable

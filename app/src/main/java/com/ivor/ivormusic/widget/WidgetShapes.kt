@@ -86,18 +86,13 @@ internal object WidgetShapes {
         polar(size) { angle -> (1f + amplitude * cos(4.0 * angle)).toFloat() }
 
     /**
-     * The official M3E Sunny - the catalog's 8-point sun with rounded points.
-     * The expressive hero shape: play buttons, anything that should pop.
-     *
-     * Re-fit to the square from its TRUE visual bounds (same measurement as
-     * [puffy], uniform scale, centred) rather than a straight scale of the
+     * Re-fit a catalog polygon to the requested square from its TRUE visual
+     * bounds (uniform scale, centred) rather than a straight scale of the
      * normalized polygon: a straight scale trusts the catalog's square, and
      * any authoring inset reads as a button sitting off-centre or skewed at
-     * widget size. Sunny's points against Bun's smooth blob is the pair that
-     * reads as different at a glance.
+     * widget size.
      */
-    fun sunny(size: Float): Path {
-        val polygon = MaterialShapes.Sunny
+    private fun refitSquare(polygon: RoundedPolygon, size: Float): Path {
         val b = polygon.calculateBounds(approximate = false)
         val w = b[2] - b[0]
         val h = b[3] - b[1]
@@ -115,10 +110,20 @@ internal object WidgetShapes {
     }
 
     /**
-     * The official M3E Flower - rounded petals, symmetric by construction.
-     * A clean, bold shape for the play button at widget size.
+     * The official M3E Sunny - the catalog's 8-point sun with rounded points.
+     * The expressive hero shape: play buttons, anything that should pop.
+     * Sunny's points against Flower's rounded petals is the pair that reads
+     * as different at a glance.
      */
-    fun flower(size: Float): Path = official(MaterialShapes.Flower, size)
+    fun sunny(size: Float): Path = refitSquare(MaterialShapes.Sunny, size)
+
+    /**
+     * The official M3E Flower - rounded petals, symmetric by construction.
+     * Re-fit from true visual bounds like [sunny], so it cannot render
+     * skewed at widget size. The next button's shape: petals against Sunny's
+     * points, different at a glance.
+     */
+    fun flower(size: Float): Path = refitSquare(MaterialShapes.Flower, size)
 
     /**
      * The official M3E Bun - a soft, rounded shape, symmetric by construction.
