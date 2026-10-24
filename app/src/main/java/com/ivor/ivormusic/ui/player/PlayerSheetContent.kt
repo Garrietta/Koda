@@ -580,6 +580,10 @@ private fun ExpressiveNowPlayingView(
                     .swipeToSkipFollow(swipeToSkip),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                if (isDjMixPlaying) {
+                    AiDjBadge()
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
                 Text(
                     text = currentSong?.title?.takeIf { !isUnknownTitle(it) } ?: stringResource(R.string.untitled_song),
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),

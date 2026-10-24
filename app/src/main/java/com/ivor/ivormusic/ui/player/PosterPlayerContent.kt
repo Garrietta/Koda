@@ -392,6 +392,10 @@ fun PosterPlayerSheetContent(
                                 .navigationBarsPadding()
                                 .padding(bottom = 16.dp)
                         ) {
+                            if (isDjMixPlaying) {
+                                AiDjBadge()
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                             // Title + like/lyrics chips
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(

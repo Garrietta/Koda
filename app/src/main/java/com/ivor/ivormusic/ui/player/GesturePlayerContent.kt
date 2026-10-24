@@ -505,6 +505,10 @@ private fun GestureNowPlayingView(
                                 .padding(horizontal = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            if (isDjMixPlaying) {
+                                AiDjBadge()
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                             Text(
                                 text = currentSong?.title?.takeIf { !isUnknownTitle(it) } ?: "Untitled",
                                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),

@@ -307,6 +307,10 @@ fun MorphPlayerSheetContent(
                             .swipeToSkip(swipeToSkip)
                             .swipeToSkipFollow(swipeToSkip)
                     ) {
+                        if (isDjMixPlaying) {
+                            AiDjBadge()
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
                         Text(
                             text = currentSong?.title?.takeIf { !isUnknownTitle(it) } ?: "Untitled",
                             style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),

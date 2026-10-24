@@ -308,6 +308,10 @@ fun HeroPlayerSheetContent(
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    if (isDjMixPlaying) {
+                                        AiDjBadge()
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                    }
                                     val title = currentSong?.title?.takeIf { !isUnknownTitle(it) }
                                         ?: stringResource(R.string.untitled_song)
                                     Crossfade(targetState = title, label = "HeroTitle") { shown ->

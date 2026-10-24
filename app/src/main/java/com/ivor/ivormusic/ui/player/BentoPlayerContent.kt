@@ -344,6 +344,10 @@ fun BentoPlayerSheetContent(
                         color = tileColor
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                            if (isDjMixPlaying) {
+                                AiDjBadge()
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                             Text(
                                 text = currentSong?.title?.takeIf { !isUnknownTitle(it) }
                                     ?: "Untitled",

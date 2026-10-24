@@ -413,6 +413,10 @@ private fun EditorialNowPlayingView(
                 .swipeToSkip(swipeToSkip)
                 .swipeToSkipFollow(swipeToSkip)
         ) {
+            if (isDjMixPlaying) {
+                AiDjBadge(modifier = Modifier.padding(horizontal = 24.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             Text(
                 text = title,
                 style = headlineBase.copy(
