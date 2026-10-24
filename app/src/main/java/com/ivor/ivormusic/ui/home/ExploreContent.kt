@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,12 +50,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ivor.ivormusic.R
+import com.ivor.ivormusic.data.PlaylistDisplayItem
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.data.SubgenreShelf
+import kotlinx.coroutines.delay
 
 private enum class ExploreFilter {
     All, Liked, Downloads, Recent
 }
+
+/** An album matched by Explore search, with its songs ready to play. */
+private data class ExploreAlbumResult(
+    val name: String,
+    val artist: String,
+    val art: String?,
+    val songs: List<Song>,
+)
 
 /**
  * The Explore tab: a place to discover what's in the library, separate from
@@ -72,25 +83,72 @@ fun ExploreContent(
     newFromLiked: List<Song> = emptyList(),
     subgenreShelves: List<SubgenreShelf> = emptyList(),
     recommendations: List<Song> = emptyList(),
+    playlists: List<PlaylistDisplayItem> = emptyList(),
     onPlaySongs: (List<Song>, Song?) -> Unit,
     onSongLongPress: ((Song) -> Unit)? = null,
     onArtistClick: (String) -> Unit,
     onArtistRadio: (String) -> Unit,
+    onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
+    onAlbumClick: (String) -> Unit = {},
     contentPadding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
 ) {
     var filter by rememberSaveable { mutableStateOf(ExploreFilter.All) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    // Debounced, like the search screen: the sections below recompute once
+    // the user pauses typing, not on every keystroke.
+    var debouncedQuery by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(searchQuery) {
+        delay(400)
+        debouncedQuery = searchQuery
+    }
+    val isSearching = debouncedQuery.trim().isNotBlank()
 
-    // When searching, filter the library; otherwise show Explore content.
-    val searchResults = remember(searchQuery, songs) {
-        val q = searchQuery.trim()
+    // Live search sections: the whole page becomes results while searching.
+    val searchArtists = remember(debouncedQuery, songs, likedSongs, topArtists) {
+        val q = debouncedQuery.trim()
         if (q.isBlank()) emptyList()
-        else songs.filter {
+        else {
+            val fromTop = topArtists.filter { it.name.contains(q, ignoreCase = true) }
+            val topNames = fromTop.map { it.name }.toSet()
+            val fromLibrary = (songs + likedSongs).map { it.artist }.distinct()
+                .filter { it.contains(q, ignoreCase = true) && it !in topNames }
+                .map { TopArtist(name = it, plays = 0, fallbackArtwork = null) }
+            (fromTop + fromLibrary).take(10)
+        }
+    }
+    val searchAlbums = remember(debouncedQuery, songs, likedSongs) {
+        val q = debouncedQuery.trim()
+        if (q.isBlank()) emptyList()
+        else (songs + likedSongs).distinctBy { it.id }
+            .groupBy { it.album }
+            .filter { (album, _) -> album.contains(q, ignoreCase = true) }
+            .map { (album, albumSongs) ->
+                ExploreAlbumResult(
+                    name = album,
+                    artist = albumSongs.first().artist,
+                    art = albumSongs.firstNotNullOfOrNull {
+                        it.albumArtUri ?: it.highResThumbnailUrl ?: it.thumbnailUrl
+                    },
+                    songs = albumSongs,
+                )
+            }
+            .sortedByDescending { it.songs.size }
+            .take(10)
+    }
+    val searchSongs = remember(debouncedQuery, songs, likedSongs) {
+        val q = debouncedQuery.trim()
+        if (q.isBlank()) emptyList()
+        else (songs + likedSongs).distinctBy { it.id }.filter {
             it.title.contains(q, ignoreCase = true) ||
             it.artist.contains(q, ignoreCase = true) ||
             it.album.contains(q, ignoreCase = true)
-        }.distinctBy { it.id }.take(50)
+        }.take(50)
+    }
+    val searchPlaylists = remember(debouncedQuery, playlists) {
+        val q = debouncedQuery.trim()
+        if (q.isBlank()) emptyList()
+        else playlists.filter { it.name.contains(q, ignoreCase = true) }.take(10)
     }
 
     val quickPicks = remember(filter, songs, likedSongs, downloadedSongs, recentlyPlayed) {
@@ -159,6 +217,8 @@ fun ExploreContent(
             )
         }
 
+        // Browse content hides while searching; the results take the whole page.
+        if (!isSearching) {
         item(key = "explore_chips") {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
@@ -411,19 +471,65 @@ fun ExploreContent(
                 }
             }
         }
+        } // !isSearching
 
-        if (quickPicks.isEmpty() && spotlightArtist == null) {
-            item(key = "explore_empty") {
-                Text(
-                    stringResource(R.string.explore_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
-                )
+        if (isSearching) {
+            // Live results: Artists, Albums, Songs, Playlists sections.
+            if (searchArtists.isNotEmpty()) {
+                item(key = "search_artists_header") {
+                    ExploreSearchSectionHeader(R.string.section_artists)
+                }
+                item(key = "search_artists_rail") {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(searchArtists, key = { "sartist_${it.name}" }) { artist ->
+                            ExploreArtistCard(
+                                artist = artist,
+                                photo = artistPhotos[artist.name] ?: artist.fallbackArtwork,
+                                onClick = { onArtistClick(artist.name) },
+                            )
+                        }
+                    }
+                }
             }
-        } else {
-            // Search results: songs matching the query.
-            if (searchResults.isEmpty()) {
+            if (searchAlbums.isNotEmpty()) {
+                item(key = "search_albums_header") {
+                    ExploreSearchSectionHeader(R.string.section_albums)
+                }
+                items(searchAlbums, key = { "salbum_${it.name}" }) { album ->
+                    ExploreAlbumRow(
+                        album = album,
+                        onClick = { onAlbumClick(album.name) },
+                    )
+                }
+            }
+            if (searchSongs.isNotEmpty()) {
+                item(key = "search_songs_header") {
+                    ExploreSearchSectionHeader(R.string.section_songs)
+                }
+                items(searchSongs, key = { "ssong_${it.id}" }) { song ->
+                    ExploreSongRow(
+                        song = song,
+                        onClick = { onPlaySongs(searchSongs, song) },
+                    )
+                }
+            }
+            if (searchPlaylists.isNotEmpty()) {
+                item(key = "search_playlists_header") {
+                    ExploreSearchSectionHeader(R.string.section_playlists)
+                }
+                items(searchPlaylists, key = { "splaylist_${it.id}" }) { playlist ->
+                    ExplorePlaylistRow(
+                        playlist = playlist,
+                        onClick = { onPlaylistClick(playlist) },
+                    )
+                }
+            }
+            if (searchArtists.isEmpty() && searchAlbums.isEmpty() &&
+                searchSongs.isEmpty() && searchPlaylists.isEmpty()
+            ) {
                 item(key = "search_empty") {
                     Text(
                         stringResource(R.string.search_no_results),
@@ -432,37 +538,159 @@ fun ExploreContent(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
                     )
                 }
-            } else {
-                items(
-                    items = searchResults,
-                    key = { it.id },
-                ) { song ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPlaySongs(searchResults, song) }
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                song.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                song.artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
             }
+        } else if (quickPicks.isEmpty() && spotlightArtist == null) {
+            item(key = "explore_empty") {
+                Text(
+                    stringResource(R.string.explore_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExploreSearchSectionHeader(titleRes: Int) {
+    Text(
+        stringResource(titleRes),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun ExploreAlbumRow(
+    album: ExploreAlbumResult,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (album.art != null) {
+            AsyncImage(
+                model = album.art,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Spacer(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                album.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${album.artist} • ${album.songs.size} songs",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExploreSongRow(
+    song: Song,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                song.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                song.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExplorePlaylistRow(
+    playlist: PlaylistDisplayItem,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (playlist.thumbnailUrl != null) {
+            AsyncImage(
+                model = playlist.thumbnailUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Spacer(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                playlist.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val subtitle = buildString {
+                append(playlist.uploaderName)
+                if (playlist.itemCount >= 0) append(" • ${playlist.itemCount} songs")
+            }
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

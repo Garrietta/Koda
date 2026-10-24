@@ -1815,6 +1815,7 @@
     <string name="section_playlists">Playlists</string>
     <string name="section_artists">Artists</string>
     <string name="section_albums">Albums</string>
+    <string name="section_songs">Songs</string>
     <!-- Artist page sections backed by the YouTube Music artist browse -->
     <string name="ar_section_popular">Popular songs</string>
     <string name="ar_section_on_device">On this device</string>

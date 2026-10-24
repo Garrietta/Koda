@@ -1618,6 +1618,7 @@ fun HomeScreen(
                             newFromLiked = viewModel.exploreNewFromLiked.collectAsState().value,
                             subgenreShelves = viewModel.exploreSubgenreShelves.collectAsState().value,
                             recommendations = viewModel.exploreRecommendations.collectAsState().value,
+                            playlists = viewModel.userPlaylists.collectAsState().value,
                             onPlaySongs = { queue, start ->
                                 playerViewModel.playQueue(queue, start)
                                 showPlayerSheet = true
@@ -1626,6 +1627,16 @@ fun HomeScreen(
                             onArtistClick = { artist ->
                                 noteLibraryReturn()
                                 viewedArtistFromPlayer = artist
+                                goToTab(TAB_LIBRARY)
+                            },
+                            onPlaylistClick = { playlist ->
+                                noteLibraryReturn()
+                                viewedPlaylistFromHome = playlist
+                                goToTab(TAB_LIBRARY)
+                            },
+                            onAlbumClick = { album ->
+                                noteLibraryReturn()
+                                viewedAlbumFromPlayer = album
                                 goToTab(TAB_LIBRARY)
                             },
                             onArtistRadio = { artist ->
