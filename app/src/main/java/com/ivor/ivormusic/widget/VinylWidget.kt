@@ -154,9 +154,10 @@ private fun VinylContent(ui: PlayerWidgetUi) {
             }
             Spacer(modifier = GlanceModifier.width(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                StarburstPlayButton(isPlaying = playing, size = hero)
+                val buttonColor = ui.snapshot.artworkColor
+                FlowerPlayButton(isPlaying = playing, size = hero, color = buttonColor)
                 Spacer(modifier = GlanceModifier.height(6.dp))
-                PuffyNextButton(size = side)
+                BunNextButton(size = side, color = buttonColor)
             }
         }
     }
@@ -190,19 +191,23 @@ private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: Colo
 }
 
 /**
- * Expressive transport buttons: the official M3E Sunny in amber, the official
- * M3E Puffy in white — per the M3E mockup. The shape is baked into a bitmap
- * background with the icon drawn over it; the whole thing is the tap target.
+ * Expressive transport buttons: the official M3E Flower for play, the official
+ * M3E Bun for next - both tinted by the dynamic color plucked from the album
+ * art (falling back to the fixed amber/white when there is none). The shape is
+ * baked into a bitmap background with the icon drawn over it; the whole thing
+ * is the tap target. The icon tint follows the button's luminance so it always
+ * reads.
  */
 @Composable
-private fun StarburstPlayButton(isPlaying: Boolean, size: Dp) {
+private fun FlowerPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
-    val bg = androidx.compose.runtime.remember(px) {
-        filledPath(WidgetShapes.sunny(px.toFloat()), px, 0xFFFFB300.toInt())
+    val bgColor = color ?: 0xFFFFB300.toInt()
+    val bg = androidx.compose.runtime.remember(px, bgColor) {
+        filledPath(WidgetShapes.flower(px.toFloat()), px, bgColor)
     }
-    val dark = ColorProvider(Color(0xFF1A1A1A.toInt()))
+    val iconTint = ColorProvider(Color(if (isLight(bgColor)) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()))
     Box(
         modifier = GlanceModifier
             .size(size)
@@ -224,21 +229,22 @@ private fun StarburstPlayButton(isPlaying: Boolean, size: Dp) {
                 if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play
             ),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(dark),
+            colorFilter = ColorFilter.tint(iconTint),
             modifier = GlanceModifier.size(size * 0.42f),
         )
     }
 }
 
 @Composable
-private fun PuffyNextButton(size: Dp) {
+private fun BunNextButton(size: Dp, color: Int?) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
-    val bg = androidx.compose.runtime.remember(px) {
-        filledPath(WidgetShapes.puffy(px.toFloat()), px, 0xFFFFFFFF.toInt())
+    val bgColor = color ?: 0xFFFFFFFF.toInt()
+    val bg = androidx.compose.runtime.remember(px, bgColor) {
+        filledPath(WidgetShapes.bun(px.toFloat()), px, bgColor)
     }
-    val dark = ColorProvider(Color(0xFF1A1A1A.toInt()))
+    val iconTint = ColorProvider(Color(if (isLight(bgColor)) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()))
     val nextDesc = widgetString(R.string.widget_action_next)
     Box(
         modifier = GlanceModifier
@@ -255,10 +261,18 @@ private fun PuffyNextButton(size: Dp) {
         Image(
             provider = ImageProvider(R.drawable.ic_media_next),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(dark),
+            colorFilter = ColorFilter.tint(iconTint),
             modifier = GlanceModifier.size(size * 0.42f),
         )
     }
+}
+
+/** True when [color] is light enough for a dark icon to read on it. */
+private fun isLight(color: Int): Boolean {
+    val r = (color shr 16) and 0xFF
+    val g = (color shr 8) and 0xFF
+    val b = color and 0xFF
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
 }
 
 /** A record is dark whichever way the theme faces. */
