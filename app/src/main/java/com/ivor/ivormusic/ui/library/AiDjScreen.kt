@@ -335,6 +335,10 @@ fun AiDjScreen(
                 val currentMix = mix
                 val currentError = error
                 val trackCount = currentMix?.tracks?.size ?: library.size
+                // Read here, in the composable body: the LazyColumn's DSL
+                // scope below is not a @Composable context, so a
+                // CompositionLocal read inside it does not compile.
+                val nowPlaying = com.ivor.ivormusic.ui.components.LocalNowPlaying.current
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -451,7 +455,6 @@ fun AiDjScreen(
                     }
                     if (currentMix != null) {
                         val tracks = currentMix.tracks
-                        val nowPlaying = com.ivor.ivormusic.ui.components.LocalNowPlaying.current
                         item {
                             TrackSectionHeader(
                                 countLabel = if (tracks.size == 1) "1 track" else "${tracks.size} tracks",
