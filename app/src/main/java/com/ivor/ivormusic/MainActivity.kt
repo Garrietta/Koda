@@ -293,12 +293,19 @@ class MainActivity : ComponentActivity() {
                 albumArtUri = themeSong?.let { it.albumArtUri?.toString() ?: it.thumbnailUrl }
             )
 
+            // One stack for the status bar, owned here so it survives tab
+            // switches: screens push their top background while up, the
+            // theme's single SideEffect applies whichever is on top.
+            val statusBarStack = androidx.compose.runtime.remember {
+                com.ivor.ivormusic.ui.theme.StatusBarBackgroundStack()
+            }
             IvorMusicTheme(
                 darkTheme = isDarkTheme,
                 colorPalette = colorPalette,
                 amoledDark = amoledTheme,
                 uiScale = uiScale,
                 paletteStyle = paletteStyle,
+                statusBarStack = statusBarStack,
                 artworkSeed = albumSeed,
                 // Music mode only: in video mode the app keeps its palette, and
                 // a playlist page there tints its accents as it did before.

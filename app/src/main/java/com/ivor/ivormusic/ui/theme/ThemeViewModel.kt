@@ -124,10 +124,16 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setColorPalette(paletteId: String) {
         themePreferences.setColorPalette(paletteId)
+        // The vinyl widget's buttons draw the app palette's primary, so a
+        // palette change has to redraw the widgets, not wait for the next
+        // playback push to happen to re-render them.
+        com.ivor.ivormusic.widget.PlayerWidgets.pushAll(getApplication())
     }
 
     fun setPaletteStyle(style: PaletteStyle) {
         themePreferences.setPaletteStyle(style)
+        // Same redraw as a palette change: the buttons follow the style.
+        com.ivor.ivormusic.widget.PlayerWidgets.pushAll(getApplication())
     }
 
     fun setLoadLocalSongs(load: Boolean) {

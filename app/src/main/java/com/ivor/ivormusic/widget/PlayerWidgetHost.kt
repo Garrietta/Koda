@@ -180,9 +180,11 @@ object PlayerWidgets {
      * snapshot if no artwork or extraction fails. Runs on IO dispatcher.
      *
      * Two roles, never one tint: [artworkColor] is the vibrant swatch for the
-     * buttons, [artworkLabelColor] is a second, different swatch for the vinyl
-     * widget's center-label sticker. A stored snapshot from before the label
-     * field existed still gets its label filled in here.
+     * vinyl widget's disc (darkened, translucent), [artworkLabelColor] is a
+     * second, different swatch for the vinyl widget's center-label sticker.
+     * The transport buttons take the app palette, not the album. A stored
+     * snapshot from before the label field existed still gets its label
+     * filled in here.
      */
     private suspend fun enrichWithArtworkColor(
         context: Context,

@@ -81,14 +81,16 @@ import kotlin.math.pow
  * that could have filled the window. The row fills the window and centers
  * its content, so any leftover is shared, never all below.
  *
- * **Color comes from the album, in two different roles.** The buttons take
- * the vibrant swatch; the center-label sticker takes a second, different
- * swatch, so the two never share one tint. The disc itself is that vibrant
- * darkened and translucent, like a fancy coloured vinyl - the translucency
- * is unchanged, the darker pick keeps real contrast against the wallpaper -
- * but the sticker stays fully opaque, so its print stays solid and legible
- * over the see-through disc. The rotation's tint needs API 31; on 30 the
- * record is drawn still rather than turning in the wrong colour.
+ * **Color comes from two places, never mixed.** The buttons take the app's
+ * selected palette - the same scheme the app UI draws in, so changing the
+ * palette style in Settings recolors them with it. The record keeps album
+ * colors: the center-label sticker takes one album swatch, the disc a
+ * second, darkened, translucent one, like a fancy coloured vinyl - the
+ * translucency is unchanged, the darker pick keeps real contrast against
+ * the wallpaper - but the sticker stays fully opaque, so its print stays
+ * solid and legible over the see-through disc. The rotation's tint needs
+ * API 31; on 30 the record is drawn still rather than turning in the wrong
+ * colour.
  *
  * **The glyph ink is baked, not tinted.** The play/pause/next glyph is drawn
  * into the button bitmap itself in black or white, whichever contrasts
@@ -152,10 +154,12 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     val armReach = record / 4
     val stage = sleeve + record / 2 + armReach
 
-    // The buttons and the sticker take two different album colours: vibrant
-    // for the transport, a second swatch for the label. The disc takes the
-    // vibrant again, but translucent - a different role, not a third tint.
-    val buttonColor = ui.snapshot.artworkColor
+    // The buttons take the app palette's primary - the same scheme the app
+    // UI draws in, resolved from the palette style in Settings, so they
+    // follow a palette change (the palette setters push a widget redraw).
+    // The record keeps album colors: a second album swatch for the label,
+    // the darkened vibrant translucent for the disc.
+    val buttonColor = GlanceTheme.colors.primary.toArgb()
     val labelColor = ui.snapshot.artworkLabelColor?.let { ColorProvider(Color(it)) }
         ?: GlanceTheme.colors.primaryContainer
 
@@ -178,7 +182,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     VinylRecord(
                         size = record,
                         playing = playing,
-                        discColor = discColor(buttonColor),
+                        discColor = discColor(ui.snapshot.artworkColor),
                         labelColor = labelColor,
                     )
                 }
@@ -246,19 +250,18 @@ private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: Colo
 /**
  * Expressive transport buttons, deliberately different shapes: the official
  * M3E Sunny for play - points, unmistakable at a glance - against the
- * official M3E Flower for next, rounded petals. Both tinted by the dynamic
- * vibrant color plucked from the album art (falling back to the fixed
- * amber/white when there is none). The shape AND the glyph are baked into
- * one bitmap, so the glyph ink is exactly the contrast color for that
- * button's color - no runtime tint for a launcher to drop. The whole
+ * official M3E Flower for next, rounded petals. Both tinted by the app
+ * palette's primary, never the album. The shape AND the glyph are baked
+ * into one bitmap, so the glyph ink is exactly the contrast color for
+ * that button's color - no runtime tint for a launcher to drop. The whole
  * bitmap is the tap target.
  */
 @Composable
-private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
+private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
-    val bgColor = color ?: 0xFFFFB300.toInt()
+    val bgColor = color
     val glyphRes = if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play
     val bg = androidx.compose.runtime.remember(px, bgColor, glyphRes) {
         transportButtonBitmap(context, WidgetShapes.sunny(px.toFloat()), px, bgColor, glyphRes)
@@ -283,11 +286,11 @@ private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
 }
 
 @Composable
-private fun FlowerNextButton(size: Dp, color: Int?) {
+private fun FlowerNextButton(size: Dp, color: Int) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
-    val bgColor = color ?: 0xFFFFFFFF.toInt()
+    val bgColor = color
     val bg = androidx.compose.runtime.remember(px, bgColor) {
         transportButtonBitmap(context, WidgetShapes.flower(px.toFloat()), px, bgColor, R.drawable.ic_media_next)
     }

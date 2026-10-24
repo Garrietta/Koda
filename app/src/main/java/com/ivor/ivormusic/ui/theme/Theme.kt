@@ -24,8 +24,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -178,6 +178,12 @@ fun IvorMusicTheme(
     artworkSeed: Color? = null,
     /** Album colours are set to "Whole app", whether or not a seed is in hand right now. */
     artworkWholeApp: Boolean = false,
+    /**
+     * The stack screens push their top background onto (see
+     * [StatusBarBackgroundStack]); null outside the activity, where the
+     * theme default is the only value there is.
+     */
+    statusBarStack: StatusBarBackgroundStack? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -202,9 +208,18 @@ fun IvorMusicTheme(
     }
     val colorScheme = rememberFadedColorScheme(targetScheme, fadeKey = artworkSeed)
 
-    // The theme's own status bar call, shared with per-screen overrides so
-    // they can restore exactly this when they leave.
-    val statusBarLightIcons = colorScheme.background.luminance() > 0.5f
+    // The theme's own status bar call. It is the ONLY writer of the flag:
+    // screens don't write it themselves, they push their top background
+    // onto [statusBarStack] and this effect applies whichever is on top
+    // (or the scheme background when the stack is empty). That ends the
+    // leak class the per-screen effects had: a page that restored a default
+    // captured at composition time could write a stale value after the song
+    // changed under it, and nothing re-asserted the screen underneath -
+    // which is how light icons survived onto the light Home page. Here a
+    // stack change recomposes the theme (the read below), so the single
+    // writer re-runs with the live top value, on every change.
+    val statusBarTop = statusBarStack?.current ?: colorScheme.background
+    val statusBarLightIcons = statusBarTop.luminance() > 0.5f
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -250,7 +265,7 @@ fun IvorMusicTheme(
         // which is invisible in dark theme.
         CompositionLocalProvider(
             LocalAppColorScheme provides colorScheme,
-            LocalStatusBarLightIcons provides statusBarLightIcons,
+            LocalStatusBarStack provides statusBarStack,
             LocalAlbumTheming provides AlbumTheming(artworkWholeApp, paletteStyle, darkTheme && amoledDark),
             androidx.compose.material3.LocalContentColor provides colorScheme.onBackground,
         ) {
@@ -274,14 +289,32 @@ data class AlbumTheming(val wholeApp: Boolean, val style: PaletteStyle, val amol
 val LocalAlbumTheming = staticCompositionLocalOf { AlbumTheming(false, PaletteStyle.TONAL_SPOT, false) }
 
 /**
- * The status bar appearance the theme itself would choose for the scheme
- * background, for screens that override it to restore on dispose: a plain
- * SideEffect override has no restore, so leaving an overriding screen used
- * to leak its icons onto whatever screen came next (a dark playlist page's
- * light icons persisting onto the light Home page, because tab navigation
- * never recomposes the root theme).
+ * The stack of backgrounds currently claiming the status bar, innermost
+ * screen last. Screens push their top background while they are up and pop
+ * it when they leave; the theme's single SideEffect applies whichever is on
+ * top, or the scheme background when the stack is empty.
+ *
+ * A stack, not a push-plus-restore: the previous design restored a default
+ * captured when the overriding screen composed, which went stale whenever
+ * the song (and with it the scheme) changed under that screen — leaving
+ * left a stale value on the screen underneath, and nothing re-asserted it.
+ * Here leaving a screen can only reveal the live value underneath, and
+ * every push/pop recomposes the theme, so the one writer re-runs.
  */
-val LocalStatusBarLightIcons = staticCompositionLocalOf { false }
+class StatusBarBackgroundStack {
+    private val stack = mutableStateListOf<Color>()
+    val current: Color? get() = stack.lastOrNull()
+    fun push(background: Color) {
+        stack.add(background)
+    }
+
+    fun pop(background: Color) {
+        val idx = stack.lastIndexOf(background)
+        if (idx >= 0) stack.removeAt(idx)
+    }
+}
+
+val LocalStatusBarStack = staticCompositionLocalOf<StatusBarBackgroundStack?> { null }
 
 /**
  * Status bar icons for a screen whose top is NOT the scheme background:
@@ -291,23 +324,28 @@ val LocalStatusBarLightIcons = staticCompositionLocalOf { false }
  * takes dark icons (isAppearanceLightStatusBars = true), a dark one light
  * icons.
  *
- * Self-restoring: the previous plain SideEffect had no restore, so leaving
- * an overriding screen leaked its icons onto the next screen — tab
- * navigation never recomposes the root theme, so the theme default never
- * got a chance to re-assert. On dispose this writes back the theme default
- * as it stands at that moment (the playing song, and the default with it,
- * can change while the screen is up).
+ * This only pushes onto the theme's stack; the theme's SideEffect is the
+ * one writer of the flag, so no ordering race and no stale restore can
+ * leave the wrong icons on the screen underneath.
  */
 @Composable
 fun StatusBarAppearance(background: Color) {
-    val view = LocalView.current
-    val defaultLightIcons by rememberUpdatedState(LocalStatusBarLightIcons.current)
-    DisposableEffect(background) {
-        val window = if (!view.isInEditMode) (view.context as Activity).window else null
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        controller?.isAppearanceLightStatusBars = background.luminance() > 0.5f
-        onDispose {
-            controller?.isAppearanceLightStatusBars = defaultLightIcons
+    val stack = LocalStatusBarStack.current
+    if (stack != null) {
+        DisposableEffect(background) {
+            stack.push(background)
+            onDispose { stack.pop(background) }
+        }
+    } else {
+        // Outside IvorMusicTheme (previews): no stack, no theme default to
+        // restore — write directly.
+        val view = LocalView.current
+        SideEffect {
+            if (!view.isInEditMode) {
+                val window = (view.context as Activity).window
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                    background.luminance() > 0.5f
+            }
         }
     }
 }
