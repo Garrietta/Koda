@@ -81,6 +81,18 @@ internal object WidgetShapes {
     fun sunny(size: Float): Path = official(MaterialShapes.Sunny, size)
 
     /**
+     * The official M3E Flower - rounded petals, symmetric by construction.
+     * A clean, bold shape for the play button at widget size.
+     */
+    fun flower(size: Float): Path = official(MaterialShapes.Flower, size)
+
+    /**
+     * The official M3E Bun - a soft, rounded shape, symmetric by construction.
+     * A clean shape for the next button that cannot read malskewed.
+     */
+    fun bun(size: Float): Path = official(MaterialShapes.Bun, size)
+
+    /**
      * The official M3E SoftBurst - a 10-point softly rounded starburst. For
      * the record's center label.
      */
