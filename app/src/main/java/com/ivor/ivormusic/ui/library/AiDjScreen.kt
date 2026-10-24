@@ -109,6 +109,11 @@ fun AiDjScreen(
     onShuffleQueue: (List<Song>) -> Unit = {},
     onOpenSettings: () -> Unit,
     contentPadding: PaddingValues,
+    // A tab has nowhere to go back to: the pill-bar tab hides the back arrow.
+    showBack: Boolean = true,
+    // Hoisted by the caller when the screen is a tab, so re-tapping the tab
+    // scrolls to the top and the position survives a tab switch.
+    listState: androidx.compose.foundation.lazy.LazyListState? = null,
 ) {
     val context = LocalContext.current
     val repository = remember { AiDjRepository(context.applicationContext) }
@@ -223,7 +228,7 @@ fun AiDjScreen(
     // has scrolled away drives the app bar fade and the artwork parallax.
     // Kept as State objects read only inside graphicsLayer/drawBehind lambdas,
     // so a scroll never recomposes the page.
-    val listState = rememberLazyListState()
+    val listState = listState ?: rememberLazyListState()
     val headerCollapse = remember {
         derivedStateOf {
             val header = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 0 }
@@ -258,11 +263,13 @@ fun AiDjScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.action_back),
-                            )
+                        if (showBack) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = stringResource(R.string.action_back),
+                                )
+                            }
                         }
                     },
                     actions = {

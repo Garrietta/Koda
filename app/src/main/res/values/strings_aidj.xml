@@ -2,6 +2,7 @@
 <resources>
     <!-- AI DJ: Gemini-powered playlist generation. -->
     <string name="aidj_title">AI DJ</string>
+    <string name="aidj_tab_label">AI DJ</string>
     <string name="aidj_intro">The DJ reads your library and crafts a mix around your custom prompt, with an intro line for every pick.</string>
     <string name="aidj_configured">Ready</string>
     <string name="aidj_not_configured">API key needed</string>

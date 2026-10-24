@@ -217,6 +217,12 @@ private const val TAB_HOME = 0
 private const val TAB_EXPLORE = 1
 private const val TAB_SEARCH = 2
 private const val TAB_LIBRARY = 3
+/**
+ * The AI DJ's own pill-bar tab, left of Home. It renders AiDjScreen directly
+ * as tab content (branch 4), with the same AnimatedContent page transition as
+ * every other tab — no Library hand-off, no FAB.
+ */
+private const val TAB_AIDJ = 4
 
 /**
  * The widest the collapsed music pill grows beside a rail. Past this it stops
@@ -455,7 +461,7 @@ fun HomeScreen(
     val visualTabOrder = if (videoMode) {
         videoHomeConfiguration.destinationOrder.map(VideoHomeDestination::tabId)
     } else {
-        listOf(TAB_HOME, TAB_EXPLORE, TAB_LIBRARY)
+        listOf(TAB_AIDJ, TAB_HOME, TAB_EXPLORE, TAB_LIBRARY)
     }
 
     // A destination can be hidden while it is selected (including from the
@@ -538,6 +544,10 @@ fun HomeScreen(
     val musicLibraryScrollState = rememberLazyListState()
     val videoLibraryScrollState = rememberLazyListState()
     val exploreScrollState = rememberLazyListState()
+    // The AI DJ tab's list, hoisted for the same reason as every other tab's:
+    // re-tapping the tab scrolls it to the top, and the position survives a
+    // tab switch instead of resetting.
+    val aiDjScrollState = rememberLazyListState()
 
     // Which of the above the visible tab is currently driving.
     val currentTabScrollState = when (selectedTab) {
@@ -545,6 +555,7 @@ fun HomeScreen(
         TAB_EXPLORE -> if (videoMode) videoSearchScrollState else exploreScrollState
         TAB_SEARCH -> if (videoMode) videoSearchScrollState else musicSearchScrollState
         TAB_LIBRARY -> if (videoMode) subscriptionsScrollState else musicLibraryScrollState
+        TAB_AIDJ -> aiDjScrollState
         else -> if (videoMode) videoLibraryScrollState else musicLibraryScrollState
     }
 
@@ -680,133 +691,8 @@ fun HomeScreen(
     var viewedVideoPlaylistFromHome by remember {
         mutableStateOf<com.ivor.ivormusic.data.VideoPlaylist?>(null)
     }
-    // The Home tab's DJ card: opens the Library's AI DJ route, consumed by
-    // LibraryContent on arrival like the playlist hand-off above.
-    var openAiDjFromHome by remember { mutableStateOf(false) }
-
-    // The DJ emblem regenerates the mix right away: a 60-song set from the
-    // last 30 plays plus liked context, with spoken transitions only at
-    // notable mood shifts. The fresh mix is cached and starts playing.
-    // Failures fall back to the DJ screen, which explains what went wrong.
-    var djInstantLoading by remember { mutableStateOf(false) }
-    val djContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
-    // Background DJ cache: pre-computes the mix and voice intros on launch,
-    // so the FAB plays instantly from cache.
-    val djCacheManager = remember(djContext) {
-        com.ivor.ivormusic.data.DjCacheManager(djContext)
-    }
-    // Start pre-computation on launch (background, non-blocking).
-    androidx.compose.runtime.LaunchedEffect(djCacheManager) {
-        djCacheManager.startPrecompute(
-            getRecent = { viewModel.getLastPlayedSongs(30) },
-            getLiked = { viewModel.likedSongs.value },
-        )
-    }
-    // Cleanup on dispose.
-    androidx.compose.runtime.DisposableEffect(djCacheManager) {
-        onDispose { djCacheManager.shutdown() }
-    }
-    // Save DJ position when the mix stops being the active queue.
-    // This enables resume-from-nearest-intro on next FAB press.
-    val isDjMixPlayingState by playerViewModel.isDjMixPlaying.collectAsState()
-    var wasDjMixPlaying by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(isDjMixPlayingState) {
-        if (wasDjMixPlaying && !isDjMixPlayingState) {
-            // DJ just stopped — save the position
-            val cached = djCacheManager.getCachedMix()
-            if (cached != null) {
-                val index = playerViewModel.getCurrentQueueIndex()
-                djCacheManager.saveDjPosition(cached, index)
-            }
-        }
-        wasDjMixPlaying = isDjMixPlayingState
-    }
-    fun regenerateDj() {
-        if (djInstantLoading) return
-        djInstantLoading = true
-        scope.launch {
-            try {
-                val repository = com.ivor.ivormusic.data.AiDjRepository(djContext)
-                val voiceRepository = com.ivor.ivormusic.data.DjVoiceRepository(djContext)
-                val recent = viewModel.getLastPlayedSongs(30)
-                val liked = viewModel.likedSongs.value
-                repository.generateInstantMix(recent, liked).fold(
-                    onSuccess = { mix ->
-                        repository.cacheMix(mix)
-                        val queue = if (repository.djVoiceEnabled.value) {
-                            voiceRepository.buildQueueWithIntros(mix)
-                        } else {
-                            mix.tracks.map { it.song }
-                        }
-                        if (queue.isNotEmpty()) {
-                            playerViewModel.playQueue(queue, queue.first())
-                            showPlayerSheet = true
-                        } else {
-                            noteLibraryReturn()
-                            openAiDjFromHome = true
-                            goToTab(3)
-                        }
-                    },
-                    onFailure = {
-                        noteLibraryReturn()
-                        openAiDjFromHome = true
-                        goToTab(3)
-                    },
-                )
-            } finally {
-                djInstantLoading = false
-            }
-        }
-    }
-    /**
-     * Play the DJ mix instantly from cache, bypassing the config screen.
-     * Tapping the button NEVER regenerates: with no cached mix it opens the
-     * AI DJ screen, where a fresh mix is built only from the explicit button.
-     */
-    fun playDjFromCache() {
-        if (djInstantLoading) return
-        // If the DJ mix is already playing, the FAB is a pause/play toggle —
-        // never restart the playlist.
-        if (playerViewModel.isDjMixPlaying.value) {
-            playerViewModel.togglePlayPause()
-            return
-        }
-        // No cached mix: open the AI DJ screen so one can be built
-        // explicitly. A tap never regenerates on its own.
-        fun openDjScreenForNewMix() {
-            noteLibraryReturn()
-            openAiDjFromHome = true
-            goToTab(TAB_LIBRARY)
-        }
-        val cached = djCacheManager.getCachedMix()
-        if (cached == null) {
-            openDjScreenForNewMix()
-            return
-        }
-        djInstantLoading = true
-        scope.launch {
-            try {
-                val queue = djCacheManager.buildQueueFromCache(cached)
-                if (queue.isNotEmpty()) {
-                    // Resume from nearest DJ intro before last position, if available.
-                    val savedPos = djCacheManager.getSavedDjPosition(cached)
-                    val startIndex = if (savedPos != null && savedPos < queue.size) {
-                        djCacheManager.findResumeIntroIndex(queue, savedPos)
-                    } else {
-                        0
-                    }
-                    playerViewModel.playDjMix(queue, startIndex)
-                    showPlayerSheet = true
-                    // Keep caching upcoming intros ahead of playback.
-                    djCacheManager.startAheadCaching(cached)
-                } else {
-                    openDjScreenForNewMix()
-                }
-            } finally {
-                djInstantLoading = false
-            }
-        }
-    }
+    // The AI DJ lives in the pill bar now (TAB_AIDJ): the Home tile, the FAB
+    // and their instant-play/regenerate machinery are gone.
 
     // A playlist link shared or opened into the app, which lands at
     // MainActivity and cannot reach the tab state from there. Same hand-off as
@@ -1296,6 +1182,7 @@ fun HomeScreen(
                     TAB_EXPLORE -> 3
                     TAB_SEARCH -> 1
                     TAB_LIBRARY -> 2
+                    TAB_AIDJ -> 4
                     else -> targetTab
                 }
                 // Each page draws the mode it was keyed on, never the live one.
@@ -1430,13 +1317,6 @@ fun HomeScreen(
                                                     selectedTab = TAB_LIBRARY
                                                 },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
-                                                onOpenAiDj = {
-                                                    noteLibraryReturn()
-                                                    openAiDjFromHome = true
-                                                    goToTab(TAB_LIBRARY)
-                                                },
-                                                onRegenerateDj = { regenerateDj() },
-                                                djLoading = djInstantLoading,
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
@@ -1708,8 +1588,6 @@ fun HomeScreen(
                                 onInitialAlbumConsumed = { viewedAlbumFromPlayer = null },
                                 onStatsClick = onNavigateToStats,
                                 onOpenAiDjSettings = onNavigateToAiDjSettings,
-                                initialAiDj = openAiDjFromHome,
-                                onInitialAiDjConsumed = { openAiDjFromHome = false },
                                 onOpenChannel = onOpenChannel,
                                 onSongLongPress = { song -> songOptionsTarget = song },
                                 onEnqueueSong = { song, playNext ->
@@ -1849,6 +1727,33 @@ fun HomeScreen(
                             )
                         }
                     }
+                    4 -> if (!videoMode) {
+                        // Music mode: the AI DJ's own tab. The page renders
+                        // directly here with the same AnimatedContent page
+                        // transition as every other tab - no Library
+                        // hand-off, no FAB. Back is hidden: a tab has nowhere
+                        // to go back to.
+                        com.ivor.ivormusic.ui.library.AiDjScreen(
+                            viewModel = viewModel,
+                            onBack = {},
+                            showBack = false,
+                            onPlayQueue = { queue, start ->
+                                playerViewModel.playQueue(queue, start)
+                                showPlayerSheet = true
+                            },
+                            onPlayDjMix = { songs ->
+                                playerViewModel.playDjMix(songs)
+                                showPlayerSheet = true
+                            },
+                            onShuffleQueue = { songs ->
+                                playerViewModel.playQueueShuffled(songs)
+                                showPlayerSheet = true
+                            },
+                            onOpenSettings = onNavigateToAiDjSettings,
+                            contentPadding = listContentPadding,
+                            listState = aiDjScrollState,
+                        )
+                    }
                 }
             }
         } else {
@@ -1953,6 +1858,7 @@ fun HomeScreen(
                 }
             }
         } else listOf(
+            Triple(TAB_AIDJ, stringResource(R.string.aidj_tab_label), Pair(Icons.Rounded.AutoAwesome, Icons.Outlined.AutoAwesome)),
             Triple(TAB_HOME, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
             Triple(TAB_EXPLORE, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore)),
             Triple(TAB_LIBRARY, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic))
@@ -2136,47 +2042,8 @@ fun HomeScreen(
             )
         }
 
-        // AI DJ floating action button: squircle, headphones emblem, bottom-right
-        // next to the nav pill (or in the rail layout's content corner).
-        // 56dp to match the pill bar height; 32dp emblem for better proportions.
-        // Tap plays instantly from cache (or toggles pause/play if the DJ mix is
-        // already running); long-press opens the DJ screen.
-        // Hides with the pill bar on scroll: fades and slides down using the
-        // toolbar's hidden fraction, so it never overlaps content.
-        if (!nonExpressiveNavigationBar) {
-            val djHiddenFraction = if (useRail) 0f else floatingToolbarState.hiddenFraction()
-            androidx.compose.material3.Surface(
-                modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(bottom = 20.dp, end = 20.dp)
-                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) {
-                        // Slide down with the toolbar, plus extra to fully clear
-                        // the 56dp button off-screen when fully hidden.
-                        (floatingToolbarState.offset + 80.dp.toPx() * djHiddenFraction).toDp()
-                    })
-                    .alpha(1f - djHiddenFraction)
-                    .size(56.dp)
-                    .combinedClickable(
-                        onClick = { playDjFromCache() },
-                        onLongClick = {
-                            noteLibraryReturn()
-                            openAiDjFromHome = true
-                            goToTab(TAB_LIBRARY)
-                        },
-                    ),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                color = androidx.compose.material3.MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onTertiaryContainer,
-                shadowElevation = 6.dp,
-            ) {
-                DjEmblem(
-                    emblemSize = 32.dp,
-                    // DjEmblem handles its own click; we want the FAB's.
-                    onClick = null,
-                )
-            }
-        }
+        // The AI DJ lives in the pill bar now (TAB_AIDJ, left of Home): the
+        // floating DJ button is gone.
 
         // Published for the video overlay, which is drawn above the NavHost and
         // therefore above this player. Cleared on dispose as well as on
