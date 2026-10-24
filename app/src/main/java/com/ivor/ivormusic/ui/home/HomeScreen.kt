@@ -1647,6 +1647,7 @@ fun HomeScreen(
                                     showPlayerSheet = true
                                 }
                             },
+                            viewModel = viewModel,
                             contentPadding = listContentPadding,
                             listState = exploreScrollState,
                         )

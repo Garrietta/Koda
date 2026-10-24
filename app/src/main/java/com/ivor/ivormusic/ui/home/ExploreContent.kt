@@ -50,9 +50,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ivor.ivormusic.R
+import com.ivor.ivormusic.data.ArtistItem
 import com.ivor.ivormusic.data.PlaylistDisplayItem
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.data.SubgenreShelf
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 
 private enum class ExploreFilter {
@@ -65,6 +67,8 @@ private data class ExploreAlbumResult(
     val artist: String,
     val art: Any?,
     val songs: List<Song>,
+    /** Set for YouTube Music albums: opens via the playlist hand-off. */
+    val ytmItem: PlaylistDisplayItem? = null,
 )
 
 /**
@@ -90,6 +94,7 @@ fun ExploreContent(
     onArtistRadio: (String) -> Unit,
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onAlbumClick: (String) -> Unit = {},
+    viewModel: HomeViewModel,
     contentPadding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
 ) {
@@ -104,8 +109,46 @@ fun ExploreContent(
     }
     val isSearching = debouncedQuery.trim().isNotBlank()
 
+    // YouTube Music results: Explore search queries all of YouTube Music,
+    // not just the local library — the same APIs the Search screen uses,
+    // fired once the query settles. Local matches merge in below; the
+    // token guard keeps a slow earlier fetch from clobbering a newer one.
+    var ytmSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var ytmArtists by remember { mutableStateOf<List<ArtistItem>>(emptyList()) }
+    var ytmAlbums by remember { mutableStateOf<List<PlaylistDisplayItem>>(emptyList()) }
+    var ytmPlaylists by remember { mutableStateOf<List<PlaylistDisplayItem>>(emptyList()) }
+    var ytmLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(debouncedQuery) {
+        val q = debouncedQuery.trim()
+        if (q.isBlank()) {
+            ytmSongs = emptyList()
+            ytmArtists = emptyList()
+            ytmAlbums = emptyList()
+            ytmPlaylists = emptyList()
+            ytmLoading = false
+            return@LaunchedEffect
+        }
+        ytmLoading = true
+        val songsDeferred = async { viewModel.searchYouTube(q) }
+        val artistsDeferred = async { viewModel.searchArtists(q) }
+        val albumsDeferred = async { viewModel.searchAlbums(q) }
+        val playlistsDeferred = async { viewModel.searchPlaylists(q) }
+        val fetchedSongs = songsDeferred.await()
+        val fetchedArtists = artistsDeferred.await()
+        val fetchedAlbums = albumsDeferred.await()
+        val fetchedPlaylists = playlistsDeferred.await()
+        if (debouncedQuery.trim() == q) {
+            ytmSongs = fetchedSongs
+            ytmArtists = fetchedArtists
+            ytmAlbums = fetchedAlbums
+            ytmPlaylists = fetchedPlaylists
+            ytmLoading = false
+        }
+    }
+
     // Live search sections: the whole page becomes results while searching.
-    val searchArtists = remember(debouncedQuery, songs, likedSongs, topArtists) {
+    // Local library matches first, YouTube Music results filling the rest.
+    val searchArtists = remember(debouncedQuery, songs, likedSongs, topArtists, ytmArtists) {
         val q = debouncedQuery.trim()
         if (q.isBlank()) emptyList()
         else {
@@ -114,41 +157,67 @@ fun ExploreContent(
             val fromLibrary = (songs + likedSongs).map { it.artist }.distinct()
                 .filter { it.contains(q, ignoreCase = true) && it !in topNames }
                 .map { TopArtist(name = it, plays = 0, fallbackArtwork = null) }
-            (fromTop + fromLibrary).take(10)
+            val known = (fromTop + fromLibrary).map { it.name.lowercase() }.toSet()
+            val fromYtm = ytmArtists
+                .filter { it.name.lowercase() !in known }
+                .map { TopArtist(name = it.name, plays = 0, fallbackArtwork = it.thumbnailUrl) }
+            (fromTop + fromLibrary + fromYtm).take(10)
         }
     }
-    val searchAlbums = remember(debouncedQuery, songs, likedSongs) {
+    val searchAlbums = remember(debouncedQuery, songs, likedSongs, ytmAlbums) {
         val q = debouncedQuery.trim()
         if (q.isBlank()) emptyList()
-        else (songs + likedSongs).distinctBy { it.id }
-            .groupBy { it.album }
-            .filter { (album, _) -> album.contains(q, ignoreCase = true) }
-            .map { (album, albumSongs) ->
-                ExploreAlbumResult(
-                    name = album,
-                    artist = albumSongs.first().artist,
-                    art = albumSongs.firstNotNullOfOrNull {
-                        it.albumArtUri ?: it.highResThumbnailUrl ?: it.thumbnailUrl
-                    },
-                    songs = albumSongs,
-                )
+        else {
+            val local = (songs + likedSongs).distinctBy { it.id }
+                .groupBy { it.album }
+                .filter { (album, _) -> album.contains(q, ignoreCase = true) }
+                .map { (album, albumSongs) ->
+                    ExploreAlbumResult(
+                        name = album,
+                        artist = albumSongs.first().artist,
+                        art = albumSongs.firstNotNullOfOrNull {
+                            it.albumArtUri ?: it.highResThumbnailUrl ?: it.thumbnailUrl
+                        },
+                        songs = albumSongs,
+                    )
+                }
+                .sortedByDescending { it.songs.size }
+            val localNames = local.map { it.name.lowercase() }.toSet()
+            val fromYtm = ytmAlbums
+                .filter { it.name.lowercase() !in localNames }
+                .map {
+                    ExploreAlbumResult(
+                        name = it.name,
+                        artist = it.uploaderName,
+                        art = it.thumbnailUrl,
+                        songs = emptyList(),
+                        ytmItem = it,
+                    )
+                }
+            (local + fromYtm).take(10)
+        }
+    }
+    val searchSongs = remember(debouncedQuery, songs, likedSongs, ytmSongs) {
+        val q = debouncedQuery.trim()
+        if (q.isBlank()) emptyList()
+        else {
+            val local = (songs + likedSongs).distinctBy { it.id }.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                it.artist.contains(q, ignoreCase = true) ||
+                it.album.contains(q, ignoreCase = true)
             }
-            .sortedByDescending { it.songs.size }
-            .take(10)
+            val localIds = local.map { it.id }.toSet()
+            (local + ytmSongs.filter { it.id !in localIds }).take(50)
+        }
     }
-    val searchSongs = remember(debouncedQuery, songs, likedSongs) {
+    val searchPlaylists = remember(debouncedQuery, playlists, ytmPlaylists) {
         val q = debouncedQuery.trim()
         if (q.isBlank()) emptyList()
-        else (songs + likedSongs).distinctBy { it.id }.filter {
-            it.title.contains(q, ignoreCase = true) ||
-            it.artist.contains(q, ignoreCase = true) ||
-            it.album.contains(q, ignoreCase = true)
-        }.take(50)
-    }
-    val searchPlaylists = remember(debouncedQuery, playlists) {
-        val q = debouncedQuery.trim()
-        if (q.isBlank()) emptyList()
-        else playlists.filter { it.name.contains(q, ignoreCase = true) }.take(10)
+        else {
+            val local = playlists.filter { it.name.contains(q, ignoreCase = true) }
+            val localIds = local.map { it.id }.toSet()
+            (local + ytmPlaylists.filter { it.id !in localIds }).take(10)
+        }
     }
 
     val quickPicks = remember(filter, songs, likedSongs, downloadedSongs, recentlyPlayed) {
@@ -501,7 +570,10 @@ fun ExploreContent(
                 items(searchAlbums, key = { "salbum_${it.name}" }) { album ->
                     ExploreAlbumRow(
                         album = album,
-                        onClick = { onAlbumClick(album.name) },
+                        onClick = {
+                            album.ytmItem?.let { onPlaylistClick(it) }
+                                ?: onAlbumClick(album.name)
+                        },
                     )
                 }
             }
@@ -528,7 +600,8 @@ fun ExploreContent(
                 }
             }
             if (searchArtists.isEmpty() && searchAlbums.isEmpty() &&
-                searchSongs.isEmpty() && searchPlaylists.isEmpty()
+                searchSongs.isEmpty() && searchPlaylists.isEmpty() &&
+                !ytmLoading
             ) {
                 item(key = "search_empty") {
                     Text(
@@ -601,7 +674,10 @@ private fun ExploreAlbumRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${album.artist} • ${album.songs.size} songs",
+                album.ytmItem?.let { item ->
+                    if (item.itemCount >= 0) "${album.artist} • ${item.itemCount} songs"
+                    else album.artist
+                } ?: "${album.artist} • ${album.songs.size} songs",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
