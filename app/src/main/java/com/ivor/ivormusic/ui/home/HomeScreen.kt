@@ -642,6 +642,13 @@ fun HomeScreen(
     }
 
     val backgroundColor = MaterialTheme.colorScheme.background
+
+    // Home's own top is the scheme background, but the theme's SideEffect
+    // only reruns when theme inputs change — so a playlist page's override
+    // used to leak light icons onto this light page after navigating back.
+    // Declaring it here makes Home self-asserting instead of trusting that
+    // the theme effect ran last.
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(backgroundColor)
     
     // Loading state for playlist fetch
     var isPlaylistLoading by remember { mutableStateOf(false) }

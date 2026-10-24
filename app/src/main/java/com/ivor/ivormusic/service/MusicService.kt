@@ -41,6 +41,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.ivor.ivormusic.MainActivity
 import android.media.audiofx.AudioEffect
 import com.ivor.ivormusic.data.AiDjRepository
+import com.ivor.ivormusic.data.isStaleDjIntro
 import com.ivor.ivormusic.data.CacheManager
 import com.ivor.ivormusic.data.DjVoiceRepository
 import com.ivor.ivormusic.data.DownloadRepository
@@ -1994,6 +1995,9 @@ class MusicService : MediaLibraryService() {
             startPositionMs = saved.positionMs
         } else {
             val lastSong = themePreferences.getLastPlayedSong() ?: return null
+            // A pre-fix DJ intro as the last song would resume showing — and
+            // speaking — its session number; no resumption beats that.
+            if (isStaleDjIntro(lastSong)) return null
             queue = listOf(MusicQueueItem(song = lastSong))
             startIndex = 0
             startPositionMs = 0L

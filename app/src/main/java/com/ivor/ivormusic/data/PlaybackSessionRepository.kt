@@ -150,10 +150,29 @@ class PlaybackSessionRepository internal constructor(private val directory: File
             val decoded = json.decodeFromString<PlaybackSession>(sessionFile.readText())
             val items = decoded.items
             if (items.isEmpty() || decoded.currentIndex !in items.indices) return null
+            // Pre-fix DJ intro items carry the session number in their fields
+            // AND in their cached audio, so relabeling alone would still
+            // speak it on play. They are synthetic interludes, not songs:
+            // drop them and remap the index onto the surviving rows.
+            val survivors = items.mapIndexedNotNull { index, item ->
+                if (isStaleDjIntro(item.song)) null else index to item
+            }
+            if (survivors.isEmpty()) return null
+            val queue = survivors.map { it.second }
+            val currentSurvived = survivors.any { it.first == decoded.currentIndex }
+            val currentIndex = survivors.count { it.first < decoded.currentIndex }
+                .coerceAtMost(queue.size - 1)
             val session = decoded.copy(
-                queue = items,
+                queue = queue,
+                currentIndex = currentIndex,
+                positionMs = if (currentSurvived) decoded.positionMs else 0L,
                 legacySongs = emptyList(),
-                playOrder = decoded.playOrder.takeIf { it.sorted() == items.indices.toList() }.orEmpty(),
+                // Old indices no longer line up once rows are dropped.
+                playOrder = if (survivors.size == items.size) {
+                    decoded.playOrder.takeIf { it.sorted() == queue.indices.toList() }.orEmpty()
+                } else {
+                    emptyList()
+                },
             )
             withLatestPosition(session)
         } catch (e: Exception) {

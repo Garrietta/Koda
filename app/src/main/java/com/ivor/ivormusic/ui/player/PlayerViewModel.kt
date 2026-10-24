@@ -14,6 +14,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.ivor.ivormusic.data.Song
+import com.ivor.ivormusic.data.isStaleDjIntro
 import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.data.MusicQueueItem
 import com.ivor.ivormusic.data.QUEUE_START_ABSENT
@@ -464,6 +465,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
      */
     private fun restoreLastPlayedSong() {
         val song = themePreferences.getLastPlayedSong() ?: return
+        // A pre-fix DJ intro here would display — and prepare audio — carrying
+        // its session number; skipping resumption beats surfacing it.
+        if (isStaleDjIntro(song)) return
 
         KLog.d("PlayerViewModel", "Restoring last played song: ${song.title}")
 

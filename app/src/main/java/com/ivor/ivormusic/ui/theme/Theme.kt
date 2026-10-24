@@ -21,9 +21,11 @@ import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -199,7 +201,11 @@ fun IvorMusicTheme(
         if (darkTheme && amoledDark) scheme else scheme.withTintedPages(darkTheme)
     }
     val colorScheme = rememberFadedColorScheme(targetScheme, fadeKey = artworkSeed)
-    
+
+    // The theme's own status bar call, shared with per-screen overrides so
+    // they can restore exactly this when they leave.
+    val statusBarLightIcons = colorScheme.background.luminance() > 0.5f
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -224,9 +230,10 @@ fun IvorMusicTheme(
             // — or dark icons on a dark one — are unreadable either way.
             // Screens whose top differs from the scheme background (the
             // playlist pages' cover-colored ground) override this further
-            // down with StatusBarAppearance.
+            // down with StatusBarAppearance, which restores this default
+            // when it leaves composition.
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                colorScheme.background.luminance() > 0.5f
+                statusBarLightIcons
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
@@ -243,6 +250,7 @@ fun IvorMusicTheme(
         // which is invisible in dark theme.
         CompositionLocalProvider(
             LocalAppColorScheme provides colorScheme,
+            LocalStatusBarLightIcons provides statusBarLightIcons,
             LocalAlbumTheming provides AlbumTheming(artworkWholeApp, paletteStyle, darkTheme && amoledDark),
             androidx.compose.material3.LocalContentColor provides colorScheme.onBackground,
         ) {
@@ -266,23 +274,40 @@ data class AlbumTheming(val wholeApp: Boolean, val style: PaletteStyle, val amol
 val LocalAlbumTheming = staticCompositionLocalOf { AlbumTheming(false, PaletteStyle.TONAL_SPOT, false) }
 
 /**
+ * The status bar appearance the theme itself would choose for the scheme
+ * background, for screens that override it to restore on dispose: a plain
+ * SideEffect override has no restore, so leaving an overriding screen used
+ * to leak its icons onto whatever screen came next (a dark playlist page's
+ * light icons persisting onto the light Home page, because tab navigation
+ * never recomposes the root theme).
+ */
+val LocalStatusBarLightIcons = staticCompositionLocalOf { false }
+
+/**
  * Status bar icons for a screen whose top is NOT the scheme background:
  * playlist pages paint their cover-colored ground (plus a ground-tinted top
  * fade) behind the status bar, so the ground's luminance — not the app
- * theme's — decides whether the icons are dark or light. Runs after the
- * theme's own SideEffect (child effects run after their parents'), so this
- * wins while the screen is composed; navigating away lets the theme default
- * take over again. A light background takes dark icons
- * (isAppearanceLightStatusBars = true), a dark one light icons.
+ * theme's — decides whether the icons are dark or light. A light background
+ * takes dark icons (isAppearanceLightStatusBars = true), a dark one light
+ * icons.
+ *
+ * Self-restoring: the previous plain SideEffect had no restore, so leaving
+ * an overriding screen leaked its icons onto the next screen — tab
+ * navigation never recomposes the root theme, so the theme default never
+ * got a chance to re-assert. On dispose this writes back the theme default
+ * as it stands at that moment (the playing song, and the default with it,
+ * can change while the screen is up).
  */
 @Composable
 fun StatusBarAppearance(background: Color) {
     val view = LocalView.current
-    SideEffect {
-        if (!view.isInEditMode) {
-            val window = (view.context as Activity).window
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                background.luminance() > 0.5f
+    val defaultLightIcons by rememberUpdatedState(LocalStatusBarLightIcons.current)
+    DisposableEffect(background) {
+        val window = if (!view.isInEditMode) (view.context as Activity).window else null
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.isAppearanceLightStatusBars = background.luminance() > 0.5f
+        onDispose {
+            controller?.isAppearanceLightStatusBars = defaultLightIcons
         }
     }
 }

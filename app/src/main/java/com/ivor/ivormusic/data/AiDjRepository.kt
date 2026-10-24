@@ -75,9 +75,23 @@ internal fun stripSessionNumberFromTitle(title: String): String {
     return stripped.ifBlank { "AI DJ Mix" }
 }
 
+private val SESSION_NUMBER_REGEX = Regex("""\bsession\s*#?\d+\b""", RegexOption.IGNORE_CASE)
+
+/** Pure detection for the phrasing the strippers remove — no whitespace normalization, so a clean line never matches. */
+internal fun containsSessionNumber(text: String): Boolean = SESSION_NUMBER_REGEX.containsMatchIn(text)
+
+/**
+ * A pre-fix DJ intro item: its fields carry a session number, and its cached
+ * audio was synthesized from the same raw line, so it speaks the number too.
+ * Relabeling alone is not enough — such items must be dropped, not kept.
+ */
+internal fun isStaleDjIntro(song: Song): Boolean =
+    song.id.startsWith(StatsRepository.DJ_INTRO_ID_PREFIX) &&
+        (containsSessionNumber(song.artist) || containsSessionNumber(song.title) || containsSessionNumber(song.album))
+
 internal fun stripSessionNumberFromLine(line: String): String? {
     val cleaned = line
-        .replace(Regex("""\bsession\s*#?\d+\b""", RegexOption.IGNORE_CASE), "")
+        .replace(SESSION_NUMBER_REGEX, "")
         .replace(Regex("""\s+([,.!?;:])"""), "$1")
         .replace(Regex("""\s+"""), " ")
         .replace(Regex("""^[,;:]\s*"""), "")
