@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
@@ -69,19 +70,21 @@ import kotlin.math.pow
  * SoftBurst sticker with its type knocked out and a scuff on the grooves, all
  * off-centre so the rotation reads. Paused, the same artwork is drawn still.
  *
- * **Every size is proportional to the window, and the arrangement follows
- * its aspect.** SizeMode.Exact hands this composition the launcher's
- * bounding box, and nothing here is clamped to a fixed size - but a
- * side-by-side stage cannot fill a squarish window: the stage is about
- * 1.8 record-widths wide for one record-height tall, so on a window
- * narrower than about 2.2 heights the width binds first and the record
- * shrinks, leaving dead bands top and bottom no matter how the buttons
- * are capped. That was the "still room to grow" complaint on every round.
- * So the layout switches: wide windows keep the transport column beside
- * the stage with the record filling the height; squarer windows move the
- * buttons below the stage, and stage plus buttons together fill the height
- * exactly. Either way the block spans the window, with any unavoidable
- * leftover split evenly by centering, never all below or all beside.
+ * **Every size is proportional to its bucket window, and the arrangement
+ * follows its aspect.** The composition sizes come from the fixed
+ * [VinylWidgetSizes] list (Responsive), not the launcher's report - see
+ * the sizeMode note for why. Within a bucket nothing is clamped to a
+ * fixed size - but a side-by-side stage cannot fill a squarish window:
+ * the stage is about 1.8 record-widths wide for one record-height tall,
+ * so on a window narrower than about 2.2 heights the width binds first
+ * and the record shrinks, leaving dead bands top and bottom no matter how
+ * the buttons are capped. That was the "still room to grow" complaint on
+ * every round. So the layout switches: wide windows keep the transport
+ * column beside the stage with the record filling the height; squarer
+ * windows move the buttons below the stage, and stage plus buttons
+ * together fill the height exactly. Either way the block spans its bucket
+ * window, with any unavoidable leftover split evenly by centering, never
+ * all below or all beside.
  *
  * **Color comes from two places, never mixed.** The buttons take the app's
  * selected palette - the same scheme the app UI draws in, so changing the
@@ -101,10 +104,30 @@ import kotlin.math.pow
  */
 class VinylWidget : GlanceAppWidget() {
 
-    // Exact (not Responsive): LocalSize is the true widget bounding box, so
-    // the layout scales dynamically to fill whatever space the launcher gives
-    // instead of snapping to 3 predefined buckets.
-    override val sizeMode: SizeMode = SizeMode.Exact
+    // Responsive, NOT Exact - and the reason is One UI's "Adjust content
+    // size", which scales INVERTED on this widget. Verified against the
+    // Glance 1.1.1 sources: with Exact, LocalSize comes straight from the
+    // launcher-provided options (OPTION_APPWIDGET_SIZES on API 31+), so the
+    // composition lays out into whatever window One UI reports. One UI
+    // reports a SMALLER window as the content-size % grows (the % is
+    // applied to the reported window, and nothing magnifies Glance's output
+    // back up), so at 110% the widget drew smaller than at 100% - the
+    // exact inversion Garrett reported. With Responsive, the composition
+    // sizes are this fixed list, not the launcher's report: the framework
+    // picks the largest bucket that fits entirely in the host view's true
+    // size, and the host view's size does not move when the % slider moves
+    // (the cell stays 4x2), so the picked bucket - and the rendering -
+    // cannot move with the slider either. Raising the % can therefore
+    // never shrink the widget again.
+    //
+    // The trade, stated plainly: manual resizes now snap to buckets
+    // instead of filling every pixel. The buckets are spaced so the dead
+    // band is small near the sizes this widget actually lives at (the
+    // 4x2 cell and its near neighbours); the layout inside each bucket
+    // still fills its bucket window exactly, aspect switch included.
+    // At most 16 variants: RemoteViews caps a size-mapped widget at
+    // MAX_INIT_VIEW_COUNT layouts.
+    override val sizeMode: SizeMode = SizeMode.Responsive(VinylWidgetSizes)
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         PlayerWidgetHost.ensureSeeded(context)
@@ -116,6 +139,34 @@ class VinylWidget : GlanceAppWidget() {
         }
     }
 }
+
+/**
+ * The fixed composition sizes for [VinylWidget] (see its sizeMode note).
+ * The framework displays the largest bucket that fits entirely in the host
+ * view's true size (1dp margin), falling back to the smallest when nothing
+ * fits - so the smallest bucket is the provider minimum, and the rest span
+ * the realistic resize range. The diagonal covers the widget's natural
+ * wide aspects; the two wide-short and two tall entries cover resizes off
+ * that diagonal so those cells don't fall all the way back to the minimum.
+ * The 365x160 bucket sits just under the 4x2 cell this widget normally
+ * lives in, so its everyday rendering stays within a few dp of the cell.
+ */
+private val VinylWidgetSizes: Set<DpSize> = setOf(
+    DpSize(250.dp, 110.dp),
+    DpSize(300.dp, 130.dp),
+    DpSize(340.dp, 150.dp),
+    DpSize(365.dp, 160.dp),
+    DpSize(395.dp, 175.dp),
+    DpSize(440.dp, 195.dp),
+    DpSize(490.dp, 215.dp),
+    DpSize(550.dp, 240.dp),
+    DpSize(620.dp, 270.dp),
+    DpSize(700.dp, 300.dp),
+    DpSize(500.dp, 135.dp),
+    DpSize(650.dp, 155.dp),
+    DpSize(265.dp, 210.dp),
+    DpSize(280.dp, 300.dp),
+)
 
 private val VINYL_PADDING = 8.dp
 
