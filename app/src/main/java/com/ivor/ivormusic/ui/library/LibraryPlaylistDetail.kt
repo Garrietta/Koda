@@ -384,6 +384,12 @@ internal fun PlaylistTrackRow(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     /**
+     * An extra line under the artist, in the accent color — the AI DJ page's
+     * spoken transition line. Null on every other page, so the row stays
+     * exactly the playlist row everywhere else.
+     */
+    extraLine: String? = null,
+    /**
      * Connected-group geometry: the list gives the first row a round top and
      * the last row a round bottom while the seams between rows stay small, so
      * the whole track list reads as one container like the library shortcuts
@@ -541,6 +547,19 @@ internal fun PlaylistTrackRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (!extraLine.isNullOrBlank()) {
+                    Text(
+                        extraLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        // On the playing row's solid primary fill the accent
+                        // would vanish, so the line rides the row's own ink
+                        // there instead.
+                        color = if (highlighted) contentColor.copy(alpha = 0.85f)
+                        else MaterialTheme.colorScheme.primary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             if (manageEnabled) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1656,11 +1675,6 @@ fun PlaylistDetailScreen(
             // the page's own tint, so it reads in both themes on all of the
             // app's palettes.
             if (showHeader) item {
-                // The status-bar scrim is drawn in the page's ground rather
-                // than in the bare background, so the band the app bar fades
-                // in over is already the page's own color.
-                val ground = playlistPageGround()
-                val windowHeight = com.ivor.ivormusic.ui.theme.windowDpSize().height
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Beside the tracks the cover is an object in a column,
                     // not a banner across the page: square, rounded, inset.
@@ -1668,140 +1682,13 @@ fun PlaylistDetailScreen(
                         heroArt = heroArt,
                         isAlbum = isAlbum,
                         onPickCover = if (isLocalPlaylist) pickCover else null
-                    ) else BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                        // Near-square on a phone, but never more than a
-                        // comfortable share of the window: the title, the
-                        // controls and the first track all have to fit under
-                        // it, in landscape as much as in portrait.
-                        val heroHeight = (maxWidth * 0.94f)
-                            .coerceAtMost(windowHeight * 0.44f)
-                            .coerceAtLeast(220.dp)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(heroHeight)
-                                // The cover drifts under the scroll; clipped
-                                // here so it never draws over the list.
-                                .clipToBounds()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .graphicsLayer {
-                                        // Scroll-driven, not time-driven: the
-                                        // cover trails the list rather than
-                                        // animating on its own, so there is
-                                        // nothing here to reduce.
-                                        val collapse = headerCollapse.value
-                                        translationY = collapse * size.height * 0.24f
-                                        alpha = 1f - collapse * 0.55f
-                                    }
-                                    .then(
-                                        // The cover is the affordance: a whole
-                                        // banner of target, exactly where
-                                        // someone looking to change the
-                                        // picture looks.
-                                        if (isLocalPlaylist) {
-                                            Modifier.clickable(onClick = pickCover)
-                                        } else Modifier
-                                    )
-                            ) {
-                                if (heroArt != null) {
-                                    // Asked for at the size it is drawn and
-                                    // layered over the feed-size original, so
-                                    // the banner is sharp rather than a 120px
-                                    // playlist thumbnail stretched over it.
-                                    VideoThumbnail(
-                                        thumbnailUrl = heroArt,
-                                        highResThumbnailUrl = googleImageAtSize(heroArt, HERO_COVER_PX)
-                                            ?.takeIf { it != heroArt },
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        showProgress = false,
-                                        placeholderColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                                    )
-                                } else {
-                                    // No cover anywhere: the theme's own
-                                    // containers with the collection's glyph
-                                    // cut into an Expressive shape, so the
-                                    // page still has a top.
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primaryContainer,
-                                                        MaterialTheme.colorScheme.tertiaryContainer
-                                                    )
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Surface(
-                                            shape = MaterialShapes.Cookie9Sided.toShape(),
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
-                                            modifier = Modifier.size(150.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    imageVector = if (isAlbum) Icons.Rounded.Album else Icons.AutoMirrored.Rounded.PlaylistPlay,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(64.dp),
-                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Where the cover hands the page over: a plain
-                            // fade, in the page's exact ground color.
-                            //
-                            // This was a `DstIn` mask that erased the cover's
-                            // foot instead. [scar] On screen it composited to
-                            // *black* rather than to transparency and ended
-                            // the cover on a hard dark edge - the layer was
-                            // not isolating the way `CompositingStrategy`
-                            // promises. Painting the fade is only correct
-                            // because the ground is one flat color: there is
-                            // exactly one value to match, so a plain SrcOver
-                            // gradient lands on it precisely, with no blend
-                            // mode and no offscreen buffer to go wrong.
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            0f to ground.copy(alpha = 0f),
-                                            0.58f to ground.copy(alpha = 0f),
-                                            0.86f to ground.copy(alpha = 0.85f),
-                                            1f to ground
-                                        )
-                                    )
-                            )
-
-                            // Top fade: back, search and the overflow need
-                            // ground to sit on whatever the cover is. Faded to
-                            // the same color at zero alpha rather than to
-                            // Transparent, which is transparent *black* and
-                            // greys the band in a light theme.
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(132.dp)
-                                    .align(Alignment.TopCenter)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                ground.copy(alpha = 0.55f),
-                                                ground.copy(alpha = 0f)
-                                            )
-                                        )
-                                    )
-                            )
-
+                    ) else PlaylistHeroBanner(
+                        headerCollapse = headerCollapse,
+                        // The cover is the affordance: a whole banner of
+                        // target, exactly where someone looking to change
+                        // the picture looks.
+                        onArtClick = if (isLocalPlaylist) pickCover else null,
+                        heroBadge = {
                             // Badge on the cover's corner, so the artwork
                             // reads as editable without a caption telling
                             // people to tap it.
@@ -1829,59 +1716,72 @@ fun PlaylistDetailScreen(
                                 }
                             }
                         }
+                    ) {
+                        if (heroArt != null) {
+                            // Asked for at the size it is drawn and layered
+                            // over the feed-size original, so the banner is
+                            // sharp rather than a 120px playlist thumbnail
+                            // stretched over it.
+                            VideoThumbnail(
+                                thumbnailUrl = heroArt,
+                                highResThumbnailUrl = googleImageAtSize(heroArt, HERO_COVER_PX)
+                                    ?.takeIf { it != heroArt },
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                showProgress = false,
+                                placeholderColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
+                        } else {
+                            // No cover anywhere: the theme's own containers
+                            // with the collection's glyph cut into an
+                            // Expressive shape, so the page still has a top.
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                MaterialTheme.colorScheme.primaryContainer,
+                                                MaterialTheme.colorScheme.tertiaryContainer
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = MaterialShapes.Cookie9Sided.toShape(),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
+                                    modifier = Modifier.size(150.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = if (isAlbum) Icons.Rounded.Album else Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(64.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // Title and facts, set the way the artist page sets a
-                    // name: poster face, start-aligned, sized down rather
-                    // than cut when the name is a long one.
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = PLAYLIST_GUTTER)
-                            .padding(top = 14.dp)
-                    ) {
-                        Text(
-                            text = resolvedPlaylist.name,
-                            style = MaterialTheme.typography.displaySmall.copy(
-                                fontFamily = MontserratFamily,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.02).em,
-                                lineHeight = 1.08.em
-                            ),
-                            color = playlistOnGround(),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            // Big for "Focus", smaller rather than cut for
-                            // "Songs to sing in the shower at 3am".
-                            autoSize = TextAutoSize.StepBased(
-                                minFontSize = 24.sp,
-                                maxFontSize = 38.sp,
-                                stepSize = 2.sp
-                            )
-                        )
-
-                        val totalDurationLabel = remember(songs) {
-                            formatTotalDuration(songs.sumOf { it.duration })
-                        }
-                        val releaseType = songs.firstOrNull()?.releaseType ?: resolvedPlaylist.releaseType
-                        val releaseYear = songs.firstOrNull()?.releaseYear ?: resolvedPlaylist.releaseYear
-                        val kindLabel = stringResource(releaseType?.labelRes ?: R.string.label_album)
-                        Text(
-                            text = listOfNotNull(
+                    PlaylistPageTitle(
+                        title = resolvedPlaylist.name,
+                        facts = run {
+                            val totalDurationLabel = formatTotalDuration(songs.sumOf { it.duration })
+                            val releaseType = songs.firstOrNull()?.releaseType ?: resolvedPlaylist.releaseType
+                            val releaseYear = songs.firstOrNull()?.releaseYear ?: resolvedPlaylist.releaseYear
+                            val kindLabel = stringResource(releaseType?.labelRes ?: R.string.label_album)
+                            listOfNotNull(
                                 if (isAlbum) kindLabel else stringResource(R.string.label_playlist),
                                 resolvedPlaylist.uploaderName.takeIf { isAlbum && it.isNotBlank() },
                                 releaseYear?.toString()?.takeIf { isAlbum },
                                 if (songs.size == 1) "1 track" else "${songs.size} tracks",
                                 totalDurationLabel
-                            ).joinToString("  ·  "),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = playlistOnGround().copy(alpha = 0.8f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
+                            ).joinToString("  ·  ")
+                        }
+                    )
 
                     // Playback is the page's one primary action, directly
                     // under the facts it acts on. Everything else is a
