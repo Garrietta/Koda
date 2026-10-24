@@ -47,6 +47,9 @@ import androidx.glance.layout.width
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.unit.ColorProvider
+import android.appwidget.AppWidgetManager
+import android.content.res.Configuration
+import androidx.glance.appwidget.LocalAppWidgetOptions
 import com.ivor.ivormusic.MainActivity
 import com.ivor.ivormusic.R
 import kotlin.math.pow
@@ -70,19 +73,18 @@ import kotlin.math.pow
  * SoftBurst sticker with its type knocked out and a scuff on the grooves, all
  * off-centre so the rotation reads. Paused, the same artwork is drawn still.
  *
- * **Every size is proportional to its bucket window, and the arrangement
- * follows its aspect.** The composition sizes come from the fixed
- * [VinylWidgetSizes] list (Responsive), not the launcher's report - see
- * the sizeMode note for why. Within a bucket nothing is clamped to a
+ * **Every size is proportional to the true window, and the arrangement
+ * follows its aspect.** The layout is sized from the launcher's true
+ * bounding box (see the sizeMode note), never from a bucket and never
+ * from the size Glance reports. Within that box nothing is clamped to a
  * fixed size - but a side-by-side stage cannot fill a squarish window:
  * the stage is about 1.8 record-widths wide for one record-height tall,
  * so on a window narrower than about 2.2 heights the width binds first
  * and the record shrinks, leaving dead bands top and bottom no matter how
- * the buttons are capped. That was the "still room to grow" complaint on
- * every round. So the layout switches: wide windows keep the transport
- * column beside the stage with the record filling the height; squarer
- * windows move the buttons below the stage, and stage plus buttons
- * together fill the height exactly. Either way the block spans its bucket
+ * the buttons are capped. So the layout switches: wide windows keep the
+ * transport column beside the stage with the record filling the height;
+ * squarer windows move the buttons below the stage, and stage plus buttons
+ * together fill the height exactly. Either way the block spans the true
  * window, with any unavoidable leftover split evenly by centering, never
  * all below or all beside.
  *
@@ -104,30 +106,36 @@ import kotlin.math.pow
  */
 class VinylWidget : GlanceAppWidget() {
 
-    // Responsive, NOT Exact - and the reason is One UI's "Adjust content
-    // size", which scales INVERTED on this widget. Verified against the
-    // Glance 1.1.1 sources: with Exact, LocalSize comes straight from the
-    // launcher-provided options (OPTION_APPWIDGET_SIZES on API 31+), so the
-    // composition lays out into whatever window One UI reports. One UI
-    // reports a SMALLER window as the content-size % grows (the % is
-    // applied to the reported window, and nothing magnifies Glance's output
-    // back up), so at 110% the widget drew smaller than at 100% - the
-    // exact inversion Garrett reported. With Responsive, the composition
-    // sizes are this fixed list, not the launcher's report: the framework
-    // picks the largest bucket that fits entirely in the host view's true
-    // size, and the host view's size does not move when the % slider moves
-    // (the cell stays 4x2), so the picked bucket - and the rendering -
-    // cannot move with the slider either. Raising the % can therefore
-    // never shrink the widget again.
+    // Exact, and the layout deliberately does NOT use LocalSize. Verified
+    // against the Glance 1.1.1 sources: with Exact, LocalSize comes from
+    // the OPTION_APPWIDGET_SIZES list in the options bundle, while the
+    // MIN/MAX width/height in the SAME bundle are the framework's
+    // portrait/landscape cell sizes (portrait = minWidth x maxHeight,
+    // landscape = maxWidth x minHeight - the same rule Glance's own
+    // estimateSizes fallback uses). One UI's "Adjust content size" moves
+    // the SIZES list inversely with the % - at 110% the widget is told a
+    // smaller window and draws smaller, the inversion Garrett reported -
+    // but the MIN/MAX cell sizes are what the host view actually is: the
+    // cell does not move with the slider. So VinylContent lays out into
+    // the MIN/MAX box for the current orientation (see trueWidgetBox),
+    // which is the true bounding box at any drag-resize size and any %
+    // setting. The variant-selection tag stays the (possibly scaled)
+    // SIZES entry, but a tag only selects the variant - it never resizes
+    // its content - and the variant root fills the host view, so content
+    // composed at the true box fills the host view edge to edge.
     //
-    // The trade, stated plainly: manual resizes now snap to buckets
-    // instead of filling every pixel. The buckets are spaced so the dead
-    // band is small near the sizes this widget actually lives at (the
-    // 4x2 cell and its near neighbours); the layout inside each bucket
-    // still fills its bucket window exactly, aspect switch included.
-    // At most 16 variants: RemoteViews caps a size-mapped widget at
-    // MAX_INIT_VIEW_COUNT layouts.
-    override val sizeMode: SizeMode = SizeMode.Responsive(VinylWidgetSizes)
+    // Honest limit, stated plainly: this rests on MIN/MAX carrying the
+    // unscaled cell while SIZES carries the % scaling. If a launcher
+    // scales MIN/MAX too, the two agree and the widget behaves exactly as
+    // it did on Exact before - smaller at high %, but no worse, and never
+    // clipped, because the box is never taken larger than the framework's
+    // own min/max. The sanity clamp in trueWidgetBox also guards against
+    // stale or mismatched options by falling back to LocalSize.
+    //
+    // Responsive buckets were tried (Build #132) and rejected by Garrett:
+    // a bucket smaller than the cell leaves dead bands inside the resize
+    // frame, which is the complaint this round closes. No buckets here.
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         PlayerWidgetHost.ensureSeeded(context)
@@ -140,38 +148,59 @@ class VinylWidget : GlanceAppWidget() {
     }
 }
 
-/**
- * The fixed composition sizes for [VinylWidget] (see its sizeMode note).
- * The framework displays the largest bucket that fits entirely in the host
- * view's true size (1dp margin), falling back to the smallest when nothing
- * fits - so the smallest bucket is the provider minimum, and the rest span
- * the realistic resize range. The diagonal covers the widget's natural
- * wide aspects; the two wide-short and two tall entries cover resizes off
- * that diagonal so those cells don't fall all the way back to the minimum.
- * The 365x160 bucket sits just under the 4x2 cell this widget normally
- * lives in, so its everyday rendering stays within a few dp of the cell.
- */
-private val VinylWidgetSizes: Set<DpSize> = setOf(
-    DpSize(250.dp, 110.dp),
-    DpSize(300.dp, 130.dp),
-    DpSize(340.dp, 150.dp),
-    DpSize(365.dp, 160.dp),
-    DpSize(395.dp, 175.dp),
-    DpSize(440.dp, 195.dp),
-    DpSize(490.dp, 215.dp),
-    DpSize(550.dp, 240.dp),
-    DpSize(620.dp, 270.dp),
-    DpSize(700.dp, 300.dp),
-    DpSize(500.dp, 135.dp),
-    DpSize(650.dp, 155.dp),
-    DpSize(265.dp, 210.dp),
-    DpSize(280.dp, 300.dp),
-)
-
 private val VINYL_PADDING = 8.dp
 
 /** How see-through the disc is: a fancy coloured vinyl, not a solid record. */
 private const val VINYL_DISC_ALPHA = 0.64f
+
+/**
+ * The box the vinyl layout is sized from: the launcher's TRUE bounding box,
+ * not the size Glance reports.
+ *
+ * Glance's [LocalSize] comes from the OPTION_APPWIDGET_SIZES list, which
+ * One UI's content-size % moves inversely (110% reports a smaller window).
+ * The MIN/MAX width/height in the same options bundle are the framework's
+ * cell sizes for the two orientations - portrait is minWidth x maxHeight,
+ * landscape is maxWidth x minHeight - and the cell itself does not move
+ * with the % slider. So the current orientation's pair is the true box:
+ * drag-resize changes it (both pairs update together with the cell), the
+ * % slider does not.
+ *
+ * Fallbacks keep this safe: missing or zero MIN/MAX, or a MIN/MAX box that
+ * diverges wildly from the reported size (stale options, or a bundle whose
+ * pairs don't line up with the reported entry), fall back to the reported
+ * size - today's behavior, never worse. A degenerate reported size (zero,
+ * e.g. an unbound preview) takes the MIN/MAX box outright, since it is
+ * strictly more informed than nothing.
+ */
+@Composable
+private fun trueWidgetBox(reported: DpSize): DpSize {
+    val context = LocalContext.current
+    val options = LocalAppWidgetOptions.current
+    val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+    val maxWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)
+    val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+    val maxHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
+    if (minWidth <= 0 || maxWidth <= 0 || minHeight <= 0 || maxHeight <= 0) {
+        return reported
+    }
+    val portrait =
+        context.resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+    val box = if (portrait) {
+        DpSize(minWidth.dp, maxHeight.dp)
+    } else {
+        DpSize(maxWidth.dp, minHeight.dp)
+    }
+    if (reported.width <= 0.dp || reported.height <= 0.dp) return box
+    // Sanity clamp: the % factor is small (110% reports ~91%), and a resize
+    // moves MIN/MAX and SIZES together, so a genuine box stays close to the
+    // reported size. Anything outside 0.5x-2x per dimension smells like a
+    // stale or mismatched bundle - trust the reported size instead.
+    val widthRatio = box.width.value / reported.width.value
+    val heightRatio = box.height.value / reported.height.value
+    if (widthRatio !in 0.5f..2.0f || heightRatio !in 0.5f..2.0f) return reported
+    return box
+}
 
 @Composable
 private fun VinylContent(ui: PlayerWidgetUi) {
@@ -179,7 +208,7 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     // (placeholder sleeve, parked arm), backed by the last-played snapshot
     // the store persists. There is no "Tap to listen" fallback.
 
-    val size = LocalSize.current
+    val size = trueWidgetBox(LocalSize.current)
     val playing = ui.snapshot.isPlaying
     val availWidth = size.width - VINYL_PADDING * 2
     val availHeight = size.height - VINYL_PADDING * 2
