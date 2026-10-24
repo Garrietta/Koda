@@ -70,6 +70,17 @@ internal object WidgetShapes {
      */
     fun cookie4Sided(size: Float): Path = official(MaterialShapes.Cookie4Sided, size)
 
+    /**
+     * The fraction of its box that the 4-sided cookie actually fills
+     * vertically. The catalog authors the lobes inside the normalized square,
+     * so the sleeve box is scaled by the inverse to make the shape's visual
+     * height match the record's diameter exactly (locked 1:1).
+     */
+    fun cookie4SidedFillFraction(): Float {
+        val b = MaterialShapes.Cookie4Sided.calculateBounds(approximate = false)
+        return (b[3] - b[1]).coerceAtLeast(0.01f)
+    }
+
     /** Four fat lobes. Used small, where a subtle scallop would read as a circle. */
     fun clover(size: Float, amplitude: Float = 0.13f): Path =
         polar(size) { angle -> (1f + amplitude * cos(4.0 * angle)).toFloat() }

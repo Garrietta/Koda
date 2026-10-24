@@ -97,15 +97,19 @@ private fun VinylContent(ui: PlayerWidgetUi) {
 
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
-    // Measured against the actual cell, like every layout that can clip: the sleeve
-    // takes the cell's height, the record shows half its width past it, the
-    // arm stands a quarter of a record further out, and the transport gets
-    // what is left.
-    // The stage is about 1.75 sleeves wide, so the width caps the sleeve too:
-    // a tall cell would otherwise push the buttons out of the cell.
+    // Measured against the actual cell, like every layout that can clip: the
+    // record sets the scale, the sleeve box is scaled up (locked 1:1) so the
+    // cookie's visual height matches the record's diameter, the arm stands a
+    // quarter of a record further out, and the transport gets what is left.
+    // The cookie's lobes don't fill their box, so the box is the record over
+    // the shape's true visual fill fraction.
     val widthForStage = size.width - VINYL_PADDING * 2 - 10.dp - 56.dp
-    val sleeve = minOf(size.height - VINYL_PADDING * 2, (widthForStage + 4.dp) / 1.75f)
-    val record = sleeve - 6.dp
+    val cookieFill = WidgetShapes.cookie4SidedFillFraction()
+    val record = minOf(
+        (size.height - VINYL_PADDING * 2) * cookieFill,
+        widthForStage / (1f / cookieFill + 0.75f),
+    )
+    val sleeve = record / cookieFill
     val armReach = record / 4
     val stage = sleeve + record / 2 + armReach
     val hero = (sleeve * 0.42f).coerceIn(44.dp, 72.dp)
