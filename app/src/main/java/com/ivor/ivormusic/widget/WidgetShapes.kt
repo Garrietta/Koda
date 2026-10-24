@@ -88,9 +88,32 @@ internal object WidgetShapes {
 
     /**
      * The official M3E Puffy - the catalog's inflated, bulging-sided shape.
-     * For secondary controls that should feel soft, not sharp.
+     * The catalog authors it vertically compressed (x0.742) by design; the
+     * widget's next button should read evenly scaled, so the compression is
+     * undone here and the shape re-fit to the square before use.
      */
-    fun puffy(size: Float): Path = official(MaterialShapes.Puffy, size)
+    fun puffy(size: Float): Path {
+        val path = official(MaterialShapes.Puffy, 1f)
+        val bounds = RectF()
+        path.computeBounds(bounds, true)
+        // 1:1 - stretch the short axis out to the long one, about the center,
+        // undoing the catalog's vertical compression.
+        path.transform(
+            Matrix().apply {
+                setScale(1f, bounds.width() / bounds.height(), bounds.centerX(), bounds.centerY())
+            }
+        )
+        // Re-fit the un-squished shape to the requested square.
+        path.computeBounds(bounds, true)
+        val s = size / bounds.width()
+        path.transform(
+            Matrix().apply {
+                setScale(s, s)
+                postTranslate(-bounds.left * s, -bounds.top * s)
+            }
+        )
+        return path
+    }
 
     /** A superellipse - squarer than a rounded rect, with no corner to catch. */
     fun squircle(size: Float, exponent: Float = 4f): Path {

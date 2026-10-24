@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Vinyl widget's turning label: the official M3E SoftBurst center
+    sticker, one full turn. Driven by the label spinner ProgressBar
+    (layout/widget_vinyl_label_spin) with the same duration and direction as
+    the print spinner, so the label turns exactly with the record - the way a
+    real vinyl's printed label turns with the disc.
+-->
+<rotate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/vinyl_label_softburst"
+    android:fromDegrees="0"
+    android:pivotX="50%"
+    android:pivotY="50%"
+    android:toDegrees="360" />

@@ -58,11 +58,11 @@ import com.ivor.ivormusic.R
  * sleeve is where it belongs on a real record anyway, and leaves the label
  * free to be something that can spin.
  *
- * **Only the label's print turns.** On a turntable the light on the grooves
+ * **Only the print turns.** On a turntable the light on the grooves
  * stays where the lamp is; what moves is what is printed on the record. So the
- * sheen is a still layer and the turning one is the label's type and a scuff
- * on the grooves, both off-centre so the rotation reads. Paused, the same
- * drawable is drawn still.
+ * sheen is a still layer and the turning ones are the label itself with its
+ * type and a scuff on the grooves, all off-centre so the rotation reads.
+ * Paused, the same layers are drawn still.
  *
  * Every layer is an alpha mask tinted with a theme role, as in [PixelWidget]:
  * the record is drawn, not photographed, so it follows the palette. The
@@ -276,22 +276,11 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
     // The light on the grooves is light in both themes, for the same reason.
     val sheen = if (dark) colors.onSurface else colors.surface
     val print = colors.onPrimaryContainer
-    // The label goes expressive: the official M3E SoftBurst cut from the
-    // primary container, generated at the record's pixel size and cached per
-    // size/color. The label is ~36% of the record diameter, centred, like the
-    // mask it replaces.
-    val density = context.resources.displayMetrics.density
-    val px = (size.value * density).toInt().coerceAtLeast(1)
-    val labelColor = colors.primaryContainer.read().toArgb()
-    val softBurstLabel = androidx.compose.runtime.remember(px, labelColor) {
-        val labelPx = (px * 0.36f).toInt().coerceAtLeast(1)
-        val label = filledPath(WidgetShapes.softBurst(labelPx.toFloat()), labelPx, labelColor)
-        val out = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(out)
-        val left = (px - labelPx) / 2f
-        canvas.drawBitmap(label, left, left, null)
-        out
-    }
+    val label = colors.primaryContainer
+    // The label is the official M3E SoftBurst, baked as a mask so it can
+    // turn. Like a real record, the label is printed on the disc: while the
+    // music plays it turns with the print, at the same speed and in the same
+    // direction.
 
     Box(
         modifier = GlanceModifier
@@ -306,19 +295,29 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
     ) {
         VinylLayer(R.drawable.vinyl_disc, recordColor())
         VinylLayer(R.drawable.vinyl_grooves, sheen)
-        Image(
-            provider = ImageProvider(softBurstLabel),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = GlanceModifier.fillMaxSize(),
-        )
         if (playing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val tint = ColorStateList.valueOf(print.read().toArgb())
             val spin = RemoteViews(context.packageName, R.layout.widget_vinyl_spin).apply {
                 setColorStateList(R.id.vinyl_spin, "setIndeterminateTintList", tint)
             }
             AndroidRemoteViews(remoteViews = spin, modifier = GlanceModifier.fillMaxSize())
+            // The label turns on its own spinner with the same duration and
+            // direction, so it rotates exactly with the print - like the
+            // printed label on a real record.
+            val labelTint = ColorStateList.valueOf(label.read().toArgb())
+            val labelSpin = RemoteViews(context.packageName, R.layout.widget_vinyl_label_spin).apply {
+                setColorStateList(R.id.vinyl_label_spin, "setIndeterminateTintList", labelTint)
+            }
+            AndroidRemoteViews(remoteViews = labelSpin, modifier = GlanceModifier.size(size * 0.36f))
         } else {
+            // Parked: the label sits still under its print.
+            Image(
+                provider = ImageProvider(R.drawable.vinyl_label_softburst),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(label),
+                contentScale = ContentScale.Fit,
+                modifier = GlanceModifier.size(size * 0.36f),
+            )
             VinylLayer(R.drawable.vinyl_label_marks, print)
         }
         VinylLayer(R.drawable.vinyl_spindle, recordColor())
