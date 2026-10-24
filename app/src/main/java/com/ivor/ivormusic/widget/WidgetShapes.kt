@@ -91,25 +91,37 @@ internal object WidgetShapes {
      * The catalog authors it vertically compressed (x0.742) by design; the
      * widget's next button should read evenly scaled, so the compression is
      * undone here and the shape re-fit to the square before use.
+     *
+     * The correction is measured from the shape's TRUE visual bounds
+     * ([RoundedPolygon.calculateBounds] with approximate=false, which solves
+     * the actual curves). Measuring the android Path's bounds instead includes
+     * the Bezier control points, whose overshoot is asymmetric - that is what
+     * left the button visibly taller than wide.
      */
     fun puffy(size: Float): Path {
-        val path = official(MaterialShapes.Puffy, 1f)
-        val bounds = RectF()
-        path.computeBounds(bounds, true)
+        val polygon = MaterialShapes.Puffy
+        // True visual bounds of the catalog shape (not control points).
+        val b = polygon.calculateBounds(approximate = false)
+        val w = b[2] - b[0]
+        val h = b[3] - b[1]
+        val cx = (b[0] + b[2]) / 2f
+        val cy = (b[1] + b[3]) / 2f
+        val path = polygon.toPath(Path())
         // 1:1 - stretch the short axis out to the long one, about the center,
-        // undoing the catalog's vertical compression.
+        // undoing the catalog's vertical compression in visual space.
+        val longSide = max(w, h)
         path.transform(
             Matrix().apply {
-                setScale(1f, bounds.width() / bounds.height(), bounds.centerX(), bounds.centerY())
+                if (h < w) setScale(1f, w / h, cx, cy) else setScale(h / w, 1f, cx, cy)
             }
         )
-        // Re-fit the un-squished shape to the requested square.
-        path.computeBounds(bounds, true)
-        val s = size / bounds.width()
+        // Re-fit the un-squished shape to the requested square. The corrected
+        // true bounds are longSide x longSide about (cx, cy).
+        val s = size / longSide
         path.transform(
             Matrix().apply {
                 setScale(s, s)
-                postTranslate(-bounds.left * s, -bounds.top * s)
+                postTranslate(-(cx - longSide / 2f) * s, -(cy - longSide / 2f) * s)
             }
         )
         return path

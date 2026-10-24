@@ -60,9 +60,9 @@ import com.ivor.ivormusic.R
  *
  * **Only the print turns.** On a turntable the light on the grooves
  * stays where the lamp is; what moves is what is printed on the record. So the
- * sheen is a still layer and the turning ones are the label itself with its
- * type and a scuff on the grooves, all off-centre so the rotation reads.
- * Paused, the same layers are drawn still.
+ * sheen is a still layer and the turning one is the label artwork - the
+ * SoftBurst sticker with its type knocked out and a scuff on the grooves, all
+ * off-centre so the rotation reads. Paused, the same artwork is drawn still.
  *
  * Every layer is an alpha mask tinted with a theme role, as in [PixelWidget]:
  * the record is drawn, not photographed, so it follows the palette. The
@@ -275,12 +275,14 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
     val dark = KodaWidgetTheme.isDark(context)
     // The light on the grooves is light in both themes, for the same reason.
     val sheen = if (dark) colors.onSurface else colors.surface
-    val print = colors.onPrimaryContainer
     val label = colors.primaryContainer
-    // The label is the official M3E SoftBurst, baked as a mask so it can
-    // turn. Like a real record, the label is printed on the disc: while the
-    // music plays it turns with the print, at the same speed and in the same
-    // direction.
+    // The label is the official M3E SoftBurst, baked into the spinning
+    // artwork (drawable-nodpi/vinyl_label_marks.png) together with its print:
+    // the label's type is knocked out of the starburst so the dark disc shows
+    // through like real print, and the groove scuffs ride along. A launcher
+    // only animates resource drawables, never runtime bitmaps, so the label
+    // could not spin as a separate layer -- as part of the disc's own artwork
+    // it turns with the record, exactly like a real vinyl's printed label.
 
     Box(
         modifier = GlanceModifier
@@ -296,29 +298,16 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
         VinylLayer(R.drawable.vinyl_disc, recordColor())
         VinylLayer(R.drawable.vinyl_grooves, sheen)
         if (playing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val tint = ColorStateList.valueOf(print.read().toArgb())
+            // The label turns with the record: it is baked into the spinning
+            // artwork, driven by the same ProgressBar mechanism as before.
+            val tint = ColorStateList.valueOf(label.read().toArgb())
             val spin = RemoteViews(context.packageName, R.layout.widget_vinyl_spin).apply {
                 setColorStateList(R.id.vinyl_spin, "setIndeterminateTintList", tint)
             }
             AndroidRemoteViews(remoteViews = spin, modifier = GlanceModifier.fillMaxSize())
-            // The label turns on its own spinner with the same duration and
-            // direction, so it rotates exactly with the print - like the
-            // printed label on a real record.
-            val labelTint = ColorStateList.valueOf(label.read().toArgb())
-            val labelSpin = RemoteViews(context.packageName, R.layout.widget_vinyl_label_spin).apply {
-                setColorStateList(R.id.vinyl_label_spin, "setIndeterminateTintList", labelTint)
-            }
-            AndroidRemoteViews(remoteViews = labelSpin, modifier = GlanceModifier.size(size * 0.36f))
         } else {
-            // Parked: the label sits still under its print.
-            Image(
-                provider = ImageProvider(R.drawable.vinyl_label_softburst),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(label),
-                contentScale = ContentScale.Fit,
-                modifier = GlanceModifier.size(size * 0.36f),
-            )
-            VinylLayer(R.drawable.vinyl_label_marks, print)
+            // Parked: the same artwork sits still.
+            VinylLayer(R.drawable.vinyl_label_marks, label)
         }
         VinylLayer(R.drawable.vinyl_spindle, recordColor())
     }
