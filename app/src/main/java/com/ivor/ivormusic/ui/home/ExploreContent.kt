@@ -63,7 +63,7 @@ private enum class ExploreFilter {
 private data class ExploreAlbumResult(
     val name: String,
     val artist: String,
-    val art: String?,
+    val art: Any?,
     val songs: List<Song>,
 )
 
