@@ -212,7 +212,7 @@ fun EditorialPlayerSheetContent(
                         viewModel.saveQueueAsPlaylist(name, description, onSaved)
                     },
                     field = field,
-                    accent = accent
+                    accent = accent,
                 )
             } else {
                 EditorialNowPlayingView(
@@ -249,7 +249,8 @@ fun EditorialPlayerSheetContent(
                     sleepTimerActive = sleepTimer.active,
                     onArtistClick = onArtistClick,
                     field = field,
-                    accent = accent
+                    accent = accent,
+                    isDjMixPlaying = isDjMixPlaying,
                 )
             }
         }
@@ -304,7 +305,8 @@ private fun EditorialNowPlayingView(
     sleepTimerActive: Boolean,
     onArtistClick: (String) -> Unit,
     field: Color,
-    accent: Color
+    accent: Color,
+    isDjMixPlaying: Boolean,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
 

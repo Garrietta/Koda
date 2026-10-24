@@ -213,7 +213,8 @@ fun GesturePlayerSheetContent(
                     isLocalOriginal = currentSong?.let { viewModel.isLocalOriginal(it) } ?: false,
                     primaryColor = primaryColor,
                     onSurfaceColor = onSurfaceColor,
-                    onSurfaceVariantColor = onSurfaceVariantColor
+                    onSurfaceVariantColor = onSurfaceVariantColor,
+                    isDjMixPlaying = isDjMixPlaying,
                 )
             }
         }
@@ -274,7 +275,8 @@ private fun GestureNowPlayingView(
     isLocalOriginal: Boolean,
     primaryColor: Color,
     onSurfaceColor: Color,
-    onSurfaceVariantColor: Color
+    onSurfaceVariantColor: Color,
+    isDjMixPlaying: Boolean,
 ) {
     // Simple current song index for the custom carousel
     val currentIndex = remember(currentQueueItemId, queue) {
