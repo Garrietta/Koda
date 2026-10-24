@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -217,7 +218,15 @@ fun IvorMusicTheme(
             // icon appearance: it decides from the system uiMode, and Koda's
             // theme mode is its own setting, so a user forcing dark inside the
             // app on a light system would otherwise get dark icons on dark.
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // But the appearance follows the background actually on screen,
+            // not the theme name: an artwork-seeded scheme can be light under
+            // a dark theme (or the reverse), and white icons on a light page
+            // — or dark icons on a dark one — are unreadable either way.
+            // Screens whose top differs from the scheme background (the
+            // playlist pages' cover-colored ground) override this further
+            // down with StatusBarAppearance.
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                colorScheme.background.luminance() > 0.5f
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
@@ -255,6 +264,28 @@ fun IvorMusicTheme(
 data class AlbumTheming(val wholeApp: Boolean, val style: PaletteStyle, val amoled: Boolean)
 
 val LocalAlbumTheming = staticCompositionLocalOf { AlbumTheming(false, PaletteStyle.TONAL_SPOT, false) }
+
+/**
+ * Status bar icons for a screen whose top is NOT the scheme background:
+ * playlist pages paint their cover-colored ground (plus a ground-tinted top
+ * fade) behind the status bar, so the ground's luminance — not the app
+ * theme's — decides whether the icons are dark or light. Runs after the
+ * theme's own SideEffect (child effects run after their parents'), so this
+ * wins while the screen is composed; navigating away lets the theme default
+ * take over again. A light background takes dark icons
+ * (isAppearanceLightStatusBars = true), a dark one light icons.
+ */
+@Composable
+fun StatusBarAppearance(background: Color) {
+    val view = LocalView.current
+    SideEffect {
+        if (!view.isInEditMode) {
+            val window = (view.context as Activity).window
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                background.luminance() > 0.5f
+        }
+    }
+}
 
 /** How long the app takes to move from one song's colours to the next. */
 private const val ALBUM_FADE_MS = 500

@@ -52,6 +52,12 @@ internal fun PlaylistHeroBanner(
     heroContent: @Composable BoxScope.() -> Unit,
 ) {
     val ground = playlistPageGround()
+    // The ground (plus its ground-tinted top fade) is what actually sits
+    // behind the status bar on this page, and it comes from the page-local
+    // artwork scheme — it can be light while the app theme is dark, which
+    // is how white status icons ended up unreadable on the DJ page's
+    // lavender header. The ground's luminance decides the icons.
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(ground)
     val windowHeight = windowDpSize().height
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         // Near-square on a phone, but never more than a comfortable share
