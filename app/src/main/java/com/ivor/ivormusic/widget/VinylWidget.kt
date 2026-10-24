@@ -64,10 +64,20 @@ import com.ivor.ivormusic.R
  * SoftBurst sticker with its type knocked out and a scuff on the grooves, all
  * off-centre so the rotation reads. Paused, the same artwork is drawn still.
  *
- * Every layer is an alpha mask tinted with a theme role, as in [PixelWidget]:
- * the record is drawn, not photographed, so it follows the palette. The
- * rotation's tint needs API 31; on 30 the record is drawn still rather than
- * turning in the wrong colour.
+ * **Every size is proportional to the window.** SizeMode.Exact hands this
+ * composition the launcher's true bounding box, and nothing here is clamped
+ * to a fixed size: the transport column is sized by the height it has to
+ * fill, the stage takes the width that is left, and the record takes the
+ * smaller of its height-bound and width-bound size - so the widget scales to
+ * whatever cell it is resized into instead of one designed size.
+ *
+ * **Color comes from the album, in two different roles.** The buttons take
+ * the vibrant swatch; the center-label sticker takes a second, different
+ * swatch, so the two never share one tint. The disc itself is that vibrant
+ * tinted translucent, like a fancy coloured vinyl - but the sticker stays
+ * fully opaque, so its print stays solid and legible over the see-through
+ * disc. The rotation's tint needs API 31; on 30 the record is drawn still
+ * rather than turning in the wrong colour.
  */
 class VinylWidget : GlanceAppWidget() {
 
@@ -89,6 +99,9 @@ class VinylWidget : GlanceAppWidget() {
 
 private val VINYL_PADDING = 8.dp
 
+/** How see-through the disc is: a fancy coloured vinyl, not a solid record. */
+private const val VINYL_DISC_ALPHA = 0.64f
+
 @Composable
 private fun VinylContent(ui: PlayerWidgetUi) {
     // The vinyl is the widget's only state: it renders even with no media
@@ -97,29 +110,42 @@ private fun VinylContent(ui: PlayerWidgetUi) {
 
     val size = LocalSize.current
     val playing = ui.snapshot.isPlaying
-    // Measured against the actual cell, like every layout that can clip: the
-    // record sets the scale, the sleeve box is scaled up (locked 1:1) so the
-    // cookie's visual height matches the record's diameter, the arm stands a
-    // quarter of a record further out, and the transport gets what is left.
-    // The cookie's lobes don't fill their box, so the box is the record over
-    // the shape's true visual fill fraction.
-    val widthForStage = size.width - VINYL_PADDING * 2 - 10.dp - 56.dp
+    // Proportional to the window, start to finish. The transport column is
+    // sized by the height it has to fill (two buttons plus the gap), the
+    // stage takes the width that is left, and the record takes the smaller
+    // of its height-bound and width-bound size. Nothing is clamped to a
+    // fixed dp, so a resized cell rescales the whole widget instead of
+    // leaving small buttons beside a large record (or the reverse). The
+    // cookie's lobes don't fill their box, so the sleeve box is the record
+    // over the shape's true visual fill fraction, and the arm stands a
+    // quarter of a record further out.
+    val availWidth = size.width - VINYL_PADDING * 2
+    val availHeight = size.height - VINYL_PADDING * 2
+    val gap = (availHeight * 0.04f).coerceAtLeast(4.dp)
+    val playSize = (availHeight * 0.46f).coerceAtLeast(24.dp)
+    val nextSize = playSize * 0.95f
     val cookieFill = WidgetShapes.cookie4SidedFillFraction()
     val record = minOf(
-        (size.height - VINYL_PADDING * 2) * cookieFill,
-        widthForStage / (1f / cookieFill + 0.75f),
-    )
+        availHeight * cookieFill,
+        (availWidth - gap - playSize) / (1f / cookieFill + 0.75f),
+    ).coerceAtLeast(1.dp)
     val sleeve = record / cookieFill
     val armReach = record / 4
     val stage = sleeve + record / 2 + armReach
-    val hero = (sleeve * 0.42f).coerceIn(44.dp, 72.dp)
-    val side = (sleeve * 0.42f).coerceIn(42.dp, 70.dp)
 
-    // No card, like Bloom: the sleeve, the record and the buttons are all
-    // opaque and stand on the wallpaper by themselves. That is also why there
-    // is no title here - theme-coloured text on a wallpaper nobody chose is
-    // the one thing that could not supply its own contrast, and the cover on
-    // the sleeve already says what is playing.
+    // The buttons and the sticker take two different album colours: vibrant
+    // for the transport, a second swatch for the label. The disc takes the
+    // vibrant again, but translucent - a different role, not a third tint.
+    val buttonColor = ui.snapshot.artworkColor
+    val labelColor = ui.snapshot.artworkLabelColor?.let { ColorProvider(Color(it)) }
+        ?: GlanceTheme.colors.primaryContainer
+
+    // No card, like Bloom: the sleeve, the buttons and the label are all
+    // opaque and stand on the wallpaper by themselves - only the disc is
+    // translucent, by design. That is also why there is no title here -
+    // theme-coloured text on a wallpaper nobody chose is the one thing that
+    // could not supply its own contrast, and the cover on the sleeve already
+    // says what is playing.
     WidgetSurface(background = null, openAppOnTap = false) {
         Row(
             modifier = GlanceModifier.padding(VINYL_PADDING),
@@ -130,7 +156,12 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     modifier = GlanceModifier.fillMaxSize().padding(end = armReach),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
-                    VinylRecord(size = record, playing = playing)
+                    VinylRecord(
+                        size = record,
+                        playing = playing,
+                        discColor = discColor(buttonColor),
+                        labelColor = labelColor,
+                    )
                 }
                 Box(
                     modifier = GlanceModifier.fillMaxSize(),
@@ -156,12 +187,11 @@ private fun VinylContent(ui: PlayerWidgetUi) {
                     )
                 }
             }
-            Spacer(modifier = GlanceModifier.width(10.dp))
+            Spacer(modifier = GlanceModifier.width(gap))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val buttonColor = ui.snapshot.artworkColor
-                FlowerPlayButton(isPlaying = playing, size = hero, color = buttonColor)
-                Spacer(modifier = GlanceModifier.height(6.dp))
-                BunNextButton(size = side, color = buttonColor)
+                SunnyPlayButton(isPlaying = playing, size = playSize, color = buttonColor)
+                Spacer(modifier = GlanceModifier.height(gap))
+                BunNextButton(size = nextSize, color = buttonColor)
             }
         }
     }
@@ -195,21 +225,22 @@ private fun VinylArm(width: Dp, height: Dp, onRecord: Boolean, accentColor: Colo
 }
 
 /**
- * Expressive transport buttons: the official M3E Flower for play, the official
- * M3E Bun for next - both tinted by the dynamic color plucked from the album
- * art (falling back to the fixed amber/white when there is none). The shape is
- * baked into a bitmap background with the icon drawn over it; the whole thing
- * is the tap target. The icon tint follows the button's luminance so it always
- * reads.
+ * Expressive transport buttons, deliberately different shapes: the official
+ * M3E Sunny for play - points, unmistakable at a glance - against the
+ * official M3E Bun for next, a smooth blob. Both tinted by the dynamic
+ * vibrant color plucked from the album art (falling back to the fixed
+ * amber/white when there is none). The shape is baked into a bitmap
+ * background with the icon drawn over it; the whole thing is the tap target.
+ * The icon tint follows the button's luminance so it always reads.
  */
 @Composable
-private fun FlowerPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
+private fun SunnyPlayButton(isPlaying: Boolean, size: Dp, color: Int?) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val px = (size.value * density).toInt().coerceAtLeast(1)
     val bgColor = color ?: 0xFFFFB300.toInt()
     val bg = androidx.compose.runtime.remember(px, bgColor) {
-        filledPath(WidgetShapes.flower(px.toFloat()), px, bgColor)
+        filledPath(WidgetShapes.sunny(px.toFloat()), px, bgColor)
     }
     val iconTint = ColorProvider(Color(if (isLight(bgColor)) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()))
     Box(
@@ -286,21 +317,41 @@ private fun recordColor(): ColorProvider {
     return if (dark) GlanceTheme.colors.background else GlanceTheme.colors.onSurface
 }
 
+/**
+ * The disc, translucent like a fancy coloured vinyl: the album's vibrant at
+ * [VINYL_DISC_ALPHA], falling back to the dark record colour at the same
+ * alpha when there is no artwork color. The tint's alpha is what makes the
+ * wallpaper show through the disc - the label tint below stays fully opaque,
+ * and nothing here touches it.
+ */
 @Composable
-private fun VinylRecord(size: Dp, playing: Boolean) {
+private fun discColor(artworkColor: Int?): ColorProvider {
+    val base = recordColor().read()
+    val solid = artworkColor?.let { Color(it) } ?: base
+    return ColorProvider(solid.copy(alpha = VINYL_DISC_ALPHA))
+}
+
+@Composable
+private fun VinylRecord(
+    size: Dp,
+    playing: Boolean,
+    discColor: ColorProvider,
+    labelColor: ColorProvider,
+) {
     val context = LocalContext.current
     val colors = GlanceTheme.colors
     val dark = KodaWidgetTheme.isDark(context)
     // The light on the grooves is light in both themes, for the same reason.
     val sheen = if (dark) colors.onSurface else colors.surface
-    val label = colors.primaryContainer
     // The label is the official M3E SoftBurst, baked into the spinning
     // artwork (drawable-nodpi/vinyl_label_marks.png) together with its print:
-    // the label's type is knocked out of the starburst so the dark disc shows
+    // the label's type is knocked out of the starburst so the disc shows
     // through like real print, and the groove scuffs ride along. A launcher
     // only animates resource drawables, never runtime bitmaps, so the label
     // could not spin as a separate layer -- as part of the disc's own artwork
     // it turns with the record, exactly like a real vinyl's printed label.
+    // The label tint is FULLY OPAQUE, always: only the disc goes translucent,
+    // never the sticker on it.
 
     Box(
         modifier = GlanceModifier
@@ -313,19 +364,19 @@ private fun VinylRecord(size: Dp, playing: Boolean) {
             .clickable(widgetTransportAction(WidgetActionActivity.ACTION_TOGGLE)),
         contentAlignment = Alignment.Center,
     ) {
-        VinylLayer(R.drawable.vinyl_disc, recordColor())
+        VinylLayer(R.drawable.vinyl_disc, discColor)
         VinylLayer(R.drawable.vinyl_grooves, sheen)
         if (playing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The label turns with the record: it is baked into the spinning
             // artwork, driven by the same ProgressBar mechanism as before.
-            val tint = ColorStateList.valueOf(label.read().toArgb())
+            val tint = ColorStateList.valueOf(labelColor.read().toArgb())
             val spin = RemoteViews(context.packageName, R.layout.widget_vinyl_spin).apply {
                 setColorStateList(R.id.vinyl_spin, "setIndeterminateTintList", tint)
             }
             AndroidRemoteViews(remoteViews = spin, modifier = GlanceModifier.fillMaxSize())
         } else {
             // Parked: the same artwork sits still.
-            VinylLayer(R.drawable.vinyl_label_marks, label)
+            VinylLayer(R.drawable.vinyl_label_marks, labelColor)
         }
         VinylLayer(R.drawable.vinyl_spindle, recordColor())
     }

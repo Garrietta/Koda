@@ -176,15 +176,20 @@ object PlayerWidgets {
     }
 
     /**
-     * Extracts a vibrant color from the snapshot's artwork. Returns the original
+     * Extracts album colors from the snapshot's artwork. Returns the original
      * snapshot if no artwork or extraction fails. Runs on IO dispatcher.
+     *
+     * Two roles, never one tint: [artworkColor] is the vibrant swatch for the
+     * buttons, [artworkLabelColor] is a second, different swatch for the vinyl
+     * widget's center-label sticker. A stored snapshot from before the label
+     * field existed still gets its label filled in here.
      */
     private suspend fun enrichWithArtworkColor(
         context: Context,
         snapshot: PlayerWidgetSnapshot
     ): PlayerWidgetSnapshot {
-        // Already has a color, or no artwork to extract from.
-        if (snapshot.artworkColor != null || snapshot.artworkUri == null) {
+        if (snapshot.artworkUri == null) return snapshot
+        if (snapshot.artworkColor != null && snapshot.artworkLabelColor != null) {
             return snapshot
         }
         return try {
@@ -194,18 +199,45 @@ object PlayerWidgets {
                 128 // Small size is enough for color extraction
             ) ?: return snapshot
             val palette = Palette.from(bitmap).generate()
-            val vibrant = palette.getVibrantColor(0)
-            if (vibrant != 0) {
-                snapshot.copy(artworkColor = vibrant)
-            } else {
-                // Fallback to dominant if no vibrant swatch
-                val dominant = palette.getDominantColor(0)
-                if (dominant != 0) snapshot.copy(artworkColor = dominant) else snapshot
-            }
+            val vibrant = snapshot.artworkColor ?: run {
+                val v = palette.getVibrantColor(0)
+                if (v != 0) v else palette.getDominantColor(0).takeIf { it != 0 }
+            } ?: return snapshot
+            val label = snapshot.artworkLabelColor ?: pickLabelColor(palette, vibrant)
+            snapshot.copy(artworkColor = vibrant, artworkLabelColor = label)
         } catch (e: Exception) {
             KLog.w("PlayerWidgets", "Artwork color extraction failed: ${e.message}")
             snapshot
         }
+    }
+
+    /**
+     * The label's swatch: the first Palette role that is actually a different
+     * color from the buttons' vibrant, light roles first so the sticker reads
+     * against the dark translucent disc. If every role collapses to the same
+     * color (a near-monochrome cover), derive one by shifting the vibrant's
+     * lightness instead of reusing it - still the album's color, just a
+     * different stop on it.
+     */
+    private fun pickLabelColor(palette: Palette, vibrant: Int): Int {
+        val vibrantRgb = vibrant and 0x00FFFFFF
+        val candidates = listOf(
+            palette.lightVibrantSwatch,
+            palette.darkVibrantSwatch,
+            palette.lightMutedSwatch,
+            palette.darkMutedSwatch,
+            palette.mutedSwatch,
+        )
+        for (swatch in candidates) {
+            val rgb = swatch?.rgb ?: continue
+            if ((rgb and 0x00FFFFFF) != vibrantRgb) return rgb
+        }
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(vibrant, hsv)
+        // Light vibrant goes dark, dark vibrant goes light: the sticker must
+        // sit apart from the buttons whichever way the cover leans.
+        hsv[2] = if (hsv[2] > 0.5f) hsv[2] * 0.4f else (hsv[2] * 1.5f + 0.3f).coerceAtMost(1f)
+        return android.graphics.Color.HSVToColor(hsv)
     }
 
     /** Redraw without new state - used when the service is going away. */

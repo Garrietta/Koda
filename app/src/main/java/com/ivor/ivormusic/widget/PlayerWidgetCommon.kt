@@ -60,6 +60,13 @@ data class PlayerWidgetSnapshot(
     val album: String?,
     /** Vibrant color extracted from artwork (ARGB int), null if unavailable. */
     val artworkColor: Int?,
+    /**
+     * Second album-derived color for the vinyl widget's center-label sticker
+     * (ARGB int), null if unavailable. Always a DIFFERENT Palette swatch from
+     * [artworkColor] (or a lightness-shifted derivation of it) so the sticker
+     * and the buttons never share one tint.
+     */
+    val artworkLabelColor: Int?,
 ) {
     /** 0f..1f for the progress strip; 0 when the duration is unknown. */
     val progress: Float
@@ -82,6 +89,7 @@ data class PlayerWidgetSnapshot(
             mediaId = null,
             album = null,
             artworkColor = null,
+            artworkLabelColor = null,
         )
     }
 }
@@ -129,6 +137,7 @@ object PlayerWidgetStore {
             put("mediaId", snapshot.mediaId ?: JSONObject.NULL)
             put("album", snapshot.album ?: JSONObject.NULL)
             put("artworkColor", snapshot.artworkColor ?: JSONObject.NULL)
+            put("artworkLabelColor", snapshot.artworkLabelColor ?: JSONObject.NULL)
             put(
                 "upNext",
                 JSONArray().apply {
@@ -185,6 +194,9 @@ object PlayerWidgetStore {
                 mediaId = json.optString("mediaId", "").takeIf { it.isNotBlank() },
                 album = json.optString("album", "").takeIf { it.isNotBlank() },
                 artworkColor = json.optInt("artworkColor", 0).takeIf { it != 0 },
+                // Old blobs predate the field: optInt defaults to 0, which
+                // reads back as null, so a stale store never breaks a render.
+                artworkLabelColor = json.optInt("artworkLabelColor", 0).takeIf { it != 0 },
             )
         } catch (e: Exception) {
             KLog.w("PlayerWidget", "Widget state unreadable: ${e.message}")
@@ -280,6 +292,7 @@ internal fun Player.toWidgetSnapshot(): PlayerWidgetSnapshot {
         mediaId = currentMediaItem?.mediaId?.takeIf { it.isNotBlank() },
         album = mediaMetadata.albumTitle?.toString()?.takeIf { it.isNotBlank() },
         artworkColor = null, // Enriched by PlayerWidgets.publish() via Palette
+        artworkLabelColor = null, // Enriched alongside it, a different swatch
     )
 }
 

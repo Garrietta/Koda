@@ -88,8 +88,31 @@ internal object WidgetShapes {
     /**
      * The official M3E Sunny - the catalog's 8-point sun with rounded points.
      * The expressive hero shape: play buttons, anything that should pop.
+     *
+     * Re-fit to the square from its TRUE visual bounds (same measurement as
+     * [puffy], uniform scale, centred) rather than a straight scale of the
+     * normalized polygon: a straight scale trusts the catalog's square, and
+     * any authoring inset reads as a button sitting off-centre or skewed at
+     * widget size. Sunny's points against Bun's smooth blob is the pair that
+     * reads as different at a glance.
      */
-    fun sunny(size: Float): Path = official(MaterialShapes.Sunny, size)
+    fun sunny(size: Float): Path {
+        val polygon = MaterialShapes.Sunny
+        val b = polygon.calculateBounds(approximate = false)
+        val w = b[2] - b[0]
+        val h = b[3] - b[1]
+        val cx = (b[0] + b[2]) / 2f
+        val cy = (b[1] + b[3]) / 2f
+        val path = polygon.toPath(Path())
+        val s = size / max(w, h)
+        path.transform(
+            Matrix().apply {
+                setScale(s, s)
+                postTranslate(size / 2f - cx * s, size / 2f - cy * s)
+            }
+        )
+        return path
+    }
 
     /**
      * The official M3E Flower - rounded petals, symmetric by construction.
