@@ -1419,7 +1419,16 @@ fun HomeScreen(
                                                     viewedPlaylistFromHome = playlist
                                                     selectedTab = TAB_LIBRARY
                                                 },
-                                                onOpenLiked = { selectedTab = TAB_LIBRARY },
+                                                onOpenLiked = {
+                                                    // Liked songs opens straight onto the likes
+                                                    // page, the way the Library's own Liked row
+                                                    // does - never the Library root.
+                                                    noteLibraryReturn()
+                                                    viewedPlaylistFromHome = com.ivor.ivormusic.data.PlaylistDisplayItem(
+                                                        "Liked Songs", "LM", "You", spotlightLiked.size, null
+                                                    )
+                                                    selectedTab = TAB_LIBRARY
+                                                },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
                                                 onOpenAiDj = {
                                                     noteLibraryReturn()

@@ -295,9 +295,11 @@ fun LibraryContent(
     }
 
     // Handle the Home tab's DJ card hand-off: open the AI DJ route once, then
-    // consume it so later visits to the tab land on the list.
+    // consume it so later visits to the tab land on the list. Back from it
+    // returns to the tab the hand-off began on, like every other hand-off.
     LaunchedEffect(initialAiDj) {
         if (initialAiDj) {
+            returnsToCaller = initialReturnToCaller
             currentRoute = LibraryRoute.AiDj
             onInitialAiDjConsumed()
         }
@@ -352,6 +354,9 @@ fun LibraryContent(
             currentRoute = LibraryRoute.Playlist
         } else if (returnsToCaller) {
             returnsToCaller = false
+            // The excursion is over: park the Library tab on its root so a
+            // later visit opens the list, not the handed-over screen.
+            currentRoute = LibraryRoute.Main
             onReturnToCaller()
         } else {
             currentRoute = LibraryRoute.Main
