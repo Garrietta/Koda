@@ -1858,7 +1858,7 @@ fun HomeScreen(
                 }
             }
         } else listOf(
-            Triple(TAB_AIDJ, stringResource(R.string.aidj_tab_label), Pair(Icons.Rounded.AutoAwesome, Icons.Outlined.AutoAwesome)),
+            Triple(TAB_AIDJ, stringResource(R.string.aidj_tab_label), Pair(Icons.Rounded.AutoAwesome, Icons.Rounded.AutoAwesome)),
             Triple(TAB_HOME, stringResource(R.string.tab_home), Pair(Icons.Rounded.Home, Icons.Outlined.Home)),
             Triple(TAB_EXPLORE, stringResource(R.string.tab_explore), Pair(Icons.Filled.Explore, Icons.Outlined.Explore)),
             Triple(TAB_LIBRARY, stringResource(R.string.tab_library), Pair(Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic))
