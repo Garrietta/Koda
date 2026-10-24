@@ -2,6 +2,7 @@ package com.ivor.ivormusic.widget
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.compose.ui.graphics.toArgb
 import androidx.glance.color.ColorProviders
 import androidx.glance.material3.ColorProviders
 import com.ivor.ivormusic.data.ThemePreferences
@@ -44,6 +45,24 @@ internal object KodaWidgetTheme {
                 dark = kodaColorScheme(context, true, palette, amoled, style),
             )
         }
+    }
+
+    /**
+     * The app palette's primary for the host's current mode, as an ARGB int
+     * - for surfaces that need a raw color, like the vinyl widget's baked
+     * button bitmaps. Glance's own [GlanceTheme.colors] roles are
+     * ColorProviders, not raw colors, so they cannot feed a bitmap; this
+     * resolves the same scheme [colors] hands Glance, in the same mode.
+     */
+    fun palettePrimaryArgb(context: Context): Int {
+        val prefs = ThemePreferences(context)
+        return kodaColorScheme(
+            context,
+            isDark(context),
+            prefs.colorPalette.value,
+            prefs.amoledTheme.value,
+            prefs.paletteStyle.value,
+        ).primary.toArgb()
     }
 
     /** Whether the host is currently drawing dark, for artwork scrim choices. */

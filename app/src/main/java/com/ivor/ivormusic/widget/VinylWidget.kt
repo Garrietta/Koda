@@ -157,9 +157,11 @@ private fun VinylContent(ui: PlayerWidgetUi) {
     // The buttons take the app palette's primary - the same scheme the app
     // UI draws in, resolved from the palette style in Settings, so they
     // follow a palette change (the palette setters push a widget redraw).
+    // Resolved here, not from GlanceTheme: Glance roles are ColorProviders,
+    // and a baked bitmap needs a raw ARGB int.
     // The record keeps album colors: a second album swatch for the label,
     // the darkened vibrant translucent for the disc.
-    val buttonColor = GlanceTheme.colors.primary.toArgb()
+    val buttonColor = KodaWidgetTheme.palettePrimaryArgb(LocalContext.current)
     val labelColor = ui.snapshot.artworkLabelColor?.let { ColorProvider(Color(it)) }
         ?: GlanceTheme.colors.primaryContainer
 
