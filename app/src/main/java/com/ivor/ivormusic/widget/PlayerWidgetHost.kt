@@ -69,17 +69,30 @@ internal object PlayerWidgetHost {
     /**
      * Make sure [state] holds something real before the first composition of a
      * session. Reads the store, and only falls back to a session bind when the
-     * store has never been written - a widget added before this build ever ran.
+     * store has never held a real track - a widget added before this build ever ran.
+     *
+     * A stored snapshot without media is NOT a seed: an empty blob (written by
+     * an older build's controller path, or a first-run bind against an idle
+     * player) must never stand in for a track, and a live bind is tried
+     * instead. Likewise a stored snapshot predates Palette enrichment, so its
+     * disc/label colors are filled in here - otherwise every post-restart
+     * render drew a grey disc and a default label until the app reopened.
      */
     suspend fun ensureSeeded(context: Context) {
         if (seeded) return
         loadLock.withLock {
             if (seeded) return
-            val stored = PlayerWidgetStore.read(context)
-            val snapshot = stored ?: withController(context) { it.toSnapshot() }
+            val stored = PlayerWidgetStore.read(context)?.takeIf { it.hasMedia }
+            val snapshot = stored
+                ?: withController(context) { it.toSnapshot() }?.takeIf { it.hasMedia }
             if (snapshot != null) {
-                if (stored == null) PlayerWidgetStore.write(context, snapshot)
-                _state.value = PlayerWidgetUi(snapshot, loadArtwork(context, snapshot))
+                val enriched = if (snapshot.artworkColor == null || snapshot.artworkLabelColor == null) {
+                    PlayerWidgets.enrichWithArtworkColor(context, snapshot)
+                } else {
+                    snapshot
+                }
+                PlayerWidgetStore.write(context, enriched)
+                _state.value = PlayerWidgetUi(enriched, loadArtwork(context, enriched))
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
@@ -90,6 +103,9 @@ internal object PlayerWidgetHost {
     /** Publish new state to every live composition. */
     suspend fun set(context: Context, snapshot: PlayerWidgetSnapshot) {
         val current = _state.value
+        // Belt and suspenders beside publish()'s guard: an empty snapshot
+        // must never replace a good live state, whatever the caller.
+        if (!snapshot.hasMedia && current.snapshot.hasMedia) return
         // Reused only when there is one to reuse: a cover that failed to load
         // is tried again on the next push rather than staying blank for as
         // long as the song plays.
@@ -157,13 +173,26 @@ object PlayerWidgets {
      */
     fun publish(context: Context, snapshot: PlayerWidgetSnapshot) {
         val appContext = context.applicationContext
-        // Don't let an empty snapshot (app closing, session destroyed) erase
-        // the last known good state. The widget should show the last song,
-        // not go blank, when the app is swiped away.
+        // Don't let an empty snapshot (queue ended, session destroyed,
+        // player released) erase the last known good state. The old code
+        // guarded only the store write below; the state update and redraw
+        // still ran unconditionally, so one empty publish blanked the
+        // widget AND latched `seeded`, after which every heartbeat
+        // re-rendered the blank until the app reopened and published
+        // something real. The guard now covers the whole publish: the
+        // widget keeps showing the last song until genuinely newer
+        // playback replaces it.
         val stored = PlayerWidgetStore.read(appContext)
-        if (snapshot.hasMedia || stored == null || !stored.hasMedia) {
-            PlayerWidgetStore.write(appContext, snapshot)
+        if (!snapshot.hasMedia &&
+            (PlayerWidgetHost.state.value.snapshot.hasMedia || stored?.hasMedia == true)
+        ) {
+            return
         }
+        // The store write is unconditional here (past the guard above) but
+        // the redraw is not: state is worth keeping current even with
+        // nothing on the home screen, so a widget added later draws the
+        // right thing on its first frame.
+        PlayerWidgetStore.write(appContext, snapshot)
         if (!anyInstalled(appContext)) return
         pushJob?.cancel()
         pushJob = scope.launch {
@@ -173,6 +202,11 @@ object PlayerWidgets {
             val enriched = withContext(Dispatchers.IO) {
                 enrichWithArtworkColor(appContext, snapshot)
             }
+            // Store the ENRICHED snapshot, not the raw one: the old code
+            // stored pre-enrichment, so a fresh process seeding from the
+            // store rendered a grey disc and a default label until the app
+            // reopened and re-published.
+            PlayerWidgetStore.write(appContext, enriched)
             PlayerWidgetHost.set(appContext, enriched)
             updateEveryWidget(appContext)
             VinylClassic.updateAll(appContext)
@@ -190,7 +224,7 @@ object PlayerWidgets {
      * snapshot from before the label field existed still gets its label
      * filled in here.
      */
-    private suspend fun enrichWithArtworkColor(
+    internal suspend fun enrichWithArtworkColor(
         context: Context,
         snapshot: PlayerWidgetSnapshot
     ): PlayerWidgetSnapshot {
