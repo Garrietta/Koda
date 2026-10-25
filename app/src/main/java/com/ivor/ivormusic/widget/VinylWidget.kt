@@ -90,6 +90,17 @@ class VinylWidgetReceiver : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        // Push a guaranteed-inflatable shell FIRST, synchronously, before
+        // any rendering work: if the full render below throws for any
+        // reason (bad snapshot, bad artwork, a hostile device state), the
+        // widget is still ADDED — empty but tappable — instead of One UI
+        // showing "Couldn't add widget." The full render replaces the
+        // shell milliseconds later, so a healthy add never shows it.
+        for (id in appWidgetIds) {
+            runCatching {
+                appWidgetManager.updateAppWidget(id, VinylClassic.staticViews(context, id))
+            }
+        }
         val pending = goAsync()
         scope.launch {
             try {
@@ -109,6 +120,11 @@ class VinylWidgetReceiver : AppWidgetProvider() {
         newOptions: android.os.Bundle,
     ) {
         // A resize can flip the narrow/wide variant; re-render for it.
+        // Same static-first rule as onUpdate: the add/resize can never
+        // fail for lack of content.
+        runCatching {
+            appWidgetManager.updateAppWidget(appWidgetId, VinylClassic.staticViews(context, appWidgetId))
+        }
         val pending = goAsync()
         scope.launch {
             try {
@@ -147,7 +163,11 @@ internal object VinylClassic {
     private const val MASK_PX = 512
 
     suspend fun updateAll(context: Context) {
-        PlayerWidgetHost.ensureSeeded(context)
+        // Seeding must never take the update down with it: a failed seed
+        // still renders (empty state, placeholder tile) instead of pushing
+        // nothing, which is what One UI reports as "Couldn't add widget."
+        runCatching { PlayerWidgetHost.ensureSeeded(context) }
+            .onFailure { KLog.w("VinylWidget", "Seed failed, rendering empty: ${it.message}") }
         val ui = PlayerWidgetHost.state.value
         val ids = runCatching {
             AppWidgetManager.getInstance(context).getAppWidgetIds(
@@ -155,15 +175,56 @@ internal object VinylClassic {
             )
         }.getOrNull() ?: IntArray(0)
         if (ids.isEmpty()) return
-        val rendered = render(context, ui)
         val manager = AppWidgetManager.getInstance(context)
+        // Render once for every instance, but a render failure must not
+        // leave any id without content: fall back to the static shell.
+        val rendered = try {
+            render(context, ui)
+        } catch (e: Exception) {
+            KLog.w("VinylWidget", "Render failed, pushing static shell: ${e.message}")
+            for (id in ids) {
+                runCatching { manager.updateAppWidget(id, staticViews(context, id)) }
+            }
+            return
+        }
         for (id in ids) {
-            try {
-                manager.updateAppWidget(id, rendered.forId(context, isWide(context, id)))
-            } catch (e: Exception) {
-                KLog.w("VinylWidget", "Update failed for $id: ${e.message}")
+            val wide = isWide(context, id)
+            // Tiered push, per id: full render first; if the host rejects
+            // it (any single RemoteViews action can fail the whole apply),
+            // retry with bitmaps but WITHOUT the reflection actions (spin
+            // tint, content descriptions); if that also fails, the static
+            // shell. An id is never left with no content.
+            val pushed = runCatching {
+                manager.updateAppWidget(id, rendered.forId(context, wide))
+            }.isSuccess || runCatching {
+                manager.updateAppWidget(id, rendered.forId(context, wide, minimal = true))
+            }.isSuccess || runCatching {
+                manager.updateAppWidget(id, staticViews(context, id))
+            }.isSuccess
+            if (!pushed) {
+                KLog.w("VinylWidget", "All push tiers failed for $id")
             }
         }
+    }
+
+    /**
+     * Minimal shell: layout + taps only — no bitmaps, no tint, no content
+     * descriptions. Every id exists in both variants and every view class
+     * is RemoteViews-legal, so this cannot fail to inflate. It is what an
+     * add falls back to, and what onUpdate pushes synchronously before
+     * the full render, so a failed enrichment can never fail the add.
+     */
+    fun staticViews(context: Context, appWidgetId: Int): RemoteViews {
+        val views = RemoteViews(
+            context.packageName,
+            if (isWide(context, appWidgetId)) R.layout.widget_vinyl_wide
+            else R.layout.widget_vinyl_narrow,
+        )
+        views.setOnClickPendingIntent(R.id.vinyl_tap_sleeve, openAppIntent(context))
+        views.setOnClickPendingIntent(R.id.vinyl_tap_record, toggleIntent(context))
+        views.setOnClickPendingIntent(R.id.vinyl_btn_play, toggleIntent(context))
+        views.setOnClickPendingIntent(R.id.vinyl_btn_next, nextIntent(context))
+        return views
     }
 
     /**
@@ -220,7 +281,7 @@ internal object VinylClassic {
         val labelColor: Int,
         val spinning: Boolean,
     ) {
-        fun forId(context: Context, wide: Boolean): RemoteViews {
+        fun forId(context: Context, wide: Boolean, minimal: Boolean = false): RemoteViews {
             val views = RemoteViews(
                 context.packageName,
                 if (wide) R.layout.widget_vinyl_wide else R.layout.widget_vinyl_narrow,
@@ -238,9 +299,12 @@ internal object VinylClassic {
                 R.id.vinyl_label_parked,
                 if (spinning) View.GONE else View.VISIBLE,
             )
-            if (spinning) {
+            if (spinning && !minimal) {
                 // Tint the turning print the sticker colour. setColorStateList
                 // on RemoteViews needs API 31, which the spin itself needs.
+                // Skipped on the minimal tier: it is the only reflection
+                // action in the widget, so it is the first thing dropped
+                // when the host rejects the full render.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     views.setColorStateList(
                         R.id.vinyl_label_spin,
@@ -253,7 +317,7 @@ internal object VinylClassic {
             views.setOnClickPendingIntent(R.id.vinyl_tap_record, toggleIntent(context))
             views.setOnClickPendingIntent(R.id.vinyl_btn_play, toggleIntent(context))
             views.setOnClickPendingIntent(R.id.vinyl_btn_next, nextIntent(context))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !minimal) {
                 views.setContentDescription(R.id.vinyl_btn_play, "Play or pause")
                 views.setContentDescription(R.id.vinyl_btn_next, "Next track")
                 views.setContentDescription(R.id.vinyl_tap_sleeve, "Open Koda")
@@ -307,20 +371,21 @@ internal object VinylClassic {
         drawMask(canvas, context, R.drawable.vinyl_disc, discColor, recordRect)
         drawMask(canvas, context, R.drawable.vinyl_grooves, light, recordRect)
         if (artwork != null) {
-            val sleeve = maskedArtwork(artwork, ArtworkShape.COOKIE4SIDED, height)
-            canvas.drawBitmap(sleeve, null, sleeveRect, null)
+            // A corrupt/recycled cover must never kill the render: fall
+            // back to the placeholder tile on any artwork failure.
+            val sleeve = try {
+                maskedArtwork(artwork, ArtworkShape.COOKIE4SIDED, height)
+            } catch (e: Exception) {
+                KLog.w("VinylWidget", "Artwork mask failed, using tile: ${e.message}")
+                null
+            }
+            if (sleeve != null) {
+                canvas.drawBitmap(sleeve, null, sleeveRect, null)
+            } else {
+                drawPlaceholderTile(canvas, context, height, sleeveRect, secondaryContainer, onSecondaryContainer)
+            }
         } else {
-            val tile = shapeTile(ArtworkShape.COOKIE4SIDED, height, secondaryContainer)
-            canvas.drawBitmap(tile, null, sleeveRect, null)
-            val markSize = (height / 2.6f).roundToInt()
-            val mark = maskBitmap(context, R.drawable.ic_playback_notification, onSecondaryContainer)
-            val m = (height - markSize) / 2f
-            canvas.drawBitmap(
-                mark,
-                null,
-                RectF(m, m, m + markSize, m + markSize),
-                null,
-            )
+            drawPlaceholderTile(canvas, context, height, sleeveRect, secondaryContainer, onSecondaryContainer)
         }
         val armPose = if (isPlaying) "on" else "off"
         val armRes = { layer: String ->
@@ -334,6 +399,28 @@ internal object VinylClassic {
         drawMask(canvas, context, armRes("metal"), light, armRect)
         drawMask(canvas, context, armRes("accent"), accent, armRect)
         return out
+    }
+
+    /** No-artwork placeholder: flat shape tile + note mark, centred. */
+    private fun drawPlaceholderTile(
+        canvas: Canvas,
+        context: Context,
+        height: Int,
+        sleeveRect: RectF,
+        secondaryContainer: Int,
+        onSecondaryContainer: Int,
+    ) {
+        val tile = shapeTile(ArtworkShape.COOKIE4SIDED, height, secondaryContainer)
+        canvas.drawBitmap(tile, null, sleeveRect, null)
+        val markSize = (height / 2.6f).roundToInt()
+        val mark = maskBitmap(context, R.drawable.ic_playback_notification, onSecondaryContainer)
+        val m = (height - markSize) / 2f
+        canvas.drawBitmap(
+            mark,
+            null,
+            RectF(m, m, m + markSize, m + markSize),
+            null,
+        )
     }
 
     /**
