@@ -99,6 +99,8 @@ class VinylWidgetReceiver : AppWidgetProvider() {
         for (id in appWidgetIds) {
             runCatching {
                 appWidgetManager.updateAppWidget(id, VinylClassic.staticViews(context, id))
+            }.onFailure {
+                KLog.w("VinylWidget", "Static shell push failed for $id: ${it.message}")
             }
         }
         val pending = goAsync()
@@ -124,6 +126,8 @@ class VinylWidgetReceiver : AppWidgetProvider() {
         // fail for lack of content.
         runCatching {
             appWidgetManager.updateAppWidget(appWidgetId, VinylClassic.staticViews(context, appWidgetId))
+        }.onFailure {
+            KLog.w("VinylWidget", "Static shell push failed for $appWidgetId: ${it.message}")
         }
         val pending = goAsync()
         scope.launch {
@@ -188,7 +192,9 @@ internal object VinylClassic {
             return
         }
         for (id in ids) {
-            val wide = isWide(context, id)
+            // A bad options bundle must never take the whole update down:
+            // fall back to narrow (the 4x2 native variant) for this id.
+            val wide = runCatching { isWide(context, id) }.getOrDefault(false)
             // Tiered push, per id: full render first; if the host rejects
             // it (any single RemoteViews action can fail the whole apply),
             // retry with bitmaps but WITHOUT the reflection actions (spin
@@ -213,12 +219,20 @@ internal object VinylClassic {
      * is RemoteViews-legal, so this cannot fail to inflate. It is what an
      * add falls back to, and what onUpdate pushes synchronously before
      * the full render, so a failed enrichment can never fail the add.
+     *
+     * Deliberately NOT variant-aware: the shell always uses the narrow
+     * layout (the 4x2 native variant) and never reads AppWidgetManager
+     * options. The shell's only job is to land something inflatable the
+     * instant the add happens, and an options read on that path is the
+     * one system call that can fail on an OEM-modified bundle and take
+     * the add down with it. The async full render picks the correct
+     * variant milliseconds later, so a wide cell shows the narrow shell
+     * only for a blink, and only if the full render is slow.
      */
     fun staticViews(context: Context, appWidgetId: Int): RemoteViews {
         val views = RemoteViews(
             context.packageName,
-            if (isWide(context, appWidgetId)) R.layout.widget_vinyl_wide
-            else R.layout.widget_vinyl_narrow,
+            R.layout.widget_vinyl_narrow,
         )
         views.setOnClickPendingIntent(R.id.vinyl_tap_sleeve, openAppIntent(context))
         views.setOnClickPendingIntent(R.id.vinyl_tap_record, toggleIntent(context))
@@ -580,10 +594,14 @@ internal object VinylClassic {
             AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
         }.getOrNull() ?: return null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            @Suppress("DEPRECATION")
-            val sizes = options.getParcelableArrayList<SizeF>(
-                AppWidgetManager.OPTION_APPWIDGET_SIZES,
-            )
+            // Unparceling an OEM-modified bundle can throw; never let it
+            // take the update down — fall through to MIN/MAX below.
+            val sizes = runCatching {
+                @Suppress("DEPRECATION")
+                options.getParcelableArrayList<SizeF>(
+                    AppWidgetManager.OPTION_APPWIDGET_SIZES,
+                )
+            }.getOrNull()
             val first = sizes?.firstOrNull()
             if (first != null && first.height > 0f) {
                 return first.width / first.height

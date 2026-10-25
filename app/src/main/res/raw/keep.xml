@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Resources the shrinker cannot see: the vinyl tonearm layers are
+    resolved by name at runtime (VinylClassic armRes via getIdentifier),
+    so without this keep rule release builds strip them and the arm
+    never draws. Verified stripped from the Build #135 release APK's
+    resources.arsc; the drawMask guard (res == 0) kept that silent.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/vinyl_arm_*" />
