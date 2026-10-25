@@ -13,6 +13,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
+import android.os.SystemClock
 import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
@@ -26,7 +27,9 @@ import com.ivor.ivormusic.ui.theme.kodaColorScheme
 import com.ivor.ivormusic.util.KLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -66,12 +69,23 @@ import kotlin.math.roundToInt
  * left-aligns the buttons, keeping the internal gap at the design gap
  * instead of letting it grow with the cell); nothing distorts.
  *
- * SPIN IS KEPT: the spinning label is a ProgressBar whose bounds are the
- * record carve — weight fractions of the art rect, and the art rect is
- * the adjustViewBounds box of the stage bitmap — so the rotate drawable
- * (pivot 50/50 of its bounds) turns about the record centre at every
- * size and ratio, exactly as the Glance version did. Paused, the parked
- * label bitmap sits in the same carve.
+ * SPIN IS OWNED, NOT HOST-ANIMATED: the label is a DETERMINATE
+ * ProgressBar whose progress drawable is the rotate drawable, so progress
+ * 0..3600 IS the angle 0..360 degrees. A ticker in VinylClassic advances
+ * the angle while playing (one revolution per 1800ms, a record at
+ * 33rpm); pausing stops the ticker, so the label freezes exactly where
+ * it is, and only a new track resets it to 0. The old indeterminate
+ * ProgressBar could not do this: its angle lived in the host, so every
+ * pause swapped to the parked label at 0 and every resume restarted at 0.
+ * Pre-S keeps the old parked label (the spin tint needs API 31).
+ *
+ * LAYERING: the stage is two bitmaps, not one. The disc layer (disc +
+ * grooves) draws first, then the carve (label + spindle), then the top
+ * layer (sleeve + arm). The sleeve therefore occludes the label's left
+ * half — the disc sits BEHIND the sleeve, so no disc element can ever
+ * paint over the album art. The tonearm never crossed the sleeve edge
+ * anyway (verified against the arm PNGs), but its draw is clipped to
+ * the sleeve edge as a structural guard.
  *
  * GEOMETRY (fractions of the stage rect, from Cookie4Sided true bounds,
  * fill ~0.94): stage width = 1 + 0.75 x 0.94 = 1.705 heights; design
@@ -166,6 +180,108 @@ internal object VinylClassic {
     /** Label/spindle mask bitmap side in px (sources are 512). */
     private const val MASK_PX = 512
 
+    /** Label rotation: one revolution per 1800ms, a record at 33rpm. */
+    private const val SPIN_PERIOD_MS = 1800L
+
+    /** Progress range for the determinate spin bar: tenths of a degree. */
+    private const val SPIN_MAX = 3600
+
+    /** Ticker cadence while playing: 50ms = 10 degrees per tick. */
+    private const val SPIN_TICK_MS = 50L
+
+    /**
+     * The owned spin angle. The host used to own it (indeterminate
+     * ProgressBar), which is why pause snapped to 0 and resume restarted
+     * at 0: the app could neither see nor set the host's angle. Now the
+     * app owns it: it advances only while playing, freezes on pause, and
+     * resets only when the track key changes. Guarded by [spinLock]:
+     * updateAll runs on more than one scope.
+     */
+    private val spinLock = Any()
+    private val spinScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var spinJob: Job? = null
+    private var spinTrackKey: String? = null
+    @Volatile
+    private var spinAngleDeg: Float = 0f
+
+    /** Current angle for a render; resets to 0 only on a track change. */
+    private fun spinAngleFor(snap: PlayerWidgetSnapshot): Float {
+        val key = snap.mediaId?.takeIf { it.isNotBlank() }
+            ?: snap.artworkUri?.toString()?.takeIf { it.isNotBlank() }
+            ?: snap.title?.takeIf { it.isNotBlank() }
+        if (key != null) {
+            synchronized(spinLock) {
+                if (key != spinTrackKey) {
+                    spinTrackKey = key
+                    spinAngleDeg = 0f
+                }
+            }
+        }
+        return spinAngleDeg
+    }
+
+    /** Start the ticker while playing, stop it otherwise. Angle survives. */
+    private fun syncSpinTicker(context: Context, snap: PlayerWidgetSnapshot) {
+        synchronized(spinLock) {
+            if (snap.hasMedia && snap.isPlaying) {
+                if (spinJob == null) {
+                    val appContext = context.applicationContext
+                    spinJob = spinScope.launch {
+                        var last = SystemClock.uptimeMillis()
+                        while (isActive) {
+                            delay(SPIN_TICK_MS)
+                            val now = SystemClock.uptimeMillis()
+                            spinAngleDeg =
+                                (spinAngleDeg + (now - last) * 360f / SPIN_PERIOD_MS) % 360f
+                            last = now
+                            pushSpinProgress(appContext)
+                        }
+                    }
+                }
+            } else {
+                spinJob?.cancel()
+                spinJob = null
+            }
+        }
+    }
+
+    private fun stopSpinTicker() {
+        synchronized(spinLock) {
+            spinJob?.cancel()
+            spinJob = null
+        }
+    }
+
+    /**
+     * One-int partial push: only the label's progress moves, so a tick
+     * costs a few bytes instead of a bitmap. Tint and bitmaps are set by
+     * the full render; ticks never touch them.
+     */
+    private fun pushSpinProgress(context: Context) {
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = runCatching {
+            manager.getAppWidgetIds(ComponentName(context, VinylWidgetReceiver::class.java))
+        }.getOrNull() ?: return
+        if (ids.isEmpty()) {
+            // Widget removed while playing: no next publish will stop us.
+            stopSpinTicker()
+            return
+        }
+        val progress = angleToProgress(spinAngleDeg)
+        for (id in ids) {
+            val wide = runCatching { isWide(context, id) }.getOrDefault(false)
+            val views = RemoteViews(
+                context.packageName,
+                if (wide) R.layout.widget_vinyl_wide else R.layout.widget_vinyl_narrow,
+            )
+            views.setProgressBar(R.id.vinyl_label_spin, SPIN_MAX, progress, false)
+            runCatching { manager.updateAppWidget(id, views) }
+        }
+    }
+
+    private fun angleToProgress(angleDeg: Float): Int =
+        (angleDeg * 10f).roundToInt().coerceIn(0, SPIN_MAX)
+
     suspend fun updateAll(context: Context) {
         // Seeding must never take the update down with it: a failed seed
         // still renders (empty state, placeholder tile) instead of pushing
@@ -178,17 +294,25 @@ internal object VinylClassic {
                 ComponentName(context, VinylWidgetReceiver::class.java),
             )
         }.getOrNull() ?: IntArray(0)
-        if (ids.isEmpty()) return
+        if (ids.isEmpty()) {
+            stopSpinTicker()
+            return
+        }
         val manager = AppWidgetManager.getInstance(context)
+        // The spin angle is owned here, not by the host: reset it only on
+        // a track change, before the render, so a full render never moves
+        // the label on a play/pause transition.
+        val angleDeg = spinAngleFor(ui.snapshot)
         // Render once for every instance, but a render failure must not
         // leave any id without content: fall back to the static shell.
         val rendered = try {
-            render(context, ui)
+            render(context, ui, angleDeg)
         } catch (e: Exception) {
             KLog.w("VinylWidget", "Render failed, pushing static shell: ${e.message}")
             for (id in ids) {
                 runCatching { manager.updateAppWidget(id, staticViews(context, id)) }
             }
+            syncSpinTicker(context, ui.snapshot)
             return
         }
         for (id in ids) {
@@ -211,6 +335,7 @@ internal object VinylClassic {
                 KLog.w("VinylWidget", "All push tiers failed for $id")
             }
         }
+        syncSpinTicker(context, ui.snapshot)
     }
 
     /**
@@ -247,7 +372,7 @@ internal object VinylClassic {
      * The variant choice reads the reported aspect only — a uniform %
      * scale leaves it unchanged.
      */
-    private fun render(context: Context, ui: PlayerWidgetUi): Rendered {
+    private fun render(context: Context, ui: PlayerWidgetUi, angleDeg: Float): Rendered {
         val snap = ui.snapshot
         val prefs = ThemePreferences(context)
         val dark = KodaWidgetTheme.isDark(context)
@@ -264,10 +389,15 @@ internal object VinylClassic {
         val light = if (dark) onSurface else surface
         val buttonColor = KodaWidgetTheme.vinylButtonArgb(context, snap.artworkColor)
         val labelColor = snap.artworkLabelColor ?: scheme.primaryContainer.toArgb()
-        val stage = stageBitmap(
+        val disc = discBitmap(
+            context = context,
+            artworkColor = snap.artworkColor,
+            recordColor = recordColor,
+            light = light,
+        )
+        val top = topBitmap(
             context = context,
             artwork = ui.artwork,
-            artworkColor = snap.artworkColor,
             recordColor = recordColor,
             light = light,
             accent = snap.artworkColor ?: scheme.primary.toArgb(),
@@ -276,56 +406,70 @@ internal object VinylClassic {
             isPlaying = snap.isPlaying,
         )
         return Rendered(
-            stage = stage,
+            disc = disc,
+            top = top,
             play = buttonBitmap(context, play = true, isPlaying = snap.isPlaying, color = buttonColor),
             next = buttonBitmap(context, play = false, isPlaying = false, color = buttonColor),
             label = maskBitmap(context, R.drawable.vinyl_label_marks, labelColor),
             spindle = maskBitmap(context, R.drawable.vinyl_spindle, recordColor),
             labelColor = labelColor,
-            spinning = snap.isPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
+            angleDeg = angleDeg,
         )
     }
 
     private class Rendered(
-        val stage: Bitmap,
+        val disc: Bitmap,
+        val top: Bitmap,
         val play: Bitmap,
         val next: Bitmap,
         val label: Bitmap,
         val spindle: Bitmap,
         val labelColor: Int,
-        val spinning: Boolean,
+        val angleDeg: Float,
     ) {
         fun forId(context: Context, wide: Boolean, minimal: Boolean = false): RemoteViews {
             val views = RemoteViews(
                 context.packageName,
                 if (wide) R.layout.widget_vinyl_wide else R.layout.widget_vinyl_narrow,
             )
-            views.setImageViewBitmap(R.id.vinyl_stage_art, stage)
+            views.setImageViewBitmap(R.id.vinyl_disc_art, disc)
+            views.setImageViewBitmap(R.id.vinyl_top_art, top)
             views.setImageViewBitmap(R.id.vinyl_btn_play, play)
             views.setImageViewBitmap(R.id.vinyl_btn_next, next)
             views.setImageViewBitmap(R.id.vinyl_label_parked, label)
             views.setImageViewBitmap(R.id.vinyl_spindle, spindle)
+            // Determinate rotation on every API: progress 0..3600 is the
+            // angle 0..360 degrees. Pre-S shows the parked label instead
+            // (the spin tint needs API 31, as before); S+ shows the label
+            // at the owned angle, frozen when paused, 0 on a new track.
+            // The parked label sits under the top layer either way, so the
+            // sleeve occludes its left half on every API.
+            val spinOn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             views.setViewVisibility(
                 R.id.vinyl_label_spin,
-                if (spinning) View.VISIBLE else View.GONE,
+                if (spinOn) View.VISIBLE else View.GONE,
             )
             views.setViewVisibility(
                 R.id.vinyl_label_parked,
-                if (spinning) View.GONE else View.VISIBLE,
+                if (spinOn) View.GONE else View.VISIBLE,
             )
-            if (spinning && !minimal) {
+            views.setProgressBar(
+                R.id.vinyl_label_spin,
+                SPIN_MAX,
+                angleToProgress(angleDeg),
+                false,
+            )
+            if (spinOn && !minimal) {
                 // Tint the turning print the sticker colour. setColorStateList
                 // on RemoteViews needs API 31, which the spin itself needs.
                 // Skipped on the minimal tier: it is the only reflection
                 // action in the widget, so it is the first thing dropped
                 // when the host rejects the full render.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    views.setColorStateList(
-                        R.id.vinyl_label_spin,
-                        "setIndeterminateTintList",
-                        ColorStateList.valueOf(labelColor),
-                    )
-                }
+                views.setColorStateList(
+                    R.id.vinyl_label_spin,
+                    "setProgressTintList",
+                    ColorStateList.valueOf(labelColor),
+                )
             }
             views.setOnClickPendingIntent(R.id.vinyl_tap_sleeve, openAppIntent(context))
             views.setOnClickPendingIntent(R.id.vinyl_tap_record, toggleIntent(context))
@@ -341,15 +485,70 @@ internal object VinylClassic {
     }
 
     /**
-     * The stage: sleeve + disc + grooves + arm, composited into one
-     * bitmap whose aspect IS the stage geometry, so adjustViewBounds
-     * gives the launcher the true art rect and everything aligned to
-     * it (label carve, taps) tracks the artwork at every size.
+     * Geometry shared by the two stage layers. Both bitmaps are the same
+     * stage rect, so their adjustViewBounds boxes coincide exactly and
+     * everything aligned to the disc layer (label carve, taps) tracks
+     * both layers at every size.
      */
-    private fun stageBitmap(
+    private class StageGeometry(
+        val width: Int,
+        val height: Int,
+        val recordRect: RectF,
+        val armRect: RectF,
+        val sleeveRect: RectF,
+    )
+
+    private fun stageGeometry(): StageGeometry {
+        val fill = WidgetShapes.cookie4SidedFillFraction()
+        // Stage width in height units: sleeve box (1.0) + half-record
+        // protrusion (fill / 2) + arm reach (record / 4).
+        val stageW = 1f + fill / 2f + fill / 4f
+        val width = (STAGE_PX * stageW).roundToInt()
+        val height = STAGE_PX
+        val record = fill * height
+        val armReach = record / 4f
+        val recordLeft = width - armReach - record
+        val recordTop = (height - record) / 2f
+        return StageGeometry(
+            width = width,
+            height = height,
+            recordRect = RectF(recordLeft, recordTop, recordLeft + record, recordTop + record),
+            armRect = RectF(recordLeft, recordTop, width.toFloat(), recordTop + record),
+            sleeveRect = RectF(0f, 0f, height.toFloat(), height.toFloat()),
+        )
+    }
+
+    /** Bottom layer: disc + grooves on transparency. */
+    private fun discBitmap(
+        context: Context,
+        artworkColor: Int?,
+        recordColor: Int,
+        light: Int,
+    ): Bitmap {
+        val g = stageGeometry()
+        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val discBase = if (artworkColor != null) {
+            darken(artworkColor, DISC_DARKEN)
+        } else {
+            recordColor
+        }
+        val discColor = withAlpha(discBase, VINYL_DISC_ALPHA)
+        drawMask(canvas, context, R.drawable.vinyl_disc, discColor, g.recordRect)
+        drawMask(canvas, context, R.drawable.vinyl_grooves, light, g.recordRect)
+        return out
+    }
+
+    /**
+     * Top layer: sleeve (or placeholder tile) + arm, drawn OVER the carve
+     * in the layout, so the sleeve occludes the label's and spindle's
+     * left half — the disc sits behind the sleeve, never over the art.
+     * The arm draw is clipped to the sleeve edge: arm pixels never cross
+     * it today, and the clip makes that structural rather than lucky.
+     */
+    private fun topBitmap(
         context: Context,
         artwork: Bitmap?,
-        artworkColor: Int?,
         recordColor: Int,
         light: Int,
         accent: Int,
@@ -357,50 +556,28 @@ internal object VinylClassic {
         onSecondaryContainer: Int,
         isPlaying: Boolean,
     ): Bitmap {
-        val fill = WidgetShapes.cookie4SidedFillFraction()
-        // Stage width in height units: sleeve box (1.0) + half-record
-        // protrusion (fill / 2) + arm reach (record / 4).
-        val stageW = 1f + fill / 2f + fill / 4f
-        val width = (STAGE_PX * stageW).roundToInt()
-        val height = STAGE_PX
-        val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val g = stageGeometry()
+        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
-
-        val record = fill * height
-        val armReach = record / 4f
-        val recordLeft = width - armReach - record
-        val recordTop = (height - record) / 2f
-        val recordRect = RectF(recordLeft, recordTop, recordLeft + record, recordTop + record)
-        val armRect = RectF(recordLeft, recordTop, width.toFloat(), recordTop + record)
-        val sleeveRect = RectF(0f, 0f, height.toFloat(), height.toFloat())
-
-        // Record first, sleeve over it in the overlap, arm on top — the
-        // same stacking the Glance version drew.
-        val discBase = if (artworkColor != null) {
-            darken(artworkColor, DISC_DARKEN)
-        } else {
-            recordColor
-        }
-        val discColor = withAlpha(discBase, VINYL_DISC_ALPHA)
-        drawMask(canvas, context, R.drawable.vinyl_disc, discColor, recordRect)
-        drawMask(canvas, context, R.drawable.vinyl_grooves, light, recordRect)
         if (artwork != null) {
             // A corrupt/recycled cover must never kill the render: fall
             // back to the placeholder tile on any artwork failure.
             val sleeve = try {
-                maskedArtwork(artwork, ArtworkShape.COOKIE4SIDED, height)
+                maskedArtwork(artwork, ArtworkShape.COOKIE4SIDED, g.height)
             } catch (e: Exception) {
                 KLog.w("VinylWidget", "Artwork mask failed, using tile: ${e.message}")
                 null
             }
             if (sleeve != null) {
-                canvas.drawBitmap(sleeve, null, sleeveRect, null)
+                canvas.drawBitmap(sleeve, null, g.sleeveRect, null)
             } else {
-                drawPlaceholderTile(canvas, context, height, sleeveRect, secondaryContainer, onSecondaryContainer)
+                drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, secondaryContainer, onSecondaryContainer)
             }
         } else {
-            drawPlaceholderTile(canvas, context, height, sleeveRect, secondaryContainer, onSecondaryContainer)
+            drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, secondaryContainer, onSecondaryContainer)
         }
+        canvas.save()
+        canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
         val armPose = if (isPlaying) "on" else "off"
         val armRes = { layer: String ->
             context.resources.getIdentifier(
@@ -409,9 +586,10 @@ internal object VinylClassic {
                 context.packageName,
             )
         }
-        drawMask(canvas, context, armRes("shadow"), recordColor, armRect)
-        drawMask(canvas, context, armRes("metal"), light, armRect)
-        drawMask(canvas, context, armRes("accent"), accent, armRect)
+        drawMask(canvas, context, armRes("shadow"), recordColor, g.armRect)
+        drawMask(canvas, context, armRes("metal"), light, g.armRect)
+        drawMask(canvas, context, armRes("accent"), accent, g.armRect)
+        canvas.restore()
         return out
     }
 

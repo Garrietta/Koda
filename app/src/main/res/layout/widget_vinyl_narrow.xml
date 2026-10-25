@@ -22,7 +22,19 @@
     The record carve holds the parked label, the spinning label and the
     spindle, so all three track the disc exactly at every size: the carve
     is weight fractions of the art rect, and the art rect is the
-    adjustViewBounds box of the stage bitmap (see the provider).
+    adjustViewBounds box of the disc bitmap (see the provider).
+
+    LAYERING (z-order in this file): disc layer, carve, top layer, taps.
+    The top layer (sleeve + arm) draws OVER the carve, so the sleeve
+    occludes the label's and spindle's left half: the disc sits behind
+    the sleeve, and no disc element can paint over the album art. The
+    disc and top bitmaps share the stage rect exactly, so both
+    adjustViewBounds boxes coincide.
+
+    SPIN: the label is a DETERMINATE ProgressBar whose progress drawable
+    is the rotate drawable, so progress 0..3600 is the angle 0..360
+    degrees. The app owns the angle and pushes it (see VinylClassic):
+    pause freezes it, only a new track resets it to 0.
 
     NARROW vs WIDE: in this variant the stage bitmap is width-driven
     (width match_parent, height wrap_content + adjustViewBounds), which
@@ -39,14 +51,14 @@
         android:layout_height="match_parent"
         android:orientation="horizontal">
 
-        <!-- Stage: sleeve + record + arm, one composited bitmap. -->
+        <!-- Stage: disc layer, carve, top layer — see header. -->
         <RelativeLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1705">
 
             <ImageView
-                android:id="@+id/vinyl_stage_art"
+                android:id="@+id/vinyl_disc_art"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
@@ -58,10 +70,10 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignLeft="@id/vinyl_stage_art"
-                android:layout_alignRight="@id/vinyl_stage_art"
-                android:layout_alignTop="@id/vinyl_stage_art"
-                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:layout_alignLeft="@id/vinyl_disc_art"
+                android:layout_alignRight="@id/vinyl_disc_art"
+                android:layout_alignTop="@id/vinyl_disc_art"
+                android:layout_alignBottom="@id/vinyl_disc_art"
                 android:orientation="vertical">
 
                 <FrameLayout
@@ -95,12 +107,11 @@
                             android:id="@+id/vinyl_label_spin"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:indeterminate="true"
-                            android:indeterminateBehavior="repeat"
-                            android:indeterminateDrawable="@drawable/vinyl_spin"
-                            android:indeterminateDuration="1800"
-                            android:indeterminateOnly="true"
-                            android:interpolator="@android:anim/linear_interpolator"
+                            android:indeterminate="false"
+                            android:indeterminateOnly="false"
+                            android:max="3600"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/vinyl_spin"
                             android:maxHeight="2000dp"
                             android:maxWidth="2000dp"
                             android:minHeight="0dp"
@@ -128,15 +139,24 @@
 
             </LinearLayout>
 
+            <!-- Top layer: sleeve + arm, over the carve (see header). -->
+            <ImageView
+                android:id="@+id/vinyl_top_art"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter" />
+
             <!-- Tap targets, fractions of the art rect: sleeve opens the app,
                  the record-only strip toggles playback. Transparent, on top. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignLeft="@id/vinyl_stage_art"
-                android:layout_alignRight="@id/vinyl_stage_art"
-                android:layout_alignTop="@id/vinyl_stage_art"
-                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:layout_alignLeft="@id/vinyl_disc_art"
+                android:layout_alignRight="@id/vinyl_disc_art"
+                android:layout_alignTop="@id/vinyl_disc_art"
+                android:layout_alignBottom="@id/vinyl_disc_art"
                 android:orientation="horizontal">
 
                 <FrameLayout

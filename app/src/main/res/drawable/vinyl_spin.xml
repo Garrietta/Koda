@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     The Vinyl widget's turning layer: the print on the record's label and a
-    scuff on its grooves, one full turn. A ProgressBar drives the level, so the
-    launcher animates it on its own frame clock (see layout/widget_vinyl_spin).
+    scuff on its grooves, one full turn. Used as a DETERMINATE ProgressBar's
+    progress drawable: the bar drives the drawable's level from progress,
+    and the rotate drawable maps level 0..10000 to 0..360 degrees — so the
+    app owns the angle (see VinylClassic spin state). Previously this was
+    the indeterminate drawable, which left the angle in the host where the
+    app could neither see nor set it, so pause snapped to 0.
 -->
 <rotate xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/vinyl_label_marks"

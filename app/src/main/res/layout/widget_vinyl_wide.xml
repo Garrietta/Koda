@@ -15,6 +15,9 @@
     but nothing distorts and nothing shrinks with the % slider.
 
     See widget_vinyl_narrow.xml for the full mechanism note and geometry.
+    Same layering here: disc layer, carve, top layer (sleeve + arm over
+    the carve, so the sleeve occludes the label's left half), taps.
+    Same determinate spin bar: progress 0..3600 is the angle 0..360.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -31,7 +34,7 @@
             android:layout_weight="1705">
 
             <ImageView
-                android:id="@+id/vinyl_stage_art"
+                android:id="@+id/vinyl_disc_art"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_alignParentRight="true"
@@ -42,10 +45,10 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignLeft="@id/vinyl_stage_art"
-                android:layout_alignRight="@id/vinyl_stage_art"
-                android:layout_alignTop="@id/vinyl_stage_art"
-                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:layout_alignLeft="@id/vinyl_disc_art"
+                android:layout_alignRight="@id/vinyl_disc_art"
+                android:layout_alignTop="@id/vinyl_disc_art"
+                android:layout_alignBottom="@id/vinyl_disc_art"
                 android:orientation="vertical">
 
                 <FrameLayout
@@ -79,12 +82,11 @@
                             android:id="@+id/vinyl_label_spin"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:indeterminate="true"
-                            android:indeterminateBehavior="repeat"
-                            android:indeterminateDrawable="@drawable/vinyl_spin"
-                            android:indeterminateDuration="1800"
-                            android:indeterminateOnly="true"
-                            android:interpolator="@android:anim/linear_interpolator"
+                            android:indeterminate="false"
+                            android:indeterminateOnly="false"
+                            android:max="3600"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/vinyl_spin"
                             android:maxHeight="2000dp"
                             android:maxWidth="2000dp"
                             android:minHeight="0dp"
@@ -112,13 +114,23 @@
 
             </LinearLayout>
 
+            <!-- Top layer: sleeve + arm, over the carve (see header). -->
+            <ImageView
+                android:id="@+id/vinyl_top_art"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignLeft="@id/vinyl_stage_art"
-                android:layout_alignRight="@id/vinyl_stage_art"
-                android:layout_alignTop="@id/vinyl_stage_art"
-                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:layout_alignLeft="@id/vinyl_disc_art"
+                android:layout_alignRight="@id/vinyl_disc_art"
+                android:layout_alignTop="@id/vinyl_disc_art"
+                android:layout_alignBottom="@id/vinyl_disc_art"
                 android:orientation="horizontal">
 
                 <FrameLayout
