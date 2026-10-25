@@ -40,8 +40,9 @@ private const val RESTORE_WAIT_MS = 2_000L
 /**
  * Ask Media3 to rebuild an empty timeline from MusicService's persisted
  * playback session, then wait until controller state reflects it.
+ * Shared with the classic widget tap receiver, not just Glance actions.
  */
-private suspend fun MediaController.ensureRestored(playWhenRestored: Boolean): Boolean {
+internal suspend fun MediaController.ensureRestored(playWhenRestored: Boolean): Boolean {
     if (mediaItemCount > 0) return true
     val result = sendCustomCommand(
         SessionCommand(MusicService.CMD_RESTORE_PLAYBACK, Bundle.EMPTY),

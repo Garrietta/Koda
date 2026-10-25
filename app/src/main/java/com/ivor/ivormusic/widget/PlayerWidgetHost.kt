@@ -130,7 +130,10 @@ object PlayerWidgets {
         BloomWidget() to BloomWidgetReceiver::class.java,
         OrbitWidget() to OrbitWidgetReceiver::class.java,
         PixelWidget() to PixelWidgetReceiver::class.java,
-        VinylWidget() to VinylWidgetReceiver::class.java,
+        // Vinyl is a classic RemoteViews widget (see VinylWidget.kt), not a
+        // Glance widget: Glance composes to a reported dp size One UI's
+        // content-size % scales, so vinyl left the family. It is updated
+        // separately by VinylClassic.updateAll in publish/pushAll below.
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -172,6 +175,7 @@ object PlayerWidgets {
             }
             PlayerWidgetHost.set(appContext, enriched)
             updateEveryWidget(appContext)
+            VinylClassic.updateAll(appContext)
         }
     }
 
@@ -258,6 +262,7 @@ object PlayerWidgets {
             delay(PUSH_DEBOUNCE_MS)
             PlayerWidgetStore.read(appContext)?.let { PlayerWidgetHost.set(appContext, it) }
             updateEveryWidget(appContext)
+            VinylClassic.updateAll(appContext)
         }
     }
 
@@ -285,5 +290,12 @@ object PlayerWidgets {
         }.getOrNull() ?: IntArray(0)
 
     private fun anyInstalled(context: Context): Boolean =
-        family.any { (_, receiver) -> appWidgetIds(context, receiver).isNotEmpty() }
+        family.any { (_, receiver) -> appWidgetIds(context, receiver).isNotEmpty() } ||
+            vinylIds(context).isNotEmpty()
+
+    private fun vinylIds(context: Context): IntArray =
+        runCatching {
+            android.appwidget.AppWidgetManager.getInstance(context)
+                .getAppWidgetIds(android.content.ComponentName(context, VinylWidgetReceiver::class.java))
+        }.getOrNull() ?: IntArray(0)
 }

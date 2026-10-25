@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Vinyl widget, classic RemoteViews shell — WIDE variant (cell aspect > 2.205).
+
+    Same design and same proportions as widget_vinyl_narrow; only the
+    measurement axis flips, because adjustViewBounds yields the true art
+    rect from exactly one fixed axis. Here the cell is wider than the
+    design ratio, so the stage bitmap is height-driven (height
+    match_parent, width wrap_content + adjustViewBounds), pinned to the
+    cell's right edge, and the buttons draw left-aligned (fitStart) so
+    the stage-to-button gap stays the design gap instead of growing with
+    the cell. The union sits right of centre on very wide cells — the
+    price of keeping internal proportions locked with static weights —
+    but nothing distorts and nothing shrinks with the % slider.
+
+    See widget_vinyl_narrow.xml for the full mechanism note and geometry.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <RelativeLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1705">
+
+            <ImageView
+                android:id="@+id/vinyl_stage_art"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_alignLeft="@id/vinyl_stage_art"
+                android:layout_alignRight="@id/vinyl_stage_art"
+                android:layout_alignTop="@id/vinyl_stage_art"
+                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:orientation="vertical">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="30" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="940"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="311" />
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="551">
+
+                        <ImageView
+                            android:id="@+id/vinyl_label_parked"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitCenter" />
+
+                        <ProgressBar
+                            android:id="@+id/vinyl_label_spin"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="true"
+                            android:indeterminateBehavior="repeat"
+                            android:indeterminateDrawable="@drawable/vinyl_spin"
+                            android:indeterminateDuration="1800"
+                            android:indeterminateOnly="true"
+                            android:interpolator="@android:anim/linear_interpolator"
+                            android:maxHeight="2000dp"
+                            android:maxWidth="2000dp"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp" />
+
+                        <ImageView
+                            android:id="@+id/vinyl_spindle"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitCenter" />
+
+                    </FrameLayout>
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="138" />
+
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="30" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_alignLeft="@id/vinyl_stage_art"
+                android:layout_alignRight="@id/vinyl_stage_art"
+                android:layout_alignTop="@id/vinyl_stage_art"
+                android:layout_alignBottom="@id/vinyl_stage_art"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/vinyl_tap_sleeve"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="586" />
+
+                <View
+                    android:id="@+id/vinyl_tap_record"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="414" />
+
+            </LinearLayout>
+
+        </RelativeLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="40" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="460"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/vinyl_btn_play"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="480"
+                android:scaleType="fitStart" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="40" />
+
+            <ImageView
+                android:id="@+id/vinyl_btn_next"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="480"
+                android:scaleType="fitStart" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

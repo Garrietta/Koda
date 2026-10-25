@@ -3,14 +3,22 @@ package com.ivor.ivormusic.widget
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.media3.common.Player
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * Handles widget button presses in the background. No UI, no flash —
  * behaves like a normal interactive widget.
+ *
+ * Toggle and next mirror the Glance actions' rules (see WidgetActions.kt):
+ * a tap on an empty timeline restores it first, buffering counts as
+ * playing, and a skip waits for the crossfade-intercepted command to
+ * settle before reading back — otherwise the published snapshot would
+ * still name the previous track.
  */
 class WidgetButtonReceiver : BroadcastReceiver() {
 
@@ -19,23 +27,44 @@ class WidgetButtonReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.getStringExtra(WidgetActionActivity.EXTRA_ACTION) ?: return
         val index = intent.getIntExtra(WidgetActionActivity.EXTRA_INDEX, -1)
-        
+
         // Use goAsync to keep the receiver alive for the coroutine
         val pending = goAsync()
         scope.launch {
             try {
                 when (action) {
                     WidgetActionActivity.ACTION_TOGGLE -> {
-                        withController(context) { controller ->
-                            if (controller.playWhenReady) controller.pause()
-                            else controller.play()
-                            PlayerWidgets.publish(context, controller.toSnapshot())
-                        }
+                        val snapshot = withController(context) { controller ->
+                            if (controller.mediaItemCount == 0) {
+                                if (!controller.ensureRestored(playWhenRestored = true)) {
+                                    return@withController null
+                                }
+                                return@withController controller.toSnapshot()
+                            }
+                            // Decide from live state, not from the last render.
+                            if (controller.playWhenReady ||
+                                controller.playbackState == Player.STATE_BUFFERING
+                            ) {
+                                controller.pause()
+                            } else {
+                                controller.play()
+                            }
+                            controller.toSnapshot()
+                        } ?: return@launch
+                        PlayerWidgets.publish(context, snapshot)
                     }
                     WidgetActionActivity.ACTION_NEXT -> {
-                        withController(context) { controller ->
+                        val sent = withController(context) { controller ->
+                            if (!controller.ensureRestored(playWhenRestored = false)) {
+                                return@withController false
+                            }
                             controller.seekToNext()
-                            PlayerWidgets.publish(context, controller.toSnapshot())
+                            true
+                        } ?: false
+                        if (sent) {
+                            delay(500L)
+                            val settled = withController(context) { it.toSnapshot() }
+                            if (settled != null) PlayerWidgets.publish(context, settled)
                         }
                     }
                     WidgetActionActivity.ACTION_PREVIOUS -> {
