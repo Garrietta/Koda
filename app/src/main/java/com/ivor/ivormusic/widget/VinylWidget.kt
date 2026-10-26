@@ -1272,8 +1272,18 @@ internal object VinylClassic {
         val px = g.armRect.left + ARM_PIVOT_PNG_X * s
         val py = g.armRect.top + ARM_PIVOT_PNG_Y * s
         // ON leans -31.7 degrees from vertical, OFF +4.5: ON->OFF swings
-        // +36.2 (clockwise on screen), OFF->ON swings -36.2.
-        val rot = (if (fromOn) ARM_SWING_DEG else -ARM_SWING_DEG) * progress
+        // -36.2 (counterclockwise on screen: the stylus travels from the
+        // record to the parked rest), OFF->ON swings +36.2. The sign
+        // matters: the old sign swung the arm the wrong way — on play
+        // the stylus drove RIGHT past the stage edge (simulated sweep
+        // max 1998 of a 1705-wide stage, button column at 1745), so on
+        // screen the tube ran into the button column's edge and vanished
+        // there behind the buttons, then the crossfade landed the true
+        // pose — the visible X/double-arm mid-swing. With this sign the
+        // sweep never exceeds the rest poses' own extent (ON 1677, OFF
+        // 1661), so the full arm stays visible inside the stage and
+        // clear of the buttons at every progress.
+        val rot = (if (fromOn) -ARM_SWING_DEG else ARM_SWING_DEG) * progress
         canvas.save()
         canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
         canvas.rotate(rot, px, py)
