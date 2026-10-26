@@ -54,6 +54,11 @@ class WidgetButtonReceiver : BroadcastReceiver() {
                         PlayerWidgets.publish(context, snapshot)
                     }
                     WidgetActionActivity.ACTION_NEXT -> {
+                        // Every press reshapes the next button, immediately
+                        // — not when the settled track publish lands 500ms
+                        // later. The later publish's full render reads the
+                        // advanced index, so it cannot undo the morph.
+                        VinylClassic.cycleNextShape(context)
                         val sent = withController(context) { controller ->
                             if (!controller.ensureRestored(playWhenRestored = false)) {
                                 return@withController false

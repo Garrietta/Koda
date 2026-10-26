@@ -10,7 +10,9 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.os.Build
 import android.os.SystemClock
@@ -21,6 +23,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.graphics.shapes.Morph
 import com.ivor.ivormusic.R
 import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.ui.theme.kodaColorScheme
@@ -93,14 +96,30 @@ import kotlin.math.roundToInt
  *
  * ARM IS TWEENED, NOT SWAPPED: the tonearm used to teleport between its
  * two baked poses in a single frame. Now a play/pause transition swings
- * it over ~300ms in 50ms steps: the current pose's arm layers rotate
- * around the measured pivot (PNG 565.4, 95.8, from the two poses' tube
- * centerlines, 36.2 degrees apart) toward the target pose, with the true
- * target pose crossfading in over the last 30% so the swing lands exactly
- * on the true pose. The full render always carries the arm's CURRENT
- * position, never the target, so a render mid-swing cannot jump it; a
- * new transition cancels the old tween and swings from wherever the arm
- * is. No bounce, no overshoot: a short smooth swing, nothing crazy.
+ * it over ~350ms in ~16ms steps with smoothstep easing: the current
+ * pose's arm layers rotate around the measured pivot (PNG 565.6, 95.6 —
+ * both poses' ring holes centre there, tube angles +4.6/-31.8 degrees,
+ * so the rotation model is the real arm's) toward the target pose, with
+ * the true target pose crossfading in over the last 20% so the swing
+ * lands exactly on the true pose. The sleeve is baked once per tween
+ * and reused across frames — re-baking it every frame is what made the
+ * old 50ms steps land unevenly. The full render always carries the
+ * arm's CURRENT position, never the target, so a render mid-swing
+ * cannot jump it; a new transition cancels the old tween and swings
+ * from wherever the arm is. No bounce, no overshoot: a short smooth
+ * swing, nothing crazy.
+ *
+ * BUTTONS MORPH, THEY DON'T SWAP: the play button is Sunny while
+ * paused and Bun while playing — the background SHAPE changes with the
+ * state, not just the glyph — and the next button cycles Flower, Bun,
+ * SoftBurst, Sunny on successive presses. Both morph through the real
+ * graphics-shapes Morph between the two catalog polygons (shared
+ * normalized frame, so a morph's first frame IS the static from-shape
+ * and its last frame IS the static to-shape — no pops), ~280ms in
+ * ~16ms eased steps, glyph swapping at the midpoint. A full render
+ * mid-morph bakes the live morph frame, never the target, so renders
+ * cannot jump a morph; a re-trigger mid-morph restarts from the nearer
+ * endpoint instead of finishing a stale morph.
  *
  * LAYERING: the stage is two bitmaps, not one. The disc layer (disc +
  * grooves) draws first, then the carve (label + spindle), then the top
@@ -303,9 +322,18 @@ internal object VinylClassic {
     private const val ARM_PIVOT_PNG_Y = 95.8f
     private const val ARM_PNG_W = 640f
 
-    /** Tween cadence and length: 50ms steps over ~300ms, no overshoot. */
-    private const val ARM_TICK_MS = 50L
-    private const val ARM_TWEEN_MS = 300L
+    /**
+     * Tween cadence and length: ~16ms steps over ~350ms, eased in and out,
+     * no overshoot. The old 50ms linear steps were ~6 jumps — that is the
+     * choppiness: a swing needs frames, not steps, and a real arm
+     * accelerates out of the rest and decelerates onto the record instead
+     * of travelling at one speed and stopping dead.
+     */
+    private const val ARM_TICK_MS = 16L
+    private const val ARM_TWEEN_MS = 350L
+
+    /** Smoothstep ease: slow out of the rest, slow onto the record. */
+    private fun easeInOut(t: Float): Float = t * t * (3f - 2f * t)
 
     /**
      * The arm's current position, as (fromPose, progress): progress 0 is
@@ -408,12 +436,19 @@ internal object VinylClassic {
     private fun startArmTween(context: Context, targetOn: Boolean) {
         val appContext = context.applicationContext
         val inputs = lastTop ?: return
+        // The sleeve never moves during a swing, so bake it once: the old
+        // loop re-baked sleeve + arm every frame, and the sleeve bake
+        // (cookie-masked artwork) is what made frames land unevenly on
+        // top of the 50ms steps. A tween frame is now one arm composite
+        // over the cached sleeve.
+        val sleeve = sleeveBitmap(appContext, inputs)
         synchronized(spinLock) {
             armJob?.cancel()
             armJob = spinScope.launch {
-                // Capture the start once: the tween interpolates linearly
-                // from here to the target, keeping fromOn fixed so the
-                // rotation never flips sides mid-swing.
+                // Capture the start once: the tween interpolates from
+                // here to the target, keeping fromOn fixed so the rotation
+                // never flips sides mid-swing. Time-based, not
+                // step-count-based, so a late frame cannot slow the swing.
                 val (fromOn, startProgress, targetProgress) = synchronized(spinLock) {
                     val tp = if (targetOn == armFromOn) 0f else 1f
                     Triple(armFromOn, armProgress, tp)
@@ -422,9 +457,19 @@ internal object VinylClassic {
                 while (isActive) {
                     val elapsed = SystemClock.uptimeMillis() - start
                     val t = (elapsed.toFloat() / ARM_TWEEN_MS).coerceIn(0f, 1f)
-                    val progress = startProgress + (targetProgress - startProgress) * t
+                    val eased = easeInOut(t)
+                    val progress = startProgress + (targetProgress - startProgress) * eased
                     synchronized(spinLock) { armProgress = progress }
-                    val frame = topBitmapWithArm(appContext, inputs, fromOn, progress)
+                    if (!isActive) return@launch
+                    val frame = compositeTopWithArm(
+                        sleeve,
+                        appContext,
+                        fromOn,
+                        progress,
+                        inputs.recordColor,
+                        inputs.light,
+                        inputs.accent,
+                    )
                     pushTopBitmap(appContext, frame)
                     if (t >= 1f) break
                     delay(ARM_TICK_MS)
@@ -451,6 +496,263 @@ internal object VinylClassic {
         drawSleeve(canvas, context, inputs, g)
         drawArm(canvas, context, g, fromOn, progress, inputs.recordColor, inputs.light, inputs.accent)
         return out
+    }
+
+    /** Sleeve alone, baked once per tween: it never moves mid-swing. */
+    private fun sleeveBitmap(context: Context, inputs: TopInputs): Bitmap {
+        val g = stageGeometry()
+        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
+        drawSleeve(Canvas(out), context, inputs, g)
+        return out
+    }
+
+    /** One tween frame: the cached sleeve plus the arm at [progress]. */
+    private fun compositeTopWithArm(
+        sleeve: Bitmap,
+        context: Context,
+        fromOn: Boolean,
+        progress: Float,
+        recordColor: Int,
+        light: Int,
+        accent: Int,
+    ): Bitmap {
+        val g = stageGeometry()
+        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawBitmap(sleeve, 0f, 0f, null)
+        drawArm(canvas, context, g, fromOn, progress, recordColor, light, accent)
+        return out
+    }
+
+    // ---- Button shape morphs ------------------------------------------------
+
+    /** Morph cadence and length: ~16ms steps over ~280ms, eased. */
+    private const val BUTTON_MORPH_MS = 280L
+    private const val BUTTON_TICK_MS = 16L
+
+    /** One in-flight button morph: shape endpoints, raw progress, glyphs. */
+    private class ButtonMorph(
+        val from: ButtonShape,
+        val to: ButtonShape,
+        var progress: Float,
+        val glyphFrom: Int,
+        val glyphTo: Int,
+    )
+
+    /** Next button's press cycle, in order. Index 0 is Flower, the shape it
+     *  has always had, so existing widgets do not change until pressed. */
+    private val NEXT_SHAPES = listOf(
+        ButtonShape.FLOWER,
+        ButtonShape.BUN,
+        ButtonShape.SOFTBURST,
+        ButtonShape.SUNNY,
+    )
+
+    private const val NEXT_SHAPE_PREFS = "koda_widget_buttons"
+    private const val NEXT_SHAPE_KEY = "next_shape_index"
+
+    private fun nextShapeIndex(context: Context): Int {
+        val prefs = context.applicationContext
+            .getSharedPreferences(NEXT_SHAPE_PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(NEXT_SHAPE_KEY, 0).coerceIn(NEXT_SHAPES.indices)
+    }
+
+    /** Advance the persisted next-button shape; returns the new shape. */
+    private fun advanceNextShape(context: Context): ButtonShape {
+        val prefs = context.applicationContext
+            .getSharedPreferences(NEXT_SHAPE_PREFS, Context.MODE_PRIVATE)
+        val next = (prefs.getInt(NEXT_SHAPE_KEY, 0) + 1) % NEXT_SHAPES.size
+        prefs.edit().putInt(NEXT_SHAPE_KEY, next).apply()
+        return NEXT_SHAPES[next]
+    }
+
+    private var playMorphState: ButtonMorph? = null
+    private var nextMorphState: ButtonMorph? = null
+    private var playMorphJob: Job? = null
+    private var nextMorphJob: Job? = null
+    private var settledPlayShape: ButtonShape? = null
+    private var settledNextShape: ButtonShape? = null
+
+    /** Button colour of the last full render, for morph frames. */
+    @Volatile
+    private var lastButtonColor: Int? = null
+
+    /** Morphs are built on normalized polygons (size-independent), so one
+     *  per shape pair is cached for the life of the process. */
+    private val morphCache = mutableMapOf<Pair<ButtonShape, ButtonShape>, Morph>()
+
+    private fun morphFor(from: ButtonShape, to: ButtonShape): Morph =
+        synchronized(spinLock) {
+            morphCache.getOrPut(from to to) {
+                Morph(from.polygon().normalized(), to.polygon().normalized())
+            }
+        }
+
+    /** True shape morph at [progress], in the shared normalized frame. */
+    private fun morphButtonPath(
+        from: ButtonShape,
+        to: ButtonShape,
+        progress: Float,
+        size: Float,
+    ): Path {
+        val path = Path()
+        var first = true
+        morphFor(from, to).forEachCubic(progress) { c ->
+            if (first) {
+                path.moveTo(c.anchor0X, c.anchor0Y)
+                first = false
+            } else {
+                path.cubicTo(
+                    c.control0X, c.control0Y,
+                    c.control1X, c.control1Y,
+                    c.anchor1X, c.anchor1Y,
+                )
+            }
+        }
+        path.close()
+        path.transform(Matrix().apply { setScale(size, size) })
+        return path
+    }
+
+    /** One button bitmap from an already-shaped path plus a glyph. */
+    private fun buttonBitmapWithShape(
+        context: Context,
+        shapePath: Path,
+        shapeSize: Float,
+        glyphRes: Int,
+        color: Int,
+    ): Bitmap {
+        val out = Bitmap.createBitmap(BUTTON_PX, BUTTON_PX, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val pad = (BUTTON_PX - shapeSize) / 2f
+        canvas.save()
+        canvas.translate(pad, pad)
+        canvas.drawPath(
+            shapePath,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.FILL
+            },
+        )
+        canvas.restore()
+        val ink = glyphInk(color)
+        val glyphSize = (shapeSize * 0.42f).roundToInt()
+        val glyph = maskBitmap(context, glyphRes, ink)
+        val g = (BUTTON_PX - glyphSize) / 2f
+        canvas.drawBitmap(
+            glyph,
+            null,
+            RectF(g, g, g + glyphSize, g + glyphSize),
+            null,
+        )
+        return out
+    }
+
+    /** One-bitmap partial push: only one button moves, like the arm tween. */
+    private fun pushButtonBitmap(context: Context, viewId: Int, bitmap: Bitmap) {
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = runCatching {
+            manager.getAppWidgetIds(ComponentName(context, VinylWidgetReceiver::class.java))
+        }.getOrNull() ?: return
+        for (id in ids) {
+            val wide = runCatching { isWide(context, id) }.getOrDefault(false)
+            val views = RemoteViews(
+                context.packageName,
+                if (wide) R.layout.widget_vinyl_wide else R.layout.widget_vinyl_narrow,
+            )
+            views.setImageViewBitmap(viewId, bitmap)
+            runCatching { manager.updateAppWidget(id, views) }
+        }
+    }
+
+    /**
+     * Morph one button toward [to] from wherever it is: the settled shape
+     * when idle, or the nearer endpoint of a running morph (so a rapid
+     * re-trigger reverses instead of finishing a stale morph, and a
+     * morph already heading to [to] is left alone). A morph whose colour
+     * source never rendered does nothing — the next full render shows
+     * the target statically instead.
+     */
+    private fun startButtonMorph(context: Context, play: Boolean, to: ButtonShape) {
+        val appContext = context.applicationContext
+        val color = lastButtonColor ?: return
+        val viewId = if (play) R.id.vinyl_btn_play else R.id.vinyl_btn_next
+        val size = if (play) BUTTON_PX.toFloat() else (BUTTON_PX * 0.95f).roundToInt().toFloat()
+        synchronized(spinLock) {
+            val running = if (play) playMorphState else nextMorphState
+            if (running?.to == to) return
+            val from = if (running != null) {
+                if (running.progress < 0.5f) running.from else running.to
+            } else {
+                if (play) settledPlayShape else settledNextShape
+            } ?: return
+            if (from == to) return
+            if (play) playMorphJob?.cancel() else nextMorphJob?.cancel()
+            val glyphFrom = if (play) {
+                if (from == ButtonShape.BUN) R.drawable.ic_media_pause else R.drawable.ic_media_play
+            } else {
+                R.drawable.ic_media_next
+            }
+            val glyphTo = if (play) {
+                if (to == ButtonShape.BUN) R.drawable.ic_media_pause else R.drawable.ic_media_play
+            } else {
+                R.drawable.ic_media_next
+            }
+            val state = ButtonMorph(from, to, 0f, glyphFrom, glyphTo)
+            if (play) playMorphState = state else nextMorphState = state
+            val job = spinScope.launch {
+                val start = SystemClock.uptimeMillis()
+                while (isActive) {
+                    val elapsed = SystemClock.uptimeMillis() - start
+                    val t = (elapsed.toFloat() / BUTTON_MORPH_MS).coerceIn(0f, 1f)
+                    synchronized(spinLock) { state.progress = t }
+                    if (!isActive) return@launch
+                    val glyph = if (t < 0.5f) glyphFrom else glyphTo
+                    val bmp = buttonBitmapWithShape(
+                        appContext,
+                        morphButtonPath(from, to, easeInOut(t), size),
+                        size,
+                        glyph,
+                        lastButtonColor ?: color,
+                    )
+                    pushButtonBitmap(appContext, viewId, bmp)
+                    if (t >= 1f) break
+                    delay(BUTTON_TICK_MS)
+                }
+                synchronized(spinLock) {
+                    if (play) {
+                        playMorphState = null
+                        settledPlayShape = to
+                        playMorphJob = null
+                    } else {
+                        nextMorphState = null
+                        settledNextShape = to
+                        nextMorphJob = null
+                    }
+                }
+                // Land exactly on the static target bitmap. The morph's
+                // last frame is the same normalized frame, so this is
+                // visually a no-op — it only guarantees the settled
+                // bitmap even if the last tween frame was dropped.
+                pushButtonBitmap(
+                    appContext,
+                    viewId,
+                    buttonBitmap(appContext, play, isPlaying = (to == ButtonShape.BUN), color = lastButtonColor ?: color),
+                )
+            }
+            if (play) playMorphJob = job else nextMorphJob = job
+        }
+    }
+
+    /**
+     * Advance the next button's shape on press, morphing immediately —
+     * not when the settled track publish lands 500ms later. If the button
+     * never rendered, only the index advances and the next full render
+     * shows the new shape statically.
+     */
+    internal fun cycleNextShape(context: Context) {
+        val to = advanceNextShape(context)
+        startButtonMorph(context, play = false, to = to)
     }
 
     suspend fun updateAll(context: Context) {
@@ -541,6 +843,27 @@ internal object VinylClassic {
         val targetOn = ui.snapshot.hasMedia && ui.snapshot.isPlaying
         if (armFraction != (if (targetOn) 1f else 0f)) {
             startArmTween(context, targetOn)
+        }
+        // Button morphs, same rule: the full render above baked the
+        // CURRENT shape (live morph frame or settled target), so a morph
+        // starts only when the settled target actually flipped. The first
+        // render settles silently — a fresh add must not morph on sight.
+        // A morph already heading to the target is left alone; one heading
+        // to a stale target is restarted from its nearer endpoint inside
+        // startButtonMorph.
+        val playTarget = if (ui.snapshot.isPlaying) ButtonShape.BUN else ButtonShape.SUNNY
+        val settledPlay = synchronized(spinLock) { settledPlayShape }
+        if (settledPlay == null) {
+            synchronized(spinLock) { settledPlayShape = playTarget }
+        } else if (playTarget != settledPlay) {
+            startButtonMorph(context, play = true, to = playTarget)
+        }
+        val nextTarget = NEXT_SHAPES[nextShapeIndex(context)]
+        val settledNext = synchronized(spinLock) { settledNextShape }
+        if (settledNext == null) {
+            synchronized(spinLock) { settledNextShape = nextTarget }
+        } else if (nextTarget != settledNext) {
+            startButtonMorph(context, play = false, to = nextTarget)
         }
     }
 
@@ -682,6 +1005,7 @@ internal object VinylClassic {
         val recordColor = if (dark) scheme.background.toArgb() else onSurface
         val light = if (dark) onSurface else surface
         val buttonColor = KodaWidgetTheme.vinylButtonArgb(context, snap.artworkColor)
+        lastButtonColor = buttonColor
         val labelColor = snap.artworkLabelColor ?: scheme.primaryContainer.toArgb()
         val disc = discBitmap(
             context = context,
@@ -703,8 +1027,8 @@ internal object VinylClassic {
         return Rendered(
             disc = disc,
             top = top,
-            play = buttonBitmap(context, play = true, isPlaying = snap.isPlaying, color = buttonColor),
-            next = buttonBitmap(context, play = false, isPlaying = false, color = buttonColor),
+            play = liveButtonBitmap(context, play = true, isPlaying = snap.isPlaying, color = buttonColor),
+            next = liveButtonBitmap(context, play = false, isPlaying = false, color = buttonColor),
             label = maskBitmap(context, R.drawable.vinyl_label_marks, labelColor),
             spindle = maskBitmap(context, R.drawable.vinyl_spindle, recordColor),
             labelColor = labelColor,
@@ -915,11 +1239,15 @@ internal object VinylClassic {
      * fromOn pose's true layers, 1 exactly the other pose's true layers.
      * In between, the from-pose layers rotate around the measured pivot
      * toward the target angle, and the true target layers crossfade in
-     * over the last 30% — so the swing lands exactly on the true pose
+     * over the last 20% — so the swing lands exactly on the true pose
      * instead of a rotated approximation, and a mid-swing render never
-     * jumps. The clip keeps arm pixels right of the sleeve edge, as
-     * before: the arm never crosses it today, and the clip makes that
-     * structural rather than lucky.
+     * jumps. The pivot itself is exact (both poses' ring holes centre on
+     * (565.6, 95.6), and the tube angles measure +4.6/-31.8 degrees, so
+     * the rotation model is the real arm's, not an approximation of it);
+     * the crossfade only covers the last few pixels where the two poses'
+     * tube lengths differ. The clip keeps arm pixels right of the sleeve
+     * edge, as before: the arm never crosses it today, and the clip makes
+     * that structural rather than lucky.
      */
     private fun drawArm(
         canvas: Canvas,
@@ -951,8 +1279,8 @@ internal object VinylClassic {
         canvas.rotate(rot, px, py)
         canvas.drawBitmap(bmp, null, g.armRect, null)
         canvas.restore()
-        if (progress >= 0.7f) {
-            val alpha = ((progress - 0.7f) / 0.3f * 255f).roundToInt().coerceIn(0, 255)
+        if (progress >= 0.8f) {
+            val alpha = ((progress - 0.8f) / 0.2f * 255f).roundToInt().coerceIn(0, 255)
             val toBmp = armBitmap(context, g, !fromOn, recordColor, light, accent)
             val paint = Paint().apply { this.alpha = alpha }
             canvas.save()
@@ -987,7 +1315,10 @@ internal object VinylClassic {
     /**
      * A transport button baked to one bitmap: expressive shape in the
      * button colour, glyph inked by WCAG contrast against that colour.
-     * Play is Sunny; next is Flower at 0.95, centred, as before.
+     * The play button is Sunny while paused and Bun while playing — the
+     * SHAPE changes with the state, not just the glyph — and the next
+     * button takes the current shape of its press cycle. This is the
+     * settled bitmap; a morph in flight is [liveButtonBitmap].
      */
     private fun buttonBitmap(
         context: Context,
@@ -995,41 +1326,43 @@ internal object VinylClassic {
         isPlaying: Boolean,
         color: Int,
     ): Bitmap {
-        val shapeSize = if (play) BUTTON_PX else (BUTTON_PX * 0.95f).roundToInt()
-        val path = if (play) {
-            WidgetShapes.sunny(shapeSize.toFloat())
+        return if (play) {
+            val shape = if (isPlaying) ButtonShape.BUN else ButtonShape.SUNNY
+            val size = BUTTON_PX.toFloat()
+            buttonBitmapWithShape(
+                context,
+                shape.path(size),
+                size,
+                if (isPlaying) R.drawable.ic_media_pause else R.drawable.ic_media_play,
+                color,
+            )
         } else {
-            WidgetShapes.flower(shapeSize.toFloat())
+            val shape = NEXT_SHAPES[nextShapeIndex(context)]
+            val size = (BUTTON_PX * 0.95f).roundToInt().toFloat()
+            buttonBitmapWithShape(context, shape.path(size), size, R.drawable.ic_media_next, color)
         }
-        val out = Bitmap.createBitmap(BUTTON_PX, BUTTON_PX, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        val pad = (BUTTON_PX - shapeSize) / 2f
-        canvas.save()
-        canvas.translate(pad, pad)
-        canvas.drawPath(
-            path,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = color
-                style = Paint.Style.FILL
-            },
-        )
-        canvas.restore()
-        val glyphRes = when {
-            play && isPlaying -> R.drawable.ic_media_pause
-            play -> R.drawable.ic_media_play
-            else -> R.drawable.ic_media_next
+    }
+
+    /** The button as it stands right now: a live morph frame, or settled. */
+    private fun liveButtonBitmap(
+        context: Context,
+        play: Boolean,
+        isPlaying: Boolean,
+        color: Int,
+    ): Bitmap {
+        val morph = synchronized(spinLock) { if (play) playMorphState else nextMorphState }
+        if (morph != null) {
+            val size = if (play) BUTTON_PX.toFloat() else (BUTTON_PX * 0.95f).roundToInt().toFloat()
+            val glyph = if (morph.progress < 0.5f) morph.glyphFrom else morph.glyphTo
+            return buttonBitmapWithShape(
+                context,
+                morphButtonPath(morph.from, morph.to, easeInOut(morph.progress), size),
+                size,
+                glyph,
+                color,
+            )
         }
-        val ink = glyphInk(color)
-        val glyphSize = (shapeSize * 0.42f).roundToInt()
-        val glyph = maskBitmap(context, glyphRes, ink)
-        val g = (BUTTON_PX - glyphSize) / 2f
-        canvas.drawBitmap(
-            glyph,
-            null,
-            RectF(g, g, g + glyphSize, g + glyphSize),
-            null,
-        )
-        return out
+        return buttonBitmap(context, play, isPlaying, color)
     }
 
     /** A mask drawable (white shape, transparent elsewhere) tinted to [tint]. */

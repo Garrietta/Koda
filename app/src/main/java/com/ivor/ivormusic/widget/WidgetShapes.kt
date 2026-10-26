@@ -231,6 +231,42 @@ internal object WidgetShapes {
 }
 
 /**
+ * A transport button's shape, as a catalog polygon. The four shapes here
+ * are the morph set: symmetric by construction, so a morph between any
+ * two reads as one shape becoming another rather than sliding sideways.
+ * Puffy is deliberately excluded — the catalog authors it vertically
+ * compressed, and un-squishing it inside a morph would fight the morph's
+ * own interpolation.
+ *
+ * The static path and every morph frame share one frame: the polygon
+ * normalized into the (0,0)-(1,1) square, then scaled to [size]. That
+ * is what makes a morph pop-free — frame 0 IS the static from-shape and
+ * frame 1 IS the static to-shape, exactly, instead of a refit that
+ * shifts a few pixels at each end. (Sunny/Flower statics used to take
+ * the true-bounds refit; for these symmetric shapes the normalized
+ * frame differs only by a uniform ~1-2% scale, centered.)
+ */
+internal enum class ButtonShape {
+    SUNNY,
+    FLOWER,
+    BUN,
+    SOFTBURST;
+
+    fun polygon(): RoundedPolygon = when (this) {
+        SUNNY -> MaterialShapes.Sunny
+        FLOWER -> MaterialShapes.Flower
+        BUN -> MaterialShapes.Bun
+        SOFTBURST -> MaterialShapes.SoftBurst
+    }
+
+    fun path(size: Float): Path {
+        val path = polygon().normalized().toPath(Path())
+        path.transform(Matrix().apply { setScale(size, size) })
+        return path
+    }
+}
+
+/**
  * The shape an album cover is cut into. Named rather than passed as a path so a
  * widget declares its identity and the drawing stays in one place.
  */
