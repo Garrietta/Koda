@@ -28,6 +28,15 @@ class WidgetButtonReceiver : BroadcastReceiver() {
         val action = intent.getStringExtra(WidgetActionActivity.EXTRA_ACTION) ?: return
         val index = intent.getIntExtra(WidgetActionActivity.EXTRA_INDEX, -1)
 
+        // Play/pause feedback starts NOW, not after the controller bind
+        // and publish chain: the arm swing and play morph move the
+        // instant the tap lands (the next button already works this
+        // way), and the settled publish continues them rather than
+        // restarting them.
+        if (action == WidgetActionActivity.ACTION_TOGGLE) {
+            VinylClassic.beginToggleNow(context)
+        }
+
         // Use goAsync to keep the receiver alive for the coroutine
         val pending = goAsync()
         scope.launch {
@@ -50,7 +59,15 @@ class WidgetButtonReceiver : BroadcastReceiver() {
                                 controller.play()
                             }
                             controller.toSnapshot()
-                        } ?: return@launch
+                        }
+                        if (snapshot == null) {
+                            // The toggle never happened, so the optimistic
+                            // press-start swing/morph is pointing the wrong
+                            // way: re-render from last-known state, which
+                            // swings both back to the true pose.
+                            VinylClassic.updateAll(context.applicationContext)
+                            return@launch
+                        }
                         PlayerWidgets.publish(context, snapshot)
                     }
                     WidgetActionActivity.ACTION_NEXT -> {

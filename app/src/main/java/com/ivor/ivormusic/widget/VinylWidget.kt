@@ -96,18 +96,25 @@ import kotlin.math.roundToInt
  *
  * ARM IS TWEENED, NOT SWAPPED: the tonearm used to teleport between its
  * two baked poses in a single frame. Now a play/pause transition swings
- * it over ~350ms in ~16ms steps with smoothstep easing: the current
+ * it over ~350ms in ~33ms steps with smoothstep easing: the current
  * pose's arm layers rotate around the measured pivot (PNG 565.6, 95.6 —
  * both poses' ring holes centre there, tube angles +4.6/-31.8 degrees,
  * so the rotation model is the real arm's) toward the target pose, with
  * the true target pose crossfading in over the last 20% so the swing
- * lands exactly on the true pose. The sleeve is baked once per tween
- * and reused across frames — re-baking it every frame is what made the
- * old 50ms steps land unevenly. The full render always carries the
- * arm's CURRENT position, never the target, so a render mid-swing
- * cannot jump it; a new transition cancels the old tween and swings
- * from wherever the arm is. No bounce, no overshoot: a short smooth
- * swing, nothing crazy.
+ * lands exactly on the true pose. The sleeve and both poses' layers are
+ * baked once per tween and reused across frames. The swing starts the
+ * instant the tap lands (the receiver starts it optimistically, ahead
+ * of the controller bind and publish chain — the old path gated the
+ * first frame behind all of that, 300-600ms after the tap), and the
+ * settled publish continues a tween already heading to its target
+ * instead of restarting its clock. Cadence is ~30fps, not 60: One UI
+ * Home cannot apply 60fps full-stage bitmap pushes, so they queued up
+ * and landed bunched and late — choppy AND slow. Elapsed-time progress
+ * keeps the duration true even when a frame slips. The full render
+ * always carries the arm's CURRENT position, never the target, so a
+ * render mid-swing cannot jump it; a new transition cancels the old
+ * tween and swings from wherever the arm is. No bounce, no overshoot:
+ * a short smooth swing, nothing crazy.
  *
  * BUTTONS MORPH, THEY DON'T SWAP: the play button is Sunny while
  * paused and Bun while playing — the background SHAPE changes with the
@@ -323,13 +330,15 @@ internal object VinylClassic {
     private const val ARM_PNG_W = 640f
 
     /**
-     * Tween cadence and length: ~16ms steps over ~350ms, eased in and out,
-     * no overshoot. The old 50ms linear steps were ~6 jumps — that is the
-     * choppiness: a swing needs frames, not steps, and a real arm
-     * accelerates out of the rest and decelerates onto the record instead
-     * of travelling at one speed and stopping dead.
+     * Tween cadence and length: ~33ms steps over ~350ms, eased in and
+     * out, no overshoot. 16ms steps were tried first and read WORSE,
+     * not better: One UI Home cannot apply 60fps full-stage bitmap
+     * pushes, so they queued up and landed bunched and late — choppy
+     * AND slow. ~30fps well-timed frames, each one cheap (cached
+     * sleeve + cached arm layers, elapsed-time progress so a late
+     * frame skips ahead instead of stretching the tween), land.
      */
-    private const val ARM_TICK_MS = 16L
+    private const val ARM_TICK_MS = 33L
     private const val ARM_TWEEN_MS = 350L
 
     /** Smoothstep ease: slow out of the rest, slow onto the record. */
@@ -349,6 +358,15 @@ internal object VinylClassic {
     @Volatile
     private var armProgress: Float = 0f
     private var armJob: Job? = null
+
+    /**
+     * The target of the running tween, if any. A settled publish after
+     * an optimistic press-start must CONTINUE a tween already heading
+     * to its target, never restart its clock — so updateAll cancels a
+     * tween only when its target differs, and a re-trigger toward the
+     * same target is a no-op. Guarded by [spinLock] with the tween job.
+     */
+    private var armTargetOn: Boolean? = null
 
     private val armFraction: Float
         get() = if (armFromOn) 1f - armProgress else armProgress
@@ -381,6 +399,11 @@ internal object VinylClassic {
         if (ids.isEmpty()) {
             // Widget removed while playing: no next publish will stop us.
             stopSpinTicker()
+            synchronized(spinLock) {
+                armJob?.cancel()
+                armJob = null
+                armTargetOn = null
+            }
             return
         }
         val progress = angleToProgress(spinAngleDeg)
@@ -428,32 +451,55 @@ internal object VinylClassic {
 
     /**
      * Swing the arm from its current position to [targetOn] over
-     * [ARM_TWEEN_MS]. The sleeve is baked once; each frame re-composites
-     * it with the arm at the next interpolated position. A new transition
-     * cancels this job and starts from wherever the arm is, so rapid
-     * play/pause taps reverse the swing instead of teleporting it.
+     * [ARM_TWEEN_MS]. The sleeve is baked once and both poses' layers
+     * are baked once; each frame is one rotate + blit of cached layers
+     * over the cached sleeve — the old loop re-baked both poses (three
+     * mask draws + a bitmap alloc each) on EVERY frame, on top of a
+     * full-stage alloc, which is what made frames land unevenly. A new
+     * transition cancels the old job and starts from wherever the arm
+     * is, so rapid play/pause taps reverse the swing instead of
+     * teleporting it; a re-trigger toward the target the running tween
+     * already heads to is a no-op, so the settled publish after an
+     * optimistic press-start continues the swing instead of restarting
+     * its clock. Time-based, not step-count-based, so a late frame
+     * skips ahead to its wall-clock position instead of stretching the
+     * tween — and the cadence is one the host can actually apply: 60fps
+     * partial pushes queue up in One UI Home and land bunched and late
+     * (choppy AND slow), while ~30fps well-timed frames land.
      */
     private fun startArmTween(context: Context, targetOn: Boolean) {
         val appContext = context.applicationContext
         val inputs = lastTop ?: return
-        // The sleeve never moves during a swing, so bake it once: the old
-        // loop re-baked sleeve + arm every frame, and the sleeve bake
-        // (cookie-masked artwork) is what made frames land unevenly on
-        // top of the 50ms steps. A tween frame is now one arm composite
-        // over the cached sleeve.
-        val sleeve = sleeveBitmap(appContext, inputs)
         synchronized(spinLock) {
+            if (armJob != null && armTargetOn == targetOn) return
             armJob?.cancel()
+            armTargetOn = targetOn
             armJob = spinScope.launch {
+                val self = coroutineContext[Job]
                 // Capture the start once: the tween interpolates from
                 // here to the target, keeping fromOn fixed so the rotation
-                // never flips sides mid-swing. Time-based, not
-                // step-count-based, so a late frame cannot slow the swing.
+                // never flips sides mid-swing.
                 val (fromOn, startProgress, targetProgress) = synchronized(spinLock) {
                     val tp = if (targetOn == armFromOn) 0f else 1f
                     Triple(armFromOn, armProgress, tp)
                 }
+                // The sleeve never moves during a swing, so bake it once,
+                // and both poses' layers once: the old loop re-baked them
+                // (three mask draws + a bitmap alloc per pose) on EVERY
+                // frame, on top of a full-stage alloc, which is what made
+                // frames land unevenly. A tween frame is now one rotate +
+                // blit of cached layers over the cached sleeve. The bake
+                // lives inside the job so the cancel + launch above stays
+                // atomic — a concurrent re-trigger cannot orphan a job
+                // mid-bake — and the clock starts after it, so the bake
+                // never eats into the swing's duration.
+                val sleeve = sleeveBitmap(appContext, inputs)
+                val g = stageGeometry()
+                val fromBmp = armBitmap(appContext, g, fromOn, inputs.recordColor, inputs.light, inputs.accent)
+                val toBmp = armBitmap(appContext, g, !fromOn, inputs.recordColor, inputs.light, inputs.accent)
                 val start = SystemClock.uptimeMillis()
+                var frames = 0
+                var maxFrameMs = 0L
                 while (isActive) {
                     val elapsed = SystemClock.uptimeMillis() - start
                     val t = (elapsed.toFloat() / ARM_TWEEN_MS).coerceIn(0f, 1f)
@@ -461,6 +507,7 @@ internal object VinylClassic {
                     val progress = startProgress + (targetProgress - startProgress) * eased
                     synchronized(spinLock) { armProgress = progress }
                     if (!isActive) return@launch
+                    val frameStart = SystemClock.uptimeMillis()
                     val frame = compositeTopWithArm(
                         sleeve,
                         appContext,
@@ -469,17 +516,61 @@ internal object VinylClassic {
                         inputs.recordColor,
                         inputs.light,
                         inputs.accent,
+                        fromBmp,
+                        toBmp,
                     )
                     pushTopBitmap(appContext, frame)
+                    val frameMs = SystemClock.uptimeMillis() - frameStart
+                    if (frameMs > maxFrameMs) maxFrameMs = frameMs
+                    frames++
                     if (t >= 1f) break
                     delay(ARM_TICK_MS)
                 }
+                val totalMs = SystemClock.uptimeMillis() - start
                 synchronized(spinLock) {
-                    // Land exactly: progress 0/1 draws the true pose layers.
-                    armProgress = targetProgress
-                    armJob = null
+                    // Land exactly — but only if this job is still the
+                    // current one: a cancelled job must never overwrite a
+                    // newer tween's state.
+                    if (armJob === self) {
+                        armProgress = targetProgress
+                        armJob = null
+                        armTargetOn = null
+                    }
+                }
+                if (totalMs > 500L) {
+                    KLog.w("VinylWidget", "Slow arm tween: $frames frames in ${totalMs}ms, slowest frame ${maxFrameMs}ms")
+                } else {
+                    KLog.d("VinylWidget", "Arm tween: $frames frames in ${totalMs}ms, slowest frame ${maxFrameMs}ms")
                 }
             }
+        }
+    }
+
+    /**
+     * Start the press feedback IMMEDIATELY on tap, ahead of the
+     * controller bind + 120ms publish debounce + enrichment + bake
+     * that used to gate the first swing frame — 300-600ms after the
+     * tap, which is the reaction delay. The target is optimistic, from
+     * the last rendered state (live flow first, stored snapshot as
+     * fallback; no media at all means the toggle restores and plays, so
+     * the target is on). The settled publish's updateAll continues a
+     * tween/morph already heading to its target and only reverses one
+     * heading the other way, so a wrong guess self-corrects without a
+     * jump — and the receiver re-renders on the failure path, which
+     * swings both back to the true pose. Nothing happens when the
+     * widget never rendered (no cached sleeve or button colour) — the
+     * publish chain then renders statically as before. Same pattern as
+     * the next button's press-time morph, which already starts in the
+     * receiver instead of waiting for the settled publish.
+     */
+    internal fun beginToggleNow(context: Context) {
+        val appContext = context.applicationContext
+        val last = PlayerWidgetHost.state.value.snapshot.takeIf { it.hasMedia }
+            ?: runCatching { PlayerWidgetStore.read(appContext) }.getOrNull()?.takeIf { it.hasMedia }
+        val targetOn = last?.let { !it.isPlaying } ?: true
+        spinScope.launch {
+            startArmTween(appContext, targetOn)
+            startButtonMorph(appContext, play = true, to = if (targetOn) ButtonShape.BUN else ButtonShape.SUNNY)
         }
     }
 
@@ -506,7 +597,9 @@ internal object VinylClassic {
         return out
     }
 
-    /** One tween frame: the cached sleeve plus the arm at [progress]. */
+    /** One tween frame: the cached sleeve plus the arm at [progress].
+     *  [fromBmp]/[toBmp] are the poses baked once for the tween; when
+     *  null (full renders) the layers bake on the spot as before. */
     private fun compositeTopWithArm(
         sleeve: Bitmap,
         context: Context,
@@ -515,12 +608,14 @@ internal object VinylClassic {
         recordColor: Int,
         light: Int,
         accent: Int,
+        fromBmp: Bitmap? = null,
+        toBmp: Bitmap? = null,
     ): Bitmap {
         val g = stageGeometry()
         val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawBitmap(sleeve, 0f, 0f, null)
-        drawArm(canvas, context, g, fromOn, progress, recordColor, light, accent)
+        drawArm(canvas, context, g, fromOn, progress, recordColor, light, accent, fromBmp, toBmp)
         return out
     }
 
@@ -777,13 +872,23 @@ internal object VinylClassic {
         }
         // A paused snapshot stops the ticker BEFORE the render, not after:
         // a tick landing between the render and the old trailing stop
-        // would un-freeze the label for one frame. And an arm tween in
-        // flight is cancelled now, so its partials can never land after
-        // this full render and jump the arm back mid-swing.
+        // would un-freeze the label for one frame.
         if (!ui.snapshot.isPlaying) stopSpinTicker()
+        // The arm tween is cancelled ONLY when it heads the other way.
+        // The old code cancelled unconditionally, so the settled publish
+        // after an optimistic press-start killed the swing that had
+        // already started and restarted its clock from the current
+        // position — a mid-swing stall that read as choppy and slow.
+        // A tween already heading to this render's target is left alone:
+        // the full render below carries the arm's CURRENT position, so
+        // it cannot jump it, and the tween's next frame continues it.
+        val targetOn = ui.snapshot.hasMedia && ui.snapshot.isPlaying
         synchronized(spinLock) {
-            armJob?.cancel()
-            armJob = null
+            if (armJob != null && armTargetOn != targetOn) {
+                armJob?.cancel()
+                armJob = null
+                armTargetOn = null
+            }
         }
         val manager = AppWidgetManager.getInstance(context)
         // The full render carries the arm's CURRENT position, never the
@@ -839,8 +944,9 @@ internal object VinylClassic {
         syncSpinTicker(context, ui.snapshot)
         // Swing the arm only if the pose actually flipped: the full render
         // above already shows the current position, and the tween moves it
-        // to the target from there.
-        val targetOn = ui.snapshot.hasMedia && ui.snapshot.isPlaying
+        // to the target from there. A tween already heading to the target
+        // is left alone by startArmTween's guard — the settled publish
+        // continues it instead of restarting its clock.
         if (armFraction != (if (targetOn) 1f else 0f)) {
             startArmTween(context, targetOn)
         }
@@ -1226,11 +1332,12 @@ internal object VinylClassic {
         recordColor: Int,
         light: Int,
         accent: Int,
+        bmp: Bitmap? = null,
     ) {
-        val bmp = armBitmap(context, g, poseOn, recordColor, light, accent)
+        val b = bmp ?: armBitmap(context, g, poseOn, recordColor, light, accent)
         canvas.save()
         canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
-        canvas.drawBitmap(bmp, null, g.armRect, null)
+        canvas.drawBitmap(b, null, g.armRect, null)
         canvas.restore()
     }
 
@@ -1258,16 +1365,18 @@ internal object VinylClassic {
         recordColor: Int,
         light: Int,
         accent: Int,
+        fromBmp: Bitmap? = null,
+        toBmp: Bitmap? = null,
     ) {
         if (progress <= 0f) {
-            drawArmPose(canvas, context, g, fromOn, recordColor, light, accent)
+            drawArmPose(canvas, context, g, fromOn, recordColor, light, accent, fromBmp)
             return
         }
         if (progress >= 1f) {
-            drawArmPose(canvas, context, g, !fromOn, recordColor, light, accent)
+            drawArmPose(canvas, context, g, !fromOn, recordColor, light, accent, toBmp)
             return
         }
-        val bmp = armBitmap(context, g, fromOn, recordColor, light, accent)
+        val bmp = fromBmp ?: armBitmap(context, g, fromOn, recordColor, light, accent)
         val s = g.armRect.width() / ARM_PNG_W
         val px = g.armRect.left + ARM_PIVOT_PNG_X * s
         val py = g.armRect.top + ARM_PIVOT_PNG_Y * s
@@ -1291,11 +1400,11 @@ internal object VinylClassic {
         canvas.restore()
         if (progress >= 0.8f) {
             val alpha = ((progress - 0.8f) / 0.2f * 255f).roundToInt().coerceIn(0, 255)
-            val toBmp = armBitmap(context, g, !fromOn, recordColor, light, accent)
+            val toBmpCached = toBmp ?: armBitmap(context, g, !fromOn, recordColor, light, accent)
             val paint = Paint().apply { this.alpha = alpha }
             canvas.save()
             canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
-            canvas.drawBitmap(toBmp, null, g.armRect, paint)
+            canvas.drawBitmap(toBmpCached, null, g.armRect, paint)
             canvas.restore()
         }
     }
