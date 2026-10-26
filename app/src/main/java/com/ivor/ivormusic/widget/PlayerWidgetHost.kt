@@ -173,6 +173,13 @@ object PlayerWidgets {
      */
     fun publish(context: Context, snapshot: PlayerWidgetSnapshot) {
         val appContext = context.applicationContext
+        // Freeze the spin the MOMENT a pause is published, before the
+        // 120ms debounce, Palette enrichment, and bitmap baking below:
+        // the ticker used to run through all of it, so the label froze
+        // hundreds of ms past the pause instant — a visibly different
+        // angle from where the music stopped. A later playing publish
+        // restarts the ticker through VinylClassic.updateAll as before.
+        if (snapshot.hasMedia && !snapshot.isPlaying) VinylClassic.freezeSpin()
         // Don't let an empty snapshot (queue ended, session destroyed,
         // player released) erase the last known good state. The old code
         // guarded only the store write below; the state update and redraw

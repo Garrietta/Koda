@@ -80,6 +80,28 @@ import kotlin.math.roundToInt
  * pause swapped to the parked label at 0 and every resume restarted at 0.
  * Pre-S keeps the old parked label (the spin tint needs API 31).
  *
+ * EXACT PAUSE: the freeze must happen the moment a pause is published,
+ * not after the render. The publish path debounces 120ms, enriches
+ * colours on IO, then bakes bitmaps — and the ticker used to run through
+ * all of it, so the label froze 200ms+ past the pause instant, at a
+ * visibly different angle from where the music stopped. Worse, the full
+ * render captured its angle BEFORE baking, so the host applied it after
+ * newer tick partials and the label jumped BACK on pause. So: a paused
+ * publish freezes the ticker synchronously at publish entry; the full
+ * render captures its angle AFTER baking; and a playing render re-pushes
+ * the latest tick once, so no older angle can land after a newer one.
+ *
+ * ARM IS TWEENED, NOT SWAPPED: the tonearm used to teleport between its
+ * two baked poses in a single frame. Now a play/pause transition swings
+ * it over ~300ms in 50ms steps: the current pose's arm layers rotate
+ * around the measured pivot (PNG 565.4, 95.8, from the two poses' tube
+ * centerlines, 36.2 degrees apart) toward the target pose, with the true
+ * target pose crossfading in over the last 30% so the swing lands exactly
+ * on the true pose. The full render always carries the arm's CURRENT
+ * position, never the target, so a render mid-swing cannot jump it; a
+ * new transition cancels the old tween and swings from wherever the arm
+ * is. No bounce, no overshoot: a short smooth swing, nothing crazy.
+ *
  * LAYERING: the stage is two bitmaps, not one. The disc layer (disc +
  * grooves) draws first, then the carve (label + spindle), then the top
  * layer (sleeve + arm). The sleeve therefore occludes the label's left
@@ -254,6 +276,68 @@ internal object VinylClassic {
     }
 
     /**
+     * Freeze the spin the moment a pause is published. Called
+     * synchronously from PlayerWidgets.publish (before its 120ms
+     * debounce, Palette enrichment, and bitmap baking) so the frozen
+     * angle is the pause instant, not the angle hundreds of ms later
+     * when the debounced render finally runs. The angle itself is kept:
+     * resume continues from it, and only a track change resets it.
+     */
+    internal fun freezeSpin() {
+        stopSpinTicker()
+    }
+
+    /**
+     * Tonearm swing, measured from the arm PNGs (drawable-nodpi, 640x512):
+     * the on/off tube centerlines intersect at (565.4, 95.8) — the pivot —
+     * and sit 36.2 degrees apart (off leans +4.5 degrees from vertical,
+     * on leans -31.7). The arm bitmaps are drawn stretched into armRect,
+     * whose aspect (1.25) matches the PNG aspect exactly, so the stretch
+     * is uniform and a rotation in stage space is a true rotation.
+     */
+    private const val ARM_SWING_DEG = 36.2f
+    private const val ARM_PIVOT_PNG_X = 565.4f
+    private const val ARM_PIVOT_PNG_Y = 95.8f
+    private const val ARM_PNG_W = 640f
+
+    /** Tween cadence and length: 50ms steps over ~300ms, no overshoot. */
+    private const val ARM_TICK_MS = 50L
+    private const val ARM_TWEEN_MS = 300L
+
+    /**
+     * The arm's current position, as (fromPose, progress): progress 0 is
+     * exactly the fromPose's true layers, 1 is exactly the other pose's
+     * true layers, in between is the rotated from-pose. Guarded by
+     * [spinLock] with the spin state: the tween job and updateAll both
+     * touch it. The fraction form is what updateAll compares against the
+     * target pose: fromOn=true reads 1-progress, fromOn=false reads
+     * progress.
+     */
+    @Volatile
+    private var armFromOn: Boolean = false
+    @Volatile
+    private var armProgress: Float = 0f
+    private var armJob: Job? = null
+
+    private val armFraction: Float
+        get() = if (armFromOn) 1f - armProgress else armProgress
+
+    /** Inputs the last full render baked the top layer from, so a tween
+     *  frame can re-bake it without a full render. The artwork reference
+     *  is the same one PlayerWidgetHost already holds; nothing new is
+     *  retained. */
+    private class TopInputs(
+        val artwork: Bitmap?,
+        val recordColor: Int,
+        val light: Int,
+        val accent: Int,
+        val secondaryContainer: Int,
+        val onSecondaryContainer: Int,
+    )
+
+    private var lastTop: TopInputs? = null
+
+    /**
      * One-int partial push: only the label's progress moves, so a tick
      * costs a few bytes instead of a bitmap. Tint and bitmaps are set by
      * the full render; ticks never touch them.
@@ -283,6 +367,89 @@ internal object VinylClassic {
     private fun angleToProgress(angleDeg: Float): Int =
         (angleDeg * 10f).roundToInt().coerceIn(0, SPIN_MAX)
 
+    /**
+     * One-bitmap partial push: only the top layer (sleeve + arm) moves,
+     * so a tween frame costs one bitmap instead of a full render. Like
+     * the spin ticks, it never touches the label progress or the buttons.
+     */
+    private fun pushTopBitmap(context: Context, top: Bitmap) {
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = runCatching {
+            manager.getAppWidgetIds(ComponentName(context, VinylWidgetReceiver::class.java))
+        }.getOrNull() ?: return
+        if (ids.isEmpty()) {
+            synchronized(spinLock) {
+                armJob?.cancel()
+                armJob = null
+            }
+            return
+        }
+        for (id in ids) {
+            val wide = runCatching { isWide(context, id) }.getOrDefault(false)
+            val views = RemoteViews(
+                context.packageName,
+                if (wide) R.layout.widget_vinyl_wide else R.layout.widget_vinyl_narrow,
+            )
+            views.setImageViewBitmap(R.id.vinyl_top_art, top)
+            runCatching { manager.updateAppWidget(id, views) }
+        }
+    }
+
+    /**
+     * Swing the arm from its current position to [targetOn] over
+     * [ARM_TWEEN_MS]. The sleeve is baked once; each frame re-composites
+     * it with the arm at the next interpolated position. A new transition
+     * cancels this job and starts from wherever the arm is, so rapid
+     * play/pause taps reverse the swing instead of teleporting it.
+     */
+    private fun startArmTween(context: Context, targetOn: Boolean) {
+        val appContext = context.applicationContext
+        val inputs = lastTop ?: return
+        synchronized(spinLock) {
+            armJob?.cancel()
+            armJob = spinScope.launch {
+                // Capture the start once: the tween interpolates linearly
+                // from here to the target, keeping fromOn fixed so the
+                // rotation never flips sides mid-swing.
+                val (fromOn, startProgress, targetProgress) = synchronized(spinLock) {
+                    val tp = if (targetOn == armFromOn) 0f else 1f
+                    Triple(armFromOn, armProgress, tp)
+                }
+                val start = SystemClock.uptimeMillis()
+                while (isActive) {
+                    val elapsed = SystemClock.uptimeMillis() - start
+                    val t = (elapsed.toFloat() / ARM_TWEEN_MS).coerceIn(0f, 1f)
+                    val progress = startProgress + (targetProgress - startProgress) * t
+                    synchronized(spinLock) { armProgress = progress }
+                    val frame = topBitmapWithArm(appContext, inputs, fromOn, progress)
+                    pushTopBitmap(appContext, frame)
+                    if (t >= 1f) break
+                    delay(ARM_TICK_MS)
+                }
+                synchronized(spinLock) {
+                    // Land exactly: progress 0/1 draws the true pose layers.
+                    armProgress = targetProgress
+                    armJob = null
+                }
+            }
+        }
+    }
+
+    /** The top layer re-baked at an interpolated arm position. */
+    private fun topBitmapWithArm(
+        context: Context,
+        inputs: TopInputs,
+        fromOn: Boolean,
+        progress: Float,
+    ): Bitmap {
+        val g = stageGeometry()
+        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        drawSleeve(canvas, context, inputs, g)
+        drawArm(canvas, context, g, fromOn, progress, inputs.recordColor, inputs.light, inputs.accent)
+        return out
+    }
+
     suspend fun updateAll(context: Context) {
         // Seeding must never take the update down with it: a failed seed
         // still renders (empty state, placeholder tile) instead of pushing
@@ -299,15 +466,22 @@ internal object VinylClassic {
             stopSpinTicker()
             return
         }
+        // A paused snapshot stops the ticker BEFORE the render, not after:
+        // a tick landing between the render and the old trailing stop
+        // would un-freeze the label for one frame. And an arm tween in
+        // flight is cancelled now, so its partials can never land after
+        // this full render and jump the arm back mid-swing.
+        if (!ui.snapshot.isPlaying) stopSpinTicker()
+        synchronized(spinLock) {
+            armJob?.cancel()
+            armJob = null
+        }
         val manager = AppWidgetManager.getInstance(context)
-        // The spin angle is owned here, not by the host: reset it only on
-        // a track change, before the render, so a full render never moves
-        // the label on a play/pause transition.
-        val angleDeg = spinAngleFor(ui.snapshot)
-        // Render once for every instance, but a render failure must not
-        // leave any id without content: fall back to the static shell.
+        // The full render carries the arm's CURRENT position, never the
+        // target pose: the tween below swings it from here, so a render
+        // mid-transition cannot teleport it.
         val rendered = try {
-            render(context, ui, angleDeg)
+            render(context, ui)
         } catch (e: Exception) {
             KLog.w("VinylWidget", "Render failed, pushing static shell: ${e.message}")
             for (id in ids) {
@@ -316,6 +490,12 @@ internal object VinylClassic {
             syncSpinTicker(context, ui.snapshot)
             return
         }
+        // Capture the angle AFTER baking, not before: baking takes
+        // ~100ms+, and the old code captured it first, so the pushed full
+        // render carried an angle older than the ticker's latest partial
+        // — the host applied it after the partial and the label visibly
+        // jumped BACK on pause. Reset still happens only on track change.
+        rendered.angleDeg = spinAngleFor(ui.snapshot)
         for (id in ids) {
             // A bad options bundle must never take the whole update down:
             // fall back to narrow (the 4x2 native variant) for this id.
@@ -336,7 +516,18 @@ internal object VinylClassic {
                 KLog.w("VinylWidget", "All push tiers failed for $id")
             }
         }
+        // Re-sync: a tick that landed during the push loop is newer than
+        // the full render's angle; push it again so the full render can't
+        // leave the label behind by one tick.
+        if (ui.snapshot.isPlaying) pushSpinProgress(context)
         syncSpinTicker(context, ui.snapshot)
+        // Swing the arm only if the pose actually flipped: the full render
+        // above already shows the current position, and the tween moves it
+        // to the target from there.
+        val targetOn = ui.snapshot.hasMedia && ui.snapshot.isPlaying
+        if (armFraction != (if (targetOn) 1f else 0f)) {
+            startArmTween(context, targetOn)
+        }
     }
 
     /**
@@ -371,9 +562,12 @@ internal object VinylClassic {
      * One render for every instance: the bitmaps do not depend on the
      * cell, only the layout variant does, and that is picked per id.
      * The variant choice reads the reported aspect only — a uniform %
-     * scale leaves it unchanged.
+     * scale leaves it unchanged. The angle is NOT captured here: the
+     * caller sets [Rendered.angleDeg] after baking, so the pushed angle
+     * is never stale by the bake duration. The arm is rendered at its
+     * current interpolated position, never the target pose.
      */
-    private fun render(context: Context, ui: PlayerWidgetUi, angleDeg: Float): Rendered {
+    private fun render(context: Context, ui: PlayerWidgetUi): Rendered {
         val snap = ui.snapshot
         val prefs = ThemePreferences(context)
         val dark = KodaWidgetTheme.isDark(context)
@@ -396,16 +590,17 @@ internal object VinylClassic {
             recordColor = recordColor,
             light = light,
         )
-        val top = topBitmap(
-            context = context,
+        val topInputs = TopInputs(
             artwork = ui.artwork,
             recordColor = recordColor,
             light = light,
             accent = snap.artworkColor ?: scheme.primary.toArgb(),
             secondaryContainer = scheme.secondaryContainer.toArgb(),
             onSecondaryContainer = scheme.onSecondaryContainer.toArgb(),
-            isPlaying = snap.isPlaying,
         )
+        lastTop = topInputs
+        val (fromOn, progress) = synchronized(spinLock) { armFromOn to armProgress }
+        val top = topBitmapWithArm(context, topInputs, fromOn, progress)
         return Rendered(
             disc = disc,
             top = top,
@@ -414,7 +609,7 @@ internal object VinylClassic {
             label = maskBitmap(context, R.drawable.vinyl_label_marks, labelColor),
             spindle = maskBitmap(context, R.drawable.vinyl_spindle, recordColor),
             labelColor = labelColor,
-            angleDeg = angleDeg,
+            angleDeg = 0f,
         )
     }
 
@@ -426,7 +621,7 @@ internal object VinylClassic {
         val label: Bitmap,
         val spindle: Bitmap,
         val labelColor: Int,
-        val angleDeg: Float,
+        var angleDeg: Float,
     ) {
         fun forId(context: Context, wide: Boolean, minimal: Boolean = false): RemoteViews {
             val views = RemoteViews(
@@ -541,30 +736,22 @@ internal object VinylClassic {
     }
 
     /**
-     * Top layer: sleeve (or placeholder tile) + arm, drawn OVER the carve
-     * in the layout, so the sleeve occludes the label's and spindle's
-     * left half — the disc sits behind the sleeve, never over the art.
-     * The arm draw is clipped to the sleeve edge: arm pixels never cross
-     * it today, and the clip makes that structural rather than lucky.
+     * Sleeve (or placeholder tile) into the stage canvas, at the sleeve
+     * rect. The sleeve draws before the arm and above the label carve in
+     * the layout, so it occludes the label's left half — the disc sits
+     * behind the sleeve, never over the art.
      */
-    private fun topBitmap(
+    private fun drawSleeve(
+        canvas: Canvas,
         context: Context,
-        artwork: Bitmap?,
-        recordColor: Int,
-        light: Int,
-        accent: Int,
-        secondaryContainer: Int,
-        onSecondaryContainer: Int,
-        isPlaying: Boolean,
-    ): Bitmap {
-        val g = stageGeometry()
-        val out = Bitmap.createBitmap(g.width, g.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        if (artwork != null) {
+        inputs: TopInputs,
+        g: StageGeometry,
+    ) {
+        if (inputs.artwork != null) {
             // A corrupt/recycled cover must never kill the render: fall
             // back to the placeholder tile on any artwork failure.
             val sleeve = try {
-                maskedArtwork(artwork, ArtworkShape.COOKIE4SIDED, g.height)
+                maskedArtwork(inputs.artwork, ArtworkShape.COOKIE4SIDED, g.height)
             } catch (e: Exception) {
                 KLog.w("VinylWidget", "Artwork mask failed, using tile: ${e.message}")
                 null
@@ -572,26 +759,108 @@ internal object VinylClassic {
             if (sleeve != null) {
                 canvas.drawBitmap(sleeve, null, g.sleeveRect, null)
             } else {
-                drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, secondaryContainer, onSecondaryContainer)
+                drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, inputs.secondaryContainer, inputs.onSecondaryContainer)
             }
         } else {
-            drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, secondaryContainer, onSecondaryContainer)
+            drawPlaceholderTile(canvas, context, g.height, g.sleeveRect, inputs.secondaryContainer, inputs.onSecondaryContainer)
         }
+    }
+
+    /** One pose's three arm layers, baked at armRect size. */
+    private fun armBitmap(
+        context: Context,
+        g: StageGeometry,
+        poseOn: Boolean,
+        recordColor: Int,
+        light: Int,
+        accent: Int,
+    ): Bitmap {
+        val w = g.armRect.width().roundToInt()
+        val h = g.armRect.height().roundToInt()
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val pose = if (poseOn) "on" else "off"
+        val full = RectF(0f, 0f, w.toFloat(), h.toFloat())
+        drawMask(canvas, context, armRes(context, pose, "shadow"), recordColor, full)
+        drawMask(canvas, context, armRes(context, pose, "metal"), light, full)
+        drawMask(canvas, context, armRes(context, pose, "accent"), accent, full)
+        return out
+    }
+
+    private fun armRes(context: Context, pose: String, layer: String): Int =
+        context.resources.getIdentifier(
+            "vinyl_arm_${pose}_$layer",
+            "drawable",
+            context.packageName,
+        )
+
+    /** One true pose's layers, drawn under the sleeve-edge clip. */
+    private fun drawArmPose(
+        canvas: Canvas,
+        context: Context,
+        g: StageGeometry,
+        poseOn: Boolean,
+        recordColor: Int,
+        light: Int,
+        accent: Int,
+    ) {
+        val bmp = armBitmap(context, g, poseOn, recordColor, light, accent)
         canvas.save()
         canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
-        val armPose = if (isPlaying) "on" else "off"
-        val armRes = { layer: String ->
-            context.resources.getIdentifier(
-                "vinyl_arm_${armPose}_$layer",
-                "drawable",
-                context.packageName,
-            )
-        }
-        drawMask(canvas, context, armRes("shadow"), recordColor, g.armRect)
-        drawMask(canvas, context, armRes("metal"), light, g.armRect)
-        drawMask(canvas, context, armRes("accent"), accent, g.armRect)
+        canvas.drawBitmap(bmp, null, g.armRect, null)
         canvas.restore()
-        return out
+    }
+
+    /**
+     * The arm at an interpolated position. Progress 0 draws exactly the
+     * fromOn pose's true layers, 1 exactly the other pose's true layers.
+     * In between, the from-pose layers rotate around the measured pivot
+     * toward the target angle, and the true target layers crossfade in
+     * over the last 30% — so the swing lands exactly on the true pose
+     * instead of a rotated approximation, and a mid-swing render never
+     * jumps. The clip keeps arm pixels right of the sleeve edge, as
+     * before: the arm never crosses it today, and the clip makes that
+     * structural rather than lucky.
+     */
+    private fun drawArm(
+        canvas: Canvas,
+        context: Context,
+        g: StageGeometry,
+        fromOn: Boolean,
+        progress: Float,
+        recordColor: Int,
+        light: Int,
+        accent: Int,
+    ) {
+        if (progress <= 0f) {
+            drawArmPose(canvas, context, g, fromOn, recordColor, light, accent)
+            return
+        }
+        if (progress >= 1f) {
+            drawArmPose(canvas, context, g, !fromOn, recordColor, light, accent)
+            return
+        }
+        val bmp = armBitmap(context, g, fromOn, recordColor, light, accent)
+        val s = g.armRect.width() / ARM_PNG_W
+        val px = g.armRect.left + ARM_PIVOT_PNG_X * s
+        val py = g.armRect.top + ARM_PIVOT_PNG_Y * s
+        // ON leans -31.7 degrees from vertical, OFF +4.5: ON->OFF swings
+        // +36.2 (clockwise on screen), OFF->ON swings -36.2.
+        val rot = (if (fromOn) ARM_SWING_DEG else -ARM_SWING_DEG) * progress
+        canvas.save()
+        canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
+        canvas.rotate(rot, px, py)
+        canvas.drawBitmap(bmp, null, g.armRect, null)
+        canvas.restore()
+        if (progress >= 0.7f) {
+            val alpha = ((progress - 0.7f) / 0.3f * 255f).roundToInt().coerceIn(0, 255)
+            val toBmp = armBitmap(context, g, !fromOn, recordColor, light, accent)
+            val paint = Paint().apply { this.alpha = alpha }
+            canvas.save()
+            canvas.clipRect(g.sleeveRect.right, 0f, g.width.toFloat(), g.height.toFloat())
+            canvas.drawBitmap(toBmp, null, g.armRect, paint)
+            canvas.restore()
+        }
     }
 
     /** No-artwork placeholder: flat shape tile + note mark, centred. */
