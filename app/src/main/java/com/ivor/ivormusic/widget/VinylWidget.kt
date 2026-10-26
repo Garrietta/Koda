@@ -127,12 +127,15 @@ class VinylWidgetReceiver : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        // Push a guaranteed-inflatable shell FIRST, synchronously, before
-        // any rendering work: if the full render below throws for any
-        // reason (bad snapshot, bad artwork, a hostile device state), the
-        // widget is still ADDED — empty but tappable — instead of One UI
-        // showing "Couldn't add widget." The full render replaces the
-        // shell milliseconds later, so a healthy add never shows it.
+        // Push a placeholder shell FIRST, synchronously, before any
+        // rendering work: if the full render below throws for any reason
+        // (bad snapshot, bad artwork, a hostile device state), the widget
+        // is still ADDED — showing the placeholder widget, not an empty
+        // cell — instead of One UI showing "Couldn't add widget." The
+        // shell is never transparent: it bakes the empty-state widget
+        // (placeholder tile, parked arm, stored colours) with no Coil and
+        // no network, so a slow full render reads as a widget loading,
+        // not as no widget. The full render replaces it when ready.
         for (id in appWidgetIds) {
             runCatching {
                 appWidgetManager.updateAppWidget(id, VinylClassic.staticViews(context, id))
@@ -454,8 +457,12 @@ internal object VinylClassic {
         // Seeding must never take the update down with it: a failed seed
         // still renders (empty state, placeholder tile) instead of pushing
         // nothing, which is what One UI reports as "Couldn't add widget."
+        // Timed: a fresh add that "lands eventually" is a latency story,
+        // and the next device report needs numbers, not guesses.
+        val seedStart = SystemClock.uptimeMillis()
         runCatching { PlayerWidgetHost.ensureSeeded(context) }
             .onFailure { KLog.w("VinylWidget", "Seed failed, rendering empty: ${it.message}") }
+        val seedMs = SystemClock.uptimeMillis() - seedStart
         val ui = PlayerWidgetHost.state.value
         val ids = runCatching {
             AppWidgetManager.getInstance(context).getAppWidgetIds(
@@ -480,6 +487,7 @@ internal object VinylClassic {
         // The full render carries the arm's CURRENT position, never the
         // target pose: the tween below swings it from here, so a render
         // mid-transition cannot teleport it.
+        val renderStart = SystemClock.uptimeMillis()
         val rendered = try {
             render(context, ui)
         } catch (e: Exception) {
@@ -489,6 +497,12 @@ internal object VinylClassic {
             }
             syncSpinTicker(context, ui.snapshot)
             return
+        }
+        val bakeMs = SystemClock.uptimeMillis() - renderStart
+        if (seedMs + bakeMs > 1000L) {
+            KLog.w("VinylWidget", "Slow full render: seed ${seedMs}ms, bake ${bakeMs}ms")
+        } else {
+            KLog.d("VinylWidget", "Full render: seed ${seedMs}ms, bake ${bakeMs}ms")
         }
         // Capture the angle AFTER baking, not before: baking takes
         // ~100ms+, and the old code captured it first, so the pushed full
@@ -531,15 +545,23 @@ internal object VinylClassic {
     }
 
     /**
-     * Minimal shell: layout + taps only — no bitmaps, no tint, no content
-     * descriptions. Every id exists in both variants and every view class
-     * is RemoteViews-legal, so this cannot fail to inflate. It is what an
-     * add falls back to, and what onUpdate pushes synchronously before
-     * the full render, so a failed enrichment can never fail the add.
+     * Placeholder shell: the empty-state widget baked synchronously —
+     * placeholder tile sleeve, parked arm, disc, label, spindle, both
+     * buttons — with NO Coil, NO network, and NO reflection actions, so
+     * it can neither block on artwork nor fail a host apply. The old
+     * shell set layout + taps only, and the layout carries no drawable
+     * defaults anywhere, so until the full render landed the cell was
+     * fully transparent and read as "no widget at all": a fresh add
+     * after a delete (cold process, Coil artwork load, bitmap baking)
+     * can leave that gap open for seconds. Stored colours (disc, label,
+     * button) are used when the store has them, so the shell already
+     * wears the last song's colours; the artwork itself follows with
+     * the full render. Any bake failure falls back to the bare layout +
+     * taps, never to no content.
      *
      * Deliberately NOT variant-aware: the shell always uses the narrow
      * layout (the 4x2 native variant) and never reads AppWidgetManager
-     * options. The shell's only job is to land something inflatable the
+     * options. The shell's only job is to land something visible the
      * instant the add happens, and an options read on that path is the
      * one system call that can fail on an OEM-modified bundle and take
      * the add down with it. The async full render picks the correct
@@ -551,11 +573,88 @@ internal object VinylClassic {
             context.packageName,
             R.layout.widget_vinyl_narrow,
         )
+        runCatching { bakeShellBitmaps(context, views) }
+            .onFailure { KLog.w("VinylWidget", "Shell bake failed, bare shell: ${it.message}") }
         views.setOnClickPendingIntent(R.id.vinyl_tap_sleeve, openAppIntent(context))
         views.setOnClickPendingIntent(R.id.vinyl_tap_record, toggleIntent(context))
         views.setOnClickPendingIntent(R.id.vinyl_btn_play, toggleIntent(context))
         views.setOnClickPendingIntent(R.id.vinyl_btn_next, nextIntent(context))
         return views
+    }
+
+    /**
+     * Empty-state bitmaps for the shell. No artwork load, so nothing here
+     * can wait on Coil or the network; the only reads are theme and
+     * store SharedPreferences, both synchronous. The spin bar is shown
+     * (S+) at the current angle but deliberately NOT tinted: the tint is
+     * the shell's only reflection action, and the minimal tier exists
+     * precisely because a host can reject a whole apply over one
+     * reflection action. The parked label covers pre-S.
+     */
+    private fun bakeShellBitmaps(context: Context, views: RemoteViews) {
+        val prefs = ThemePreferences(context)
+        val dark = KodaWidgetTheme.isDark(context)
+        val scheme = kodaColorScheme(
+            context,
+            dark,
+            prefs.colorPalette.value,
+            prefs.amoledTheme.value,
+            prefs.paletteStyle.value,
+        )
+        val surface = scheme.surface.toArgb()
+        val onSurface = scheme.onSurface.toArgb()
+        val recordColor = if (dark) scheme.background.toArgb() else onSurface
+        val light = if (dark) onSurface else surface
+        val stored = runCatching { PlayerWidgetStore.read(context) }.getOrNull()
+        val buttonColor = KodaWidgetTheme.vinylButtonArgb(context, stored?.artworkColor)
+        val labelColor = stored?.artworkLabelColor ?: scheme.primaryContainer.toArgb()
+        views.setImageViewBitmap(
+            R.id.vinyl_disc_art,
+            discBitmap(context, stored?.artworkColor, recordColor, light),
+        )
+        val topInputs = TopInputs(
+            artwork = null,
+            recordColor = recordColor,
+            light = light,
+            accent = stored?.artworkColor ?: scheme.primary.toArgb(),
+            secondaryContainer = scheme.secondaryContainer.toArgb(),
+            onSecondaryContainer = scheme.onSecondaryContainer.toArgb(),
+        )
+        views.setImageViewBitmap(
+            R.id.vinyl_top_art,
+            topBitmapWithArm(context, topInputs, fromOn = false, progress = 0f),
+        )
+        views.setImageViewBitmap(
+            R.id.vinyl_btn_play,
+            buttonBitmap(
+                context,
+                play = true,
+                isPlaying = stored?.isPlaying ?: false,
+                color = buttonColor,
+            ),
+        )
+        views.setImageViewBitmap(
+            R.id.vinyl_btn_next,
+            buttonBitmap(context, play = false, isPlaying = false, color = buttonColor),
+        )
+        views.setImageViewBitmap(
+            R.id.vinyl_label_parked,
+            maskBitmap(context, R.drawable.vinyl_label_marks, labelColor),
+        )
+        views.setImageViewBitmap(
+            R.id.vinyl_spindle,
+            maskBitmap(context, R.drawable.vinyl_spindle, recordColor),
+        )
+        val spinOn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        views.setViewVisibility(
+            R.id.vinyl_label_spin,
+            if (spinOn) View.VISIBLE else View.GONE,
+        )
+        views.setViewVisibility(
+            R.id.vinyl_label_parked,
+            if (spinOn) View.GONE else View.VISIBLE,
+        )
+        views.setProgressBar(R.id.vinyl_label_spin, SPIN_MAX, angleToProgress(spinAngleDeg), false)
     }
 
     /**

@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,13 +88,23 @@ internal object PlayerWidgetHost {
             val snapshot = stored
                 ?: withController(context) { it.toSnapshot() }?.takeIf { it.hasMedia }
             if (snapshot != null) {
-                val enriched = if (snapshot.artworkColor == null || snapshot.artworkLabelColor == null) {
-                    PlayerWidgets.enrichWithArtworkColor(context, snapshot)
-                } else {
-                    snapshot
+                // The colour enrichment (128px load + Palette) and the
+                // display artwork load (384px) are independent Coil
+                // executes; run them together instead of back to back so
+                // a cold-cache seed costs one round trip, not two.
+                val (enriched, artwork) = coroutineScope {
+                    val enrichedDeferred = async {
+                        if (snapshot.artworkColor == null || snapshot.artworkLabelColor == null) {
+                            PlayerWidgets.enrichWithArtworkColor(context, snapshot)
+                        } else {
+                            snapshot
+                        }
+                    }
+                    val artworkDeferred = async { loadArtwork(context, snapshot) }
+                    enrichedDeferred.await() to artworkDeferred.await()
                 }
                 PlayerWidgetStore.write(context, enriched)
-                _state.value = PlayerWidgetUi(enriched, loadArtwork(context, enriched))
+                _state.value = PlayerWidgetUi(enriched, artwork)
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
