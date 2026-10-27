@@ -105,6 +105,41 @@ internal fun sanitizeAiDjMix(mix: AiDjMix): AiDjMix = AiDjMix(
 )
 
 /**
+ * Drop lines that name an artist from elsewhere in the mix. A line is
+ * spoken before — and shown under — its own track, so a line naming a
+ * different mix artist is misattributed by construction (the pre-fix page
+ * generator paired lines with the wrong songs outright; the model can also
+ * still name-drop). The previous track's artist is allowed: a transition
+ * may name where the set just came from. Artists outside the mix are left
+ * alone — the guard only fires on names provably from this mix — and
+ * matching is whole-word, so "Mac" never fires on "Machine".
+ */
+internal fun dropMisattributedLines(tracks: List<AiDjTrack>): List<AiDjTrack> {
+    if (tracks.size < 2) return tracks
+    fun artistParts(artist: String): List<String> =
+        artist.split(',', '&', ';')
+            .flatMap { it.split(" feat. ", " ft. ", " Feat. ", " Ft. ") }
+            .map { it.trim() }
+            .filter { it.length >= 4 }
+    fun mentions(line: String, part: String): Boolean =
+        Regex("""\b${Regex.escape(part)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(line)
+    val mixParts = tracks.map { artistParts(it.song.artist) }
+    return tracks.mapIndexed { i, track ->
+        val line = track.djLine ?: return@mapIndexed track
+        val own = artistParts(track.song.artist)
+        val prev = if (i > 0) artistParts(tracks[i - 1].song.artist) else emptyList()
+        val misattributed = mixParts.withIndex().any { (j, parts) ->
+            j != i && parts.any { part ->
+                mentions(line, part) &&
+                    own.none { mentions(it, part) || it.contains(part, ignoreCase = true) } &&
+                    prev.none { mentions(it, part) || it.contains(part, ignoreCase = true) }
+            }
+        }
+        if (misattributed) track.copy(djLine = null) else track
+    }
+}
+
+/**
  * The AI DJ: crafts a playlist from the user's library via the Google AI
  * (Gemini) API, guided by a custom prompt the user writes in Settings.
  *
@@ -199,6 +234,18 @@ class AiDjRepository(context: Context) {
     fun cachedMixTime(): Long = prefs.getLong(KEY_CACHED_MIX_TIME, 0L)
 
     private fun loadCachedMix(): AiDjMix? {
+        // One-time scrub: mixes cached by the pre-fix page generator paired
+        // lines with the wrong songs (numbered list shuffled, lookup pool
+        // not), and the shuffle is not stored — so a cached line cannot be
+        // re-paired to its intended song. Strip the lines, keep the songs
+        // and title; the next generation writes correct lines. The flag is
+        // set even when there is no cache, so a mix cached after the fix
+        // is never scrubbed. The cached time is left untouched so the 24h
+        // auto-refresh clock is not reset.
+        val scrubNeeded = !prefs.getBoolean(KEY_CACHED_MIX_LINES_SCRUBBED, false)
+        if (scrubNeeded) {
+            prefs.edit().putBoolean(KEY_CACHED_MIX_LINES_SCRUBBED, true).apply()
+        }
         return try {
             val title = prefs.getString(KEY_CACHED_MIX_TITLE, null) ?: return null
             val json = prefs.getString(KEY_CACHED_MIX_TRACKS, null) ?: return null
@@ -206,7 +253,25 @@ class AiDjRepository(context: Context) {
                 kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
                 json,
             )
-            if (tracks.isEmpty()) null else sanitizeAiDjMix(AiDjMix(title, tracks))
+            if (tracks.isEmpty()) {
+                null
+            } else {
+                val mix = sanitizeAiDjMix(AiDjMix(title, tracks))
+                if (scrubNeeded) {
+                    val scrubbed = mix.copy(tracks = mix.tracks.map { it.copy(djLine = null) })
+                    try {
+                        val scrubJson = kotlinx.serialization.json.Json.encodeToString(
+                            kotlinx.serialization.builtins.ListSerializer(AiDjTrack.serializer()),
+                            scrubbed.tracks,
+                        )
+                        prefs.edit().putString(KEY_CACHED_MIX_TRACKS, scrubJson).apply()
+                    } catch (_: Exception) {
+                    }
+                    scrubbed
+                } else {
+                    mix
+                }
+            }
         } catch (e: Exception) {
             KLog.w(TAG, "Failed to load cached DJ mix", e)
             null
@@ -348,6 +413,9 @@ class AiDjRepository(context: Context) {
             append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY for a genuine ")
             append("shift worth announcing (new genre, big energy change, different era). NO MORE than ")
             append("1 in 4 tracks may have a line. When in doubt, leave it off. ")
+            append("A line is spoken immediately BEFORE the track it is attached to and shown under that track, ")
+            append("so it must describe THAT track — its sound, or the step into it from the previous song — ")
+            append("and must never name an artist other than that track's artist or the previous track's artist. ")
             append("NEVER mention a session number, episode number, or anything like 'session 21761' ")
             append("in the title or in any line — the listener never hears one. ")
             append("Respond with ONLY this JSON object and no other text: ")
@@ -391,7 +459,12 @@ class AiDjRepository(context: Context) {
                         )
                     )
                 }
-                return@withContext parseMix(responseBody, pool)
+                // The numbered list was built from `shuffled`, so the lookup
+                // pool must be `shuffled` too. Passing the unshuffled `pool`
+                // here paired every pick — and its spoken line — with a random
+                // different song from the same pool: the model wrote a line
+                // for shuffled[n-1] and the code attached it to pool[n-1].
+                return@withContext parseMix(responseBody, shuffled)
             }
         } catch (e: Exception) {
             KLog.w(TAG, "AI DJ generation failed", e)
@@ -473,9 +546,13 @@ class AiDjRepository(context: Context) {
             append("Give each discovery as {\"new\": {\"title\": \"...\", \"artist\": \"...\"}}. ")
             append("Interleave discoveries through the set so familiar and new alternate naturally. ")
             append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY when the ")
-            append("next track is a genuine shift worth announcing: a new genre, a big energy change, ")
-            append("a different era, or a discovery that needs context. NO MORE than 1 in 4 tracks may ")
+            append("track it is attached to marks a genuine shift worth announcing: a new genre, a big ")
+            append("energy change, a different era, or a discovery that needs context. NO MORE than 1 in 4 tracks may ")
             append("have a line. When in doubt, leave it off. A line marks a moment, not every song. ")
+            append("A line is spoken immediately BEFORE the track it is attached to and shown under that track, ")
+            append("so it must describe THAT track — never the following track — and must never name an artist ")
+            append("other than that track's artist or the previous track's artist. A discovery's line may introduce ")
+            append("that discovery itself. ")
             append("NEVER mention a session number, episode number, or anything like 'session 21761' ")
             append("in the title or in any line — the listener never hears one. ")
             append("Respond with ONLY this JSON object and no other text: ")
@@ -631,7 +708,7 @@ class AiDjRepository(context: Context) {
                     if (t.djLine != null && i !in keepPos) t.copy(djLine = null) else t
                 }
             } else tracks
-            Result.success(AiDjMix(title = title, tracks = capped))
+            Result.success(AiDjMix(title = title, tracks = dropMisattributedLines(capped)))
         }
     }
 
@@ -775,7 +852,7 @@ class AiDjRepository(context: Context) {
             if (tracks.isEmpty()) {
                 Result.failure(IllegalStateException("The DJ came back with no playable picks"))
             } else {
-                Result.success(AiDjMix(title = title, tracks = tracks))
+                Result.success(AiDjMix(title = title, tracks = dropMisattributedLines(tracks)))
             }
         } catch (e: Exception) {
             KLog.w(TAG, "Failed to parse AI DJ response", e)
@@ -798,6 +875,7 @@ class AiDjRepository(context: Context) {
         private const val KEY_CACHED_MIX_TITLE = "cached_mix_title"
         private const val KEY_CACHED_MIX_TRACKS = "cached_mix_tracks"
         private const val KEY_CACHED_MIX_TIME = "cached_mix_time"
+        private const val KEY_CACHED_MIX_LINES_SCRUBBED = "cached_mix_lines_scrubbed"
 
         private const val GENERATE_URL_BASE =
             "https://generativelanguage.googleapis.com/v1beta/models"

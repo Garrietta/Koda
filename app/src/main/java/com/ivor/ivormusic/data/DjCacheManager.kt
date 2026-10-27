@@ -124,8 +124,9 @@ class DjCacheManager(context: Context) {
             for ((index, track) in mix.tracks.withIndex()) {
                 if (done >= count) break
                 val line = track.djLine?.let(::stripSessionNumberFromLine) ?: continue
-                val wavFile = File(voiceDir, "intro_${mixKey}_$index.wav")
-                val mp3File = File(voiceDir, "intro_${mixKey}_$index.mp3")
+                val lineKey = line.hashCode().toString(36)
+                val wavFile = File(voiceDir, "intro_${mixKey}_${index}_$lineKey.wav")
+                val mp3File = File(voiceDir, "intro_${mixKey}_${index}_$lineKey.mp3")
                 if ((wavFile.exists() && wavFile.length() > 0) ||
                     (mp3File.exists() && mp3File.length() > 0)
                 ) {
@@ -158,8 +159,9 @@ class DjCacheManager(context: Context) {
                 for (index in startIndex until mix.tracks.size) {
                     val track = mix.tracks[index]
                     val line = track.djLine?.let(::stripSessionNumberFromLine) ?: continue
-                    val wavFile = File(voiceDir, "intro_${mixKey}_$index.wav")
-                    val mp3File = File(voiceDir, "intro_${mixKey}_$index.mp3")
+                    val lineKey = line.hashCode().toString(36)
+                    val wavFile = File(voiceDir, "intro_${mixKey}_${index}_$lineKey.wav")
+                    val mp3File = File(voiceDir, "intro_${mixKey}_${index}_$lineKey.mp3")
                     if ((wavFile.exists() && wavFile.length() > 0) ||
                         (mp3File.exists() && mp3File.length() > 0)
                     ) {

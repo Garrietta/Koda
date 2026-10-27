@@ -68,6 +68,7 @@ import com.ivor.ivormusic.data.AiDjMix
 import com.ivor.ivormusic.data.AiDjRepository
 import com.ivor.ivormusic.data.DjVoiceRepository
 import com.ivor.ivormusic.data.Song
+import com.ivor.ivormusic.data.SongSource
 import com.ivor.ivormusic.ui.home.HomeViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -106,11 +107,36 @@ fun AiDjScreen(
     val hasKey by repository.hasApiKey.collectAsState()
     val djVoiceEnabled by repository.djVoiceEnabled.collectAsState()
     val likedSongs by viewModel.likedSongs.collectAsState()
-    val downloadedSongs by viewModel.downloadedSongs.collectAsState()
+    val playHistory by viewModel.playHistory.collectAsState()
 
-    // The DJ pool: what the user owns and loves, deduplicated.
-    val library = remember(likedSongs, downloadedSongs) {
-        (likedSongs + downloadedSongs).distinctBy { it.id }
+    // Recent plays: last 30, newest first, podcasts excluded — the familiar
+    // pool for the instant mix, same construction as MusicService's auto-DJ.
+    // The page used to generate from liked + downloaded songs only, which
+    // has no discovery mechanism at all — every page mix came out 100%
+    // liked. The instant mix is 60% familiar (recent + liked) and 40%
+    // YouTube-search-resolved discoveries, interleaved.
+    val recent = remember(playHistory) {
+        val seen = HashSet<String>()
+        val out = mutableListOf<Song>()
+        for (entry in playHistory) {
+            if (entry.source == SongSource.PODCAST) continue
+            if (!seen.add(entry.songId)) continue
+            out += Song.fromYouTube(
+                videoId = entry.songId,
+                title = entry.title,
+                artist = entry.artist,
+                album = entry.album,
+                duration = entry.duration,
+                thumbnailUrl = entry.thumbnailUrl,
+            )
+            if (out.size >= 30) break
+        }
+        out
+    }
+
+    // The DJ pool shown in the hero ("N songs in the crates").
+    val pool = remember(recent, likedSongs) {
+        (recent + likedSongs).distinctBy { it.id }
     }
 
     var generating by remember { mutableStateOf(false) }
@@ -125,10 +151,10 @@ fun AiDjScreen(
     // Daily auto-refresh: if the cached mix is older than 24h, quietly build
     // a fresh one in the background. The cached mix stays visible meanwhile.
     val autoRefresh by repository.autoRefresh.collectAsState()
-    LaunchedEffect(autoRefresh, library) {
+    LaunchedEffect(autoRefresh, recent, likedSongs) {
         if (autoRefresh && hasKey && repository.isCacheStale() && !generating) {
             generating = true
-            repository.generateMix(library).fold(
+            repository.generateInstantMix(recent, likedSongs).fold(
                 onSuccess = {
                     repository.cacheMix(it)
                     mix = it
@@ -149,7 +175,7 @@ fun AiDjScreen(
         error = null
         mix = null
         scope.launch {
-            repository.generateMix(library).fold(
+            repository.generateInstantMix(recent, likedSongs).fold(
                 onSuccess = {
                     repository.cacheMix(it)
                     mix = it
@@ -334,7 +360,7 @@ fun AiDjScreen(
             else -> {
                 val currentMix = mix
                 val currentError = error
-                val trackCount = currentMix?.tracks?.size ?: library.size
+                val trackCount = currentMix?.tracks?.size ?: pool.size
                 // Read here, in the composable body: the LazyColumn's DSL
                 // scope below is not a @Composable context, so a
                 // CompositionLocal read inside it does not compile.
@@ -415,7 +441,7 @@ fun AiDjScreen(
                                 ) {
                                     FilledTonalButton(
                                         onClick = ::generate,
-                                        enabled = library.isNotEmpty(),
+                                        enabled = pool.isNotEmpty(),
                                         modifier = Modifier
                                             .weight(1f)
                                             .heightIn(min = 48.dp),

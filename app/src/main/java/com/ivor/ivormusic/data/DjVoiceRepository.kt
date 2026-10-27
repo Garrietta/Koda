@@ -146,8 +146,13 @@ class DjVoiceRepository(context: Context) {
             // here too, so it is never spoken or shown as an intro title.
             val line = track.djLine?.let(::stripSessionNumberFromLine)
             if (line != null) {
-                val wavFile = java.io.File(voiceDir, "intro_${mixKey}_$index.wav")
-                val mp3File = java.io.File(voiceDir, "intro_${mixKey}_$index.mp3")
+                // The line's hash is part of the file name: intro audio was
+                // keyed by (title, size, voice, index) alone, so a regenerated
+                // mix with the same title and size silently reused the old
+                // mix's spoken lines at the same indices.
+                val lineKey = line.hashCode().toString(36)
+                val wavFile = java.io.File(voiceDir, "intro_${mixKey}_${index}_$lineKey.wav")
+                val mp3File = java.io.File(voiceDir, "intro_${mixKey}_${index}_$lineKey.mp3")
                 val file: java.io.File? = when {
                     wavFile.exists() && wavFile.length() > 0 -> wavFile
                     mp3File.exists() && mp3File.length() > 0 -> mp3File
