@@ -469,7 +469,15 @@ fun AiDjScreen(
                     // on the page's rail, never centered on the art.
                     item(key = "dj_header") {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            PlaylistHeroBanner(headerCollapse = headerCollapse) {
+                            PlaylistHeroBanner(
+                                headerCollapse = headerCollapse,
+                                // The hero's own drawn wash ends at this
+                                // ground (its bottom stop), so the foot
+                                // fade follows the art's last row down
+                                // into the exact ground the list stands
+                                // on — one consistent downward motion.
+                                handoffGround = ground,
+                            ) {
                                 AiDjHeroArtwork(modifier = Modifier.fillMaxSize())
                             }
                             PlaylistPageTitle(

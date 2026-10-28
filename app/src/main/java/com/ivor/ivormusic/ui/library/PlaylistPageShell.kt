@@ -50,6 +50,18 @@ internal fun PlaylistHeroBanner(
     headerCollapse: State<Float>,
     onArtClick: (() -> Unit)? = null,
     heroBadge: @Composable BoxScope.() -> Unit = {},
+    /**
+     * The color the foot fade lands on. Defaults to the shared playlist
+     * ground; the AI DJ page passes its own tertiary ground instead, so
+     * the hero hands off to the exact ground its list stands on. Without
+     * this the fade landed on the shared primary-family ground while the
+     * AI page below it is tertiary — a hard horizontal line at the
+     * banner's foot, exactly the seam in the "Parallel Lines Collide"
+     * screenshot. The top fade and the status-bar decision keep the
+     * shared ground: only the foot handoff changes, so normal playlist
+     * pages are untouched.
+     */
+    handoffGround: Color = playlistPageGround(),
     heroContent: @Composable BoxScope.() -> Unit,
 ) {
     val ground = playlistPageGround()
@@ -100,15 +112,17 @@ internal fun PlaylistHeroBanner(
             // because the ground is one flat color: there is exactly one
             // value to match, so a plain SrcOver gradient lands on it
             // precisely, with no blend mode and no offscreen buffer.
+            // [handoffGround] is that color for this page: the shared
+            // ground by default, the AI page's own tertiary ground there.
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to ground.copy(alpha = 0f),
-                            0.58f to ground.copy(alpha = 0f),
-                            0.86f to ground.copy(alpha = 0.85f),
-                            1f to ground
+                            0f to handoffGround.copy(alpha = 0f),
+                            0.58f to handoffGround.copy(alpha = 0f),
+                            0.86f to handoffGround.copy(alpha = 0.85f),
+                            1f to handoffGround
                         )
                     )
             )
