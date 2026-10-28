@@ -544,7 +544,15 @@ class AiDjRepository(context: Context) {
             append("$discoveryCount tracks: NEW discoveries NOT in the lists above — songs they have ")
             append("never heard that match their taste, from popular charts or deep cuts. ")
             append("Give each discovery as {\"new\": {\"title\": \"...\", \"artist\": \"...\"}}. ")
-            append("Interleave discoveries through the set so familiar and new alternate naturally. ")
+            append("Sequence the whole set by flow and vibe continuity: energy arc, ")
+            append("mood, and genre transitions that feel inevitable from one song to ")
+            append("the next. Place each discovery wherever it FITS that flow — at a ")
+            append("natural transition point, opening a new mood, or in a run or ")
+            append("cluster of new sounds when the moment calls for a stretch of the ")
+            append("unfamiliar. Do NOT place discoveries on a fixed cadence: never ")
+            append("alternate mechanically, never one discovery every other track, ")
+            append("never spread them evenly. Runs, clusters, gaps, and lone ")
+            append("discoveries are all fine — the music decides, not a pattern. ")
             append("CRITICAL - SPOKEN LINES: Most tracks get NO line. Add a \"line\" ONLY when the ")
             append("track it is attached to marks a genuine shift worth announcing: a new genre, a big ")
             append("energy change, a different era, or a discovery that needs context. NO MORE than 1 in 4 tracks may ")
@@ -866,6 +874,14 @@ class AiDjRepository(context: Context) {
         if (tracks.isEmpty()) {
             Result.failure(IllegalStateException("The DJ came back with no playable picks"))
         } else {
+            // The counts are the model's contract (60/40 familiar/discovery);
+            // log the split actually delivered so drift is visible in a bug
+            // report instead of discovered by ear weeks later.
+            KLog.i(
+                TAG,
+                "AI DJ instant mix: ${tracks.size} tracks, " +
+                    "${items.count { it.discovery != null }} discovery entries requested"
+            )
             // Safety cap: no more than 1 in 4 tracks carries a spoken line.
             // If the model ignored the prompt constraint, thin the lines out,
             // keeping them spread through the set.
