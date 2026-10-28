@@ -482,6 +482,13 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
             )
 
             _currentQueue.value = session.queue
+            // The badge follows the queue, not a flag left over from an
+            // earlier mix: a restored queue is a DJ mix only if it still
+            // carries its spoken-intro items (djid: ids). A non-DJ restore
+            // after a cleared DJ player must not inherit the chip.
+            _isDjMixPlaying.value = session.queue.any {
+                it.song.id.startsWith(com.ivor.ivormusic.data.StatsRepository.DJ_INTRO_ID_PREFIX)
+            }
             _currentQueueItemId.value = queueItem.id
             _currentSong.value = song
             _progress.value = session.positionMs
@@ -518,6 +525,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
         val queueItem = MusicQueueItem(song = song)
         _currentSong.value = song
         _currentQueue.value = listOf(queueItem)
+        // A lone restored song is never a DJ mix, whatever flag an
+        // earlier session left behind.
+        _isDjMixPlaying.value = false
         _currentQueueItemId.value = queueItem.id
 
         // Prepare the song in the player (but don't auto-play)
@@ -955,9 +965,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     }
 
     fun playQueue(songs: List<Song>, startSong: Song? = null) {
-        _isDjMixPlaying.value = false
         // Any non-DJ queue ends the session: its segments belong to the
-        // mix they extended, not to whatever plays next.
+        // mix they extended, not to whatever plays next. The DJ badge
+        // itself is cleared by the playQueueAtPosition funnel below.
         djSession = null
         playQueueAtPosition(songs, startSong, resumePositionFor(startSong))
     }
@@ -981,10 +991,13 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
         // A fresh DJ play without a session (Home emblem) stays finite;
         // a tab play starts its session right after via startDjSession.
         djSession = null
-        _isDjMixPlaying.value = true
         setShuffleEnabled(false)
         val startSong = songs.getOrNull(startIndex.coerceIn(0, songs.size - 1))
         playQueueAtPosition(songs, startSong, 0L)
+        // After the funnel: playQueueAtPosition clears the flag for every
+        // queue replacement, so a DJ mix re-asserts it only once its own
+        // queue is in place.
+        _isDjMixPlaying.value = true
     }
 
     /**
@@ -1156,6 +1169,16 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
      */
     fun playQueueAtPosition(songs: List<Song>, startSong: Song? = null, startPositionMs: Long = 0L) {
         if (songs.isEmpty() && startSong == null) return
+
+        // THE funnel for queue replacement: playQueue, playQueueShuffled
+        // and the video handover all arrive here, so the DJ badge is
+        // cleared here, not in each caller — a caller that skipped the
+        // clear (shuffle did) left the chip on non-DJ songs. playDjMix
+        // re-asserts the flag after this call returns. Same-queue
+        // rebuilds (skipToQueueItem, pending replay) go through
+        // playQueueItems directly and never touch the flag, so a skip
+        // inside a DJ mix keeps its chip.
+        _isDjMixPlaying.value = false
 
         val startIndex = queueStartIndex(songs, startSong)
 
@@ -2269,6 +2292,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
         // Clear UI state
         _currentSong.value = null
         _currentQueue.value = emptyList()
+        // A cleared player is not a DJ mix playing, whatever was there.
+        _isDjMixPlaying.value = false
+        djSession = null
         _currentQueueItemId.value = null
         _isPlaying.value = false
         _isBuffering.value = false
