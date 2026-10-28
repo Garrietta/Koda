@@ -130,9 +130,74 @@ class DjVoiceRepository(context: Context) {
     /** Public: the voice key used in cached file names (must match buildQueueWithIntros). */
     fun currentVoiceKey(): String = geminiTts.voice.hashCode().toString(36)
 
+    /** Outcome of [warmupMix]: how many intros were already cached, freshly synthesized, or failed. */
+    data class DjWarmupResult(
+        val lines: Int,
+        val alreadyCached: Int,
+        val synthesized: Int,
+        val failed: Int,
+    )
+
+    /**
+     * Pre-run every intro line in [mix] through the same synthesis path
+     * playback uses (Gemini voice, device TTS fallback), caching each file
+     * under exactly the name [buildQueueWithIntros] looks for. Lines that
+     * fail both engines are left absent — playback then skips them instead
+     * of synthesizing inline, so a warmed-up mix always starts instantly.
+     * Reports progress 0..1 across the mix's lines. This is what gates a
+     * freshly generated mix: the mix must not read as complete until this
+     * has run, or the first press of play pays the synthesis delay instead.
+     */
+    suspend fun warmupMix(
+        mix: AiDjMix,
+        onProgress: (Float) -> Unit = {},
+    ): DjWarmupResult = withContext(Dispatchers.IO) {
+        val voiceDir = java.io.File(appContext.cacheDir, "dj_voice").apply { mkdirs() }
+        val voiceKey = currentVoiceKey()
+        val mixKey = (mix.title.hashCode().toString(36) + mix.tracks.size + voiceKey)
+        val lines = mix.tracks.mapIndexedNotNull { index, track ->
+            track.djLine?.let(::stripSessionNumberFromLine)?.let { index to it }
+        }
+        var cached = 0
+        var synthesized = 0
+        var failed = 0
+        lines.forEachIndexed { done, (index, line) ->
+            val lineKey = line.hashCode().toString(36)
+            val wavFile = java.io.File(voiceDir, "intro_${mixKey}_${index}_$lineKey.wav")
+            val mp3File = java.io.File(voiceDir, "intro_${mixKey}_${index}_$lineKey.mp3")
+            when {
+                (wavFile.exists() && wavFile.length() > 0) ||
+                    (mp3File.exists() && mp3File.length() > 0) -> cached++
+                synthesizeNatural(line, wavFile, mp3File) != null -> synthesized++
+                else -> failed++
+            }
+            onProgress((done + 1).toFloat() / lines.size.coerceAtLeast(1))
+        }
+        if (lines.isEmpty()) onProgress(1f)
+        KLog.i(
+            TAG,
+            "AI DJ voice warmup: ${lines.size} lines, $cached already cached, " +
+                "$synthesized synthesized, $failed failed (failed lines play silent, never blocking)"
+        )
+        DjWarmupResult(
+            lines = lines.size,
+            alreadyCached = cached,
+            synthesized = synthesized,
+            failed = failed,
+        )
+    }
+
     suspend fun buildQueueWithIntros(
         mix: AiDjMix,
         onProgress: (Float) -> Unit = {},
+        /**
+         * When false (a mix that already went through [warmupMix]), intros
+         * with no cached file are skipped instead of synthesized inline —
+         * that is what makes the first press of play instant. The default
+         * keeps every other caller (auto-DJ, cache playback) on the old
+         * synthesize-inline behavior.
+         */
+        synthesizeMissing: Boolean = true,
     ): List<Song> = withContext(Dispatchers.IO) {
         val voiceDir = java.io.File(appContext.cacheDir, "dj_voice").apply { mkdirs() }
         // The voice is part of the key: changing voices in Settings must
@@ -156,7 +221,8 @@ class DjVoiceRepository(context: Context) {
                 val file: java.io.File? = when {
                     wavFile.exists() && wavFile.length() > 0 -> wavFile
                     mp3File.exists() && mp3File.length() > 0 -> mp3File
-                    else -> synthesizeNatural(line, wavFile, mp3File)
+                    synthesizeMissing -> synthesizeNatural(line, wavFile, mp3File)
+                    else -> null
                 }
                 if (file != null) {
                     queue += Song(

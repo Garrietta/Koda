@@ -48,6 +48,7 @@
     <string name="aidj_usage_detail">%1$d tokens tracking\nPrompt: %2$d | Output: %3$d</string>
     <string name="aidj_usage_clear">Clear Logs</string>
     <string name="aidj_preparing_voice">The DJ is warming up their voice\u2026</string>
+    <string name="aidj_warming_voice">Warming up the DJ\'s voice so playback starts instantly\u2026</string>
     <string name="aidj_voice_intro_title">AI DJ</string>
     <string name="aidj_home_card_sub">Your mix, introduced track by track. Tap the emblem for a fresh one.</string>
     <string name="aidj_home_card_loading">The DJ is building your mix\u2026</string>

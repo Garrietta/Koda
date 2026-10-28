@@ -92,6 +92,14 @@ fun AiDjScreen(
     onBack: () -> Unit,
     onPlayQueue: (List<Song>, Song?) -> Unit,
     onPlayDjMix: (List<Song>) -> Unit,
+    /**
+     * Start infinite extension for the mix just handed to [onPlayDjMix]:
+     * title, seed songs, pools, and the voice toggle. Defaults to a no-op
+     * so existing hosts stay finite; the DJ tab host wires it to the
+     * player. Called after onPlayDjMix in every branch, so the session
+     * always follows a real play.
+     */
+    onDjSessionStarted: (String, List<Song>, List<Song>, List<Song>, Boolean) -> Unit = {},
     onShuffleQueue: (List<Song>) -> Unit = {},
     onOpenSettings: () -> Unit,
     contentPadding: PaddingValues,
@@ -142,22 +150,50 @@ fun AiDjScreen(
 
     var generating by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Voice warmup gating: a freshly generated mix is not complete until
+    // its DJ intros are pre-run and cached. While warming up, the page
+    // shows a warmup progress state instead of the mix.
+    var warmingUp by remember { mutableStateOf(false) }
+    var warmupProgress by remember { mutableFloatStateOf(0f) }
+    // Key of the mix whose voice is warmed (title + size + track ids).
+    // playMix skips inline synthesis only for exactly this mix.
+    var warmedMixKey by remember { mutableStateOf<String?>(null) }
+    fun djMixKey(m: AiDjMix) =
+        "${m.title}|${m.tracks.size}|${m.tracks.map { it.song.id }.hashCode()}"
     // Open on the cached mix when one exists; only the Generate/Regenerate
     // buttons (or the Home emblem) build a fresh one.
     val cachedMix by repository.cachedMix.collectAsState()
     var mix by remember { mutableStateOf<AiDjMix?>(null) }
     LaunchedEffect(cachedMix) {
-        if (mix == null) mix = cachedMix
+        // Never steal a mix that generate() is still warming up: the gate
+        // is the whole point, and cacheMix lands before warmup finishes.
+        if (mix == null && !generating && !warmingUp) {
+            mix = cachedMix
+            // Silent background warmup for the cached mix, so the first
+            // play after opening the tab is instant. No UI state: the mix
+            // is already shown; this only fills the voice cache.
+            if (cachedMix != null && djVoiceEnabled &&
+                warmedMixKey != djMixKey(cachedMix)
+            ) {
+                voiceRepository.warmupMix(cachedMix) {}
+                warmedMixKey = djMixKey(cachedMix)
+            }
+        }
     }
     // Daily auto-refresh: if the cached mix is older than 24h, quietly build
     // a fresh one in the background. The cached mix stays visible meanwhile.
     val autoRefresh by repository.autoRefresh.collectAsState()
     LaunchedEffect(autoRefresh, recent, likedSongs) {
-        if (autoRefresh && hasKey && repository.isCacheStale() && !generating) {
+        if (autoRefresh && hasKey && repository.isCacheStale() && !generating && !warmingUp) {
             generating = true
             repository.generateInstantMix(recent, likedSongs).fold(
                 onSuccess = {
                     repository.cacheMix(it)
+                    // Warm the new mix's voice BEFORE it replaces the old
+                    // one, so the first play of the refreshed mix is
+                    // instant too. The stale mix stays visible meanwhile.
+                    voiceRepository.warmupMix(it) {}
+                    warmedMixKey = djMixKey(it)
                     mix = it
                 },
                 onFailure = { /* keep the stale cache; user can retry */ },
@@ -171,7 +207,7 @@ fun AiDjScreen(
     val scope = rememberCoroutineScope()
 
     fun generate() {
-        if (generating) return
+        if (generating || warmingUp) return
         generating = true
         error = null
         mix = null
@@ -179,6 +215,19 @@ fun AiDjScreen(
             repository.generateInstantMix(recent, likedSongs).fold(
                 onSuccess = {
                     repository.cacheMix(it)
+                    // Gate completion on the voice warmup: the mix must
+                    // not read as complete until every intro is pre-run
+                    // and cached, or the first press of play pays the
+                    // synthesis delay instead. generating ends here so
+                    // the page shows the warmup state, not the spinner.
+                    generating = false
+                    warmingUp = true
+                    warmupProgress = 0f
+                    voiceRepository.warmupMix(it) { progress ->
+                        warmupProgress = progress
+                    }
+                    warmedMixKey = djMixKey(it)
+                    warmingUp = false
                     mix = it
                 },
                 onFailure = { error = it.message ?: "Generation failed" },
@@ -195,6 +244,23 @@ fun AiDjScreen(
         if (preparingVoice) return
         if (!djVoiceEnabled) {
             onPlayDjMix(mix.tracks.map { it.song })
+            onDjSessionStarted(
+                mix.title, mix.tracks.map { it.song }, recent, likedSongs, djVoiceEnabled
+            )
+            return
+        }
+        if (warmedMixKey == djMixKey(mix)) {
+            // Already warmed: the queue builds from cache only, so there
+            // is no voice delay to show progress for. Missing intros (a
+            // line that failed both TTS engines) are simply skipped.
+            scope.launch {
+                onPlayDjMix(
+                    voiceRepository.buildQueueWithIntros(mix, synthesizeMissing = false)
+                )
+                onDjSessionStarted(
+                    mix.title, mix.tracks.map { it.song }, recent, likedSongs, djVoiceEnabled
+                )
+            }
             return
         }
         preparingVoice = true
@@ -206,6 +272,9 @@ fun AiDjScreen(
                     voiceProgress = progress
                 }
                 onPlayDjMix(queue)
+                onDjSessionStarted(
+                    mix.title, mix.tracks.map { it.song }, recent, likedSongs, djVoiceEnabled
+                )
             } finally {
                 preparingVoice = false
             }
@@ -350,6 +419,15 @@ fun AiDjScreen(
                 AiDjBusy(
                     message = stringResource(R.string.aidj_generating),
                     progress = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                )
+            }
+            warmingUp -> {
+                AiDjBusy(
+                    message = stringResource(R.string.aidj_warming_voice),
+                    progress = warmupProgress,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
