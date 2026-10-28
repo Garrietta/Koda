@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -145,6 +146,8 @@ internal fun PlaylistHeroBanner(
 internal fun PlaylistPageTitle(
     title: String,
     facts: String,
+    /** Ink override; default is the shared playlist ink. The AI DJ page passes its own. */
+    ink: Color = playlistOnGround(),
 ) {
     Column(
         modifier = Modifier
@@ -160,7 +163,7 @@ internal fun PlaylistPageTitle(
                 letterSpacing = (-0.02).em,
                 lineHeight = 1.08.em
             ),
-            color = playlistOnGround(),
+            color = ink,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             // Big for "Focus", smaller rather than cut for
@@ -175,7 +178,7 @@ internal fun PlaylistPageTitle(
             text = facts,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium,
-            color = playlistOnGround().copy(alpha = 0.8f),
+            color = ink.copy(alpha = 0.8f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp)

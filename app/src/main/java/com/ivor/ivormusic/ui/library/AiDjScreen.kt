@@ -114,7 +114,8 @@ fun AiDjScreen(
     // The page used to generate from liked + downloaded songs only, which
     // has no discovery mechanism at all — every page mix came out 100%
     // liked. The instant mix is 60% familiar (recent + liked) and 40%
-    // YouTube-search-resolved discoveries, interleaved.
+    // YouTube-search-resolved discoveries, placed by flow rather than a
+    // fixed cadence (see generateInstantMix).
     val recent = remember(playHistory) {
         val seen = HashSet<String>()
         val out = mutableListOf<Song>()
@@ -253,10 +254,16 @@ fun AiDjScreen(
     val barAlpha = remember {
         derivedStateOf { (headerCollapse.value / 0.55f).coerceIn(0f, 1f) }
     }
-    // The playlist page's ground, shared by construction: the hero
-    // dissolves into it and the track list stands on it, exactly like a
-    // normal playlist page. Never a DJ-only color again.
-    val ground = playlistPageGround()
+    // The AI DJ page's OWN ground, not the shared playlist ground: the
+    // shared ground is primary-family, and so is the now-playing pill that
+    // floats over this page — scrolled far down, the pill's edge vanished
+    // into the page behind it. The DJ ground is the tertiary family
+    // instead (see aiDjPageGround): still dynamic, still flat the whole
+    // way down, but always a different hue family from the pill, so bar
+    // and background stay distinguishable however the theme moves. The
+    // hero dissolves into it and the track list stands on it, exactly as
+    // the shared ground works everywhere else — only the family differs.
+    val ground = aiDjPageGround()
 
     Scaffold(
         topBar = {
@@ -386,6 +393,7 @@ fun AiDjScreen(
                             PlaylistPageTitle(
                                 title = currentMix?.title ?: stringResource(R.string.aidj_title),
                                 facts = stringResource(R.string.aidj_pool_size, trackCount),
+                                ink = aiDjOnGround(),
                             )
                             // DJ extras, kept in their places: the voice
                             // toggle above the playback rows, New mix under
@@ -399,7 +407,7 @@ fun AiDjScreen(
                                     Text(
                                         stringResource(R.string.aidj_intro),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = playlistOnGround().copy(alpha = 0.8f),
+                                        color = aiDjOnGround().copy(alpha = 0.8f),
                                         modifier = Modifier.padding(top = 14.dp, bottom = 12.dp),
                                     )
                                 }
@@ -411,7 +419,7 @@ fun AiDjScreen(
                                     Text(
                                         stringResource(R.string.aidj_dj_voice_title),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = playlistOnGround(),
+                                        color = aiDjOnGround(),
                                     )
                                     Switch(
                                         checked = djVoiceEnabled,
@@ -487,6 +495,7 @@ fun AiDjScreen(
                                 manageEnabled = false,
                                 canEdit = false,
                                 onToggleEdit = {},
+                                ink = aiDjOnGround(),
                             )
                         }
                         itemsIndexed(
@@ -529,6 +538,8 @@ fun AiDjScreen(
                                     extraLine = track.djLine,
                                     topCorner = if (isFirstTrack) 16.dp else 4.dp,
                                     bottomCorner = if (isLastTrack) 16.dp else 4.dp,
+                                    rowSurface = aiDjRaisedSurface(),
+                                    rowInk = aiDjOnGround(),
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -542,16 +553,17 @@ fun AiDjScreen(
 
 /**
  * Abstract code-drawn header artwork for the AI DJ page: the page's own
- * cover, in the playlist page's primary family so it dissolves into the
- * playlist ground exactly like a photo cover does. Soft circles, ring arcs
- * and sparkle motifs, in the spirit of the playlist headers. Drawn in code
- * so it follows the theme; no bundled bitmaps. Positions are fixed
- * fractions, never random per recomposition.
+ * cover, in the playlist page's primary family, dissolving into the AI DJ
+ * page's own tertiary ground (not the shared playlist ground) so the art
+ * hands off seamlessly to the background the list stands on. Soft circles,
+ * ring arcs and sparkle motifs, in the spirit of the playlist headers.
+ * Drawn in code so it follows the theme; no bundled bitmaps. Positions are
+ * fixed fractions, never random per recomposition.
  */
 @Composable
 private fun AiDjHeroArtwork(modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val ground = playlistPageGround()
+    val ground = aiDjPageGround()
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height

@@ -253,7 +253,9 @@ internal fun TrackSectionHeader(
     countLabel: String,
     manageEnabled: Boolean,
     canEdit: Boolean,
-    onToggleEdit: () -> Unit
+    onToggleEdit: () -> Unit,
+    /** Ink override; default is the shared playlist ink. The AI DJ page passes its own. */
+    ink: Color = playlistOnGround(),
 ) {
     Row(
         modifier = Modifier
@@ -267,12 +269,12 @@ internal fun TrackSectionHeader(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 // Stands on the page's ground, not on a theme surface.
-                color = playlistOnGround()
+                color = ink
             )
             Text(
                 text = countLabel,
                 style = MaterialTheme.typography.bodySmall,
-                color = playlistOnGround().copy(alpha = 0.78f)
+                color = ink.copy(alpha = 0.78f)
             )
         }
         if (canEdit) {
@@ -396,7 +398,14 @@ internal fun PlaylistTrackRow(
      * card. A dragged row still lifts into a fully round card of its own.
      */
     topCorner: Dp = 20.dp,
-    bottomCorner: Dp = 20.dp
+    bottomCorner: Dp = 20.dp,
+    /**
+     * The page's own row surface and ink. Defaults are the shared playlist
+     * helpers, so every existing caller is unchanged; the AI DJ page passes
+     * its tertiary-family pair so its rows stand on its own ground.
+     */
+    rowSurface: Color = playlistRaisedSurface(),
+    rowInk: Color = playlistOnGround(),
 ) {
     val liftSpec = spring<Dp>(
         dampingRatio = Spring.DampingRatioNoBouncy,
@@ -417,13 +426,13 @@ internal fun PlaylistTrackRow(
         targetValue = when {
             isDragging -> MaterialTheme.colorScheme.secondaryContainer
             highlighted -> MaterialTheme.colorScheme.primary
-            else -> playlistRaisedSurface()
+            else -> rowSurface
         },
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
         label = "trackContainer"
     )
     val contentColor by animateColorAsState(
-        targetValue = if (highlighted) MaterialTheme.colorScheme.onPrimary else playlistOnGround(),
+        targetValue = if (highlighted) MaterialTheme.colorScheme.onPrimary else rowInk,
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
         label = "trackContent"
     )

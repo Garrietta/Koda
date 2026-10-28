@@ -137,3 +137,55 @@ internal fun formatTotalDuration(totalMs: Long): String? {
     val minutes = totalMinutes % 60
     return if (hours > 0) "$hours hr $minutes min" else "$minutes min"
 }
+
+/**
+ * The AI DJ page's ground: the SAME construction as [playlistPageGround],
+ * but from the dynamic scheme's tertiary family instead of the primary one.
+ *
+ * Why a different family, and why tertiary: the now-playing pill floats
+ * over this page, and the pill is a primaryContainer surface by default
+ * (see ExpandablePlayer: "the pill is the accent container"). A page ground
+ * in the primary family therefore converges with the pill whenever the
+ * dynamic theme moves, and scrolled far down the list the pill's edge
+ * vanishes into the page behind it — the bar and the background bleed into
+ * one another. The tertiary family is the dynamic palette's other hue
+ * family (the secondary family keeps the primary's hue at lower chroma, so
+ * it does not separate reliably), so a tertiary ground stays visibly
+ * distinct from the primary pill across every cover and every theme, while
+ * still being a dynamic color rather than a flat neutral. The light-theme
+ * deepening rule is the same as the primary ground's, for the same reason:
+ * a pale tertiaryContainer needs deepening toward tertiary to read at all,
+ * while a dark tertiaryContainer is already a strong color. Ink is
+ * onTertiaryContainer by the same M3 construction, so contrast is
+ * guaranteed rather than tuned per cover. Flat, like the primary ground:
+ * one color the whole way down, so the page reads as one consistent
+ * background however far it scrolls.
+ *
+ * AI DJ page ONLY. Every other playlist page keeps [playlistPageGround].
+ */
+@Composable
+internal fun aiDjPageGround(): Color {
+    val scheme = MaterialTheme.colorScheme
+    if (scheme.background.luminance() < 0.5f) return scheme.tertiaryContainer
+    return lerp(scheme.tertiaryContainer, scheme.tertiary, PLAYLIST_GROUND_DEPTH)
+}
+
+/** Ink for text standing on [aiDjPageGround] or [aiDjRaisedSurface]. */
+@Composable
+internal fun aiDjOnGround(): Color = MaterialTheme.colorScheme.onTertiaryContainer
+
+/**
+ * A card standing on [aiDjPageGround]: the [playlistRaisedSurface] rule in
+ * the tertiary family — lift toward the light, with the same asymmetric
+ * fractions, so a row never reads as a hole punched in the ground.
+ */
+@Composable
+internal fun aiDjRaisedSurface(): Color {
+    val scheme = MaterialTheme.colorScheme
+    val ground = aiDjPageGround()
+    return if (scheme.background.luminance() < 0.5f) {
+        lerp(ground, scheme.tertiary, 0.16f)
+    } else {
+        lerp(ground, scheme.tertiaryContainer, 0.45f)
+    }
+}
