@@ -119,6 +119,49 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     private val _isDjMixPlaying = MutableStateFlow(false)
     val isDjMixPlaying: StateFlow<Boolean> = _isDjMixPlaying.asStateFlow()
 
+    private val aiDjRepository = com.ivor.ivormusic.data.AiDjRepository(context)
+    private val djVoiceRepository = com.ivor.ivormusic.data.DjVoiceRepository(context)
+
+    /**
+     * The infinite DJ session (Spotify-AI-DJ shape): a DJ mix that never
+     * ends as a fixed list. While a session is active, the queue extends
+     * itself — when few songs remain, the next segment is generated in the
+     * background, its voice intros are prewarmed, and it is appended
+     * seamlessly via the established appendToQueue path (shuffle stays
+     * off, voice sections stay in order). What the listener skips steers
+     * the next segment: skipped artists are excluded, and heavy skipping
+     * pivots the discovery angle. Letting songs play holds course.
+     *
+     * A session is NOT the cached mix: it is never written to the cache
+     * and never survives leaving the queue. The 24h auto-refresh toggle
+     * still governs only the cached mix shown on the DJ tab when no
+     * session is active; returning to the tab later shows that cached mix
+     * (possibly auto-refreshed), not the session's tail. Starting a new
+     * tab mix starts a fresh session. A DJ play with no session (the Home
+     * emblem, which passes no pools) stays a finite mix, as before.
+     */
+    private var djSession: DjSession? = null
+    private var djSessionExtending = false
+
+    /** Session-scoped routing state; nothing here is persisted. */
+    private class DjSession(
+        val mixTitle: String,
+        val seedSongs: List<Song>,
+        val recent: List<Song>,
+        val liked: List<Song>,
+        val voiceEnabled: Boolean,
+    ) {
+        /** Every song id the session has offered (seed + segments). */
+        val trackIds = LinkedHashSet<String>()
+        /** Artists skipped in this session: excluded from next segments. */
+        val skippedArtists = LinkedHashSet<String>()
+        /** Discovery angle the session is currently holding. */
+        var currentAngle: String? = null
+        var skipsSinceSegment = 0
+        var playedSinceSegment = 0
+        var segmentsAppended = 0
+    }
+
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
 
@@ -628,6 +671,13 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
                         return
                     }
 
+                    // DJ session bookkeeping: the song and position being
+                    // left. Captured before this callback rewrites _progress
+                    // to the incoming song, so a skip is judged on the song
+                    // that actually ended, not on the one starting.
+                    val djPrevSong = _currentSong.value
+                    val djPrevProgress = _progress.value
+
                     // A crossfade swaps the MediaSession onto an incoming
                     // player that is already STATE_READY, so there may be no
                     // later READY callback to refresh these values. Publish
@@ -739,6 +789,14 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
                              KLog.d("PlayerViewModel", "Auto-Queue: $songsLeft songs left, loading more...")
                              loadMoreRecommendations()
                         }
+
+                        // Infinite DJ session: record whether the song just
+                        // left was played or skipped, and top the queue up
+                        // when it runs short. Runs on every transition, so
+                        // a skip from the notification or the player bar
+                        // steers the session exactly like a tap on Next.
+                        recordDjTransition(djPrevSong, djPrevProgress, it)
+                        maybeExtendDjSession()
                     }
                 }
             })
@@ -898,6 +956,9 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
 
     fun playQueue(songs: List<Song>, startSong: Song? = null) {
         _isDjMixPlaying.value = false
+        // Any non-DJ queue ends the session: its segments belong to the
+        // mix they extended, not to whatever plays next.
+        djSession = null
         playQueueAtPosition(songs, startSong, resumePositionFor(startSong))
     }
 
@@ -917,10 +978,159 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
      * @param startIndex Queue position to start from (for resume). Defaults to 0.
      */
     fun playDjMix(songs: List<Song>, startIndex: Int = 0) {
+        // A fresh DJ play without a session (Home emblem) stays finite;
+        // a tab play starts its session right after via startDjSession.
+        djSession = null
         _isDjMixPlaying.value = true
         setShuffleEnabled(false)
         val startSong = songs.getOrNull(startIndex.coerceIn(0, songs.size - 1))
         playQueueAtPosition(songs, startSong, 0L)
+    }
+
+    /**
+     * Judge the song just left: played, or skipped. A song counts as
+     * skipped when playback ended well before its end — less than half
+     * through, and not within the crossfade grace at the tail. Spoken
+     * intros (zero duration) never count either way, and neither do
+     * songs the session never offered (hand-queued songs, repeats of the
+     * same id from a resolution transition).
+     */
+    private fun recordDjTransition(prevSong: Song?, prevProgressMs: Long, newSong: Song?) {
+        val session = djSession ?: return
+        if (prevSong == null || newSong == null || prevSong.id == newSong.id) return
+        if (prevSong.id.startsWith(com.ivor.ivormusic.data.StatsRepository.DJ_INTRO_ID_PREFIX)) return
+        if (prevSong.id !in session.trackIds) return
+        val duration = prevSong.duration
+        val skipped = duration > 0 &&
+            prevProgressMs < duration / 2 &&
+            prevProgressMs < duration - DJ_SESSION_END_GRACE_MS
+        if (skipped) {
+            session.skipsSinceSegment++
+            session.skippedArtists += prevSong.artist
+            KLog.d(
+                "PlayerViewModel",
+                "DJ session: skipped \"${prevSong.title}\" " +
+                    "(${session.skipsSinceSegment} skips since segment)",
+            )
+        } else {
+            session.playedSinceSegment++
+        }
+    }
+
+    /** Top the session's queue up when it runs short. */
+    private fun maybeExtendDjSession() {
+        val session = djSession ?: return
+        if (!_isDjMixPlaying.value) return
+        if (djSessionExtending) return
+        val queue = _currentQueue.value
+        if (queue.isEmpty()) return
+        val remaining = queue.size - currentIndexInQueue() - 1
+        if (remaining > DJ_SESSION_EXTEND_THRESHOLD) return
+        djSessionExtending = true
+        viewModelScope.launch {
+            try {
+                extendDjSession(session)
+            } catch (e: Exception) {
+                // A failed segment must not kill the session: the queue
+                // still has songs, and the next transition retries.
+                KLog.w("PlayerViewModel", "DJ session: segment failed (${e.message})", e)
+            } finally {
+                djSessionExtending = false
+            }
+        }
+    }
+
+    /**
+     * Generate one continuation segment and append it. Skipped artists
+     * are always excluded; heavy skipping (3+ skips, or skips outnumbering
+     * plays since the last segment) additionally pivots the discovery
+     * angle, so repeated skips steer to a different vibe instead of more
+     * of the same. Segment songs are excluded from later segments, so
+     * the session never loops back over what it already played. The
+     * segment's voice intros are prewarmed before appending, so the join
+     * between sets is seamless and announced by the segment's opening
+     * line; with voice off, raw songs are appended instead.
+     */
+    private suspend fun extendDjSession(session: DjSession) {
+        val total = session.skipsSinceSegment + session.playedSinceSegment
+        val pivot = session.skipsSinceSegment >= 3 ||
+            (total > 0 && session.skipsSinceSegment * 2 > total)
+        val angle = if (pivot) {
+            aiDjRepository.randomDiscoveryAngle(session.currentAngle)
+                .also { session.currentAngle = it }
+        } else {
+            session.currentAngle
+        }
+        val segment = aiDjRepository.generateInstantMix(
+            recent = session.recent,
+            liked = session.liked,
+            trackCount = DJ_SESSION_SEGMENT_TRACKS,
+            angleOverride = angle,
+            avoidArtists = session.skippedArtists,
+            excludeSongIds = session.trackIds,
+            segmentContinuation = true,
+        ).getOrNull()
+        if (segment == null) {
+            KLog.w(
+                "PlayerViewModel",
+                "DJ session: segment generation failed, will retry at the next transition",
+            )
+            return
+        }
+        val segmentSongs = if (session.voiceEnabled) {
+            djVoiceRepository.warmupMix(segment) {}
+            djVoiceRepository.buildQueueWithIntros(segment, synthesizeMissing = false)
+        } else {
+            segment.tracks.map { it.song }
+        }
+        if (segmentSongs.isEmpty()) return
+        // The session may have been replaced while this segment generated
+        // (a new mix started); never append one session's songs to
+        // another session's queue.
+        if (djSession !== session) {
+            KLog.d("PlayerViewModel", "DJ session: superseded while generating, discarding segment")
+            return
+        }
+        // Register before appending so transitions into the new songs
+        // count, and so a filtered-out song is still never re-offered.
+        segmentSongs.forEach { session.trackIds += it.id }
+        session.segmentsAppended++
+        session.skipsSinceSegment = 0
+        session.playedSinceSegment = 0
+        appendToQueue(segmentSongs, queuedByUser = false)
+        KLog.d(
+            "PlayerViewModel",
+            "DJ session: appended segment ${session.segmentsAppended} " +
+                "(${segmentSongs.size} items, angle=${angle ?: "daily"})",
+        )
+    }
+
+    /**
+     * Start infinite extension for the mix that just began playing via
+     * [playDjMix]. Called by the DJ tab after handing the queue over, so
+     * the session always follows a real play — never a stale queue.
+     * With no pools there is nothing to generate segments from, so the
+     * mix stays finite instead of failing loudly on every transition.
+     */
+    fun startDjInfiniteSession(
+        mixTitle: String,
+        seedSongs: List<Song>,
+        recent: List<Song>,
+        liked: List<Song>,
+        voiceEnabled: Boolean,
+    ) {
+        if (recent.isEmpty() && liked.isEmpty()) {
+            KLog.d("PlayerViewModel", "DJ session: no pools, staying finite")
+            return
+        }
+        val session = DjSession(mixTitle, seedSongs, recent, liked, voiceEnabled)
+        session.currentAngle = aiDjRepository.dailyDiscoveryAngle()
+        seedSongs.forEach { session.trackIds += it.id }
+        djSession = session
+        KLog.d(
+            "PlayerViewModel",
+            "DJ session started: \"$mixTitle\" (${session.trackIds.size} seed tracks)",
+        )
     }
 
     /**
@@ -2100,5 +2310,14 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
     
     fun setCrossfadeDuration(durationMs: Int) {
         themePreferences.setCrossfadeDuration(durationMs)
+    }
+
+    companion object {
+        /** Extend the DJ session when this many queue items remain. */
+        private const val DJ_SESSION_EXTEND_THRESHOLD = 5
+        /** Tracks per continuation segment (12 familiar / 8 discovery). */
+        private const val DJ_SESSION_SEGMENT_TRACKS = 20
+        /** Tail grace: ending within this of a song's end still counts as played. */
+        private const val DJ_SESSION_END_GRACE_MS = 15_000L
     }
 }

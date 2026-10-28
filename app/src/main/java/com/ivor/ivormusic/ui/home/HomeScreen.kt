@@ -1572,6 +1572,11 @@ fun HomeScreen(
                                     playerViewModel.playDjMix(songs)
                                     showPlayerSheet = true
                                 },
+                                onDjSessionStarted = { title, seed, recent, liked, voice ->
+                                    playerViewModel.startDjInfiniteSession(
+                                        title, seed, recent, liked, voice
+                                    )
+                                },
                                 onShuffleQueue = { songs: List<Song> ->
                                     playerViewModel.playQueueShuffled(songs)
                                     showPlayerSheet = true
@@ -1762,6 +1767,11 @@ fun HomeScreen(
                             onPlayDjMix = { songs ->
                                 playerViewModel.playDjMix(songs)
                                 showPlayerSheet = true
+                            },
+                            onDjSessionStarted = { title, seed, recent, liked, voice ->
+                                playerViewModel.startDjInfiniteSession(
+                                    title, seed, recent, liked, voice
+                                )
                             },
                             onShuffleQueue = { songs ->
                                 playerViewModel.playQueueShuffled(songs)

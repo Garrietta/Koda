@@ -482,17 +482,47 @@ class AiDjRepository(context: Context) {
      * the AI thinks they'll love, resolved via YouTube search. A daily seed
      * keeps each day's mix unique.
      */
+    /** Today's discovery angle (the same computation generateInstantMix uses by default). */
+    fun dailyDiscoveryAngle(): String {
+        val today = java.time.LocalDate.now().toString()
+        val index = today.hashCode().mod(DISCOVERY_ANGLES.size)
+            .let { if (it < 0) it + DISCOVERY_ANGLES.size else it }
+        return DISCOVERY_ANGLES[index]
+    }
+
+    /** A discovery angle different from [except], for skip-pivot routing. */
+    fun randomDiscoveryAngle(except: String? = null): String {
+        val candidates = DISCOVERY_ANGLES.filter { it != except }
+        return (candidates.ifEmpty { DISCOVERY_ANGLES }).random()
+    }
+
     suspend fun generateInstantMix(
         recent: List<Song>,
         liked: List<Song>,
+        /**
+         * Segment size for infinite sessions (default: the full 60-track
+         * page mix). The 60/40 familiar/discovery split scales with it.
+         */
+        trackCount: Int = INSTANT_MIX_TRACKS,
+        /** Discovery angle override; null keeps today's daily angle. */
+        angleOverride: String? = null,
+        /** Artists to leave out entirely (skip-driven routing). */
+        avoidArtists: Set<String> = emptySet(),
+        /** Song ids already heard in this session (never repeated). */
+        excludeSongIds: Set<String> = emptySet(),
+        /** True for a continuation segment: its first line bridges the join. */
+        segmentContinuation: Boolean = false,
     ): Result<AiDjMix> = withContext(Dispatchers.IO) {
         val apiKey = prefs.getString(KEY_API_KEY, null)?.trim().orEmpty()
         if (apiKey.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("No Google AI API key set"))
         }
-        val recentPool = recent.distinctBy { it.id }.take(INSTANT_MIX_RECENT)
+        val recentPool = recent.distinctBy { it.id }
+            .filter { it.id !in excludeSongIds }
+            .take(INSTANT_MIX_RECENT)
         val likedPool = liked.distinctBy { it.id }
             .filter { liked -> recentPool.none { it.id == liked.id } }
+            .filter { it.id !in excludeSongIds }
             .take(INSTANT_MIX_LIKED)
         if (recentPool.isEmpty() && likedPool.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("Nothing to build a mix from yet"))
@@ -517,29 +547,28 @@ class AiDjRepository(context: Context) {
         // session number in the prompt gets echoed into titles and spoken
         // lines — which the user never sees or hears.
 
-        val libraryCount = (INSTANT_MIX_TRACKS * 0.6).toInt()
-        val discoveryCount = INSTANT_MIX_TRACKS - libraryCount
-        // Daily seed: a fresh angle every day so the mix never repeats itself.
-        val today = java.time.LocalDate.now().toString()
-        val dailyAngles = listOf(
-            "deep cuts and B-sides they have never considered",
-            "current chart climbers across their favorite genres",
-            "one-hit wonders and forgotten gems from the last three decades",
-            "live versions and acoustic reimaginings of familiar sounds",
-            "rising underground artists about to break through",
-            "cross-genre collaborations and unexpected features",
-            "songs that sample or interpolate artists they love",
-        )
-        val dailyAngle = dailyAngles[today.hashCode().mod(dailyAngles.size).let { if (it < 0) it + dailyAngles.size else it }]
+        val libraryCount = (trackCount * 0.6).toInt()
+        val discoveryCount = trackCount - libraryCount
+        // The angle: today's daily angle by default; an explicit override
+        // holds a session on course or pivots it after heavy skipping.
+        val angle = angleOverride ?: dailyDiscoveryAngle()
 
         val userText = buildString {
             appendLine(_prompt.value.trim().ifEmpty { DEFAULT_PROMPT })
             appendLine()
             appendLine(numbered)
             appendLine()
-            append("Today is $today. Build a $INSTANT_MIX_TRACKS-song DJ set in play order, ")
+            append("Today is ${java.time.LocalDate.now()}. Build a $trackCount-song DJ set in play order, ")
             append("flowing from what they have been playing lately through their liked favorites. ")
-            append("Today's discovery angle: $dailyAngle. ")
+            append("Today's discovery angle: $angle. ")
+            if (avoidArtists.isNotEmpty()) {
+                append("Do not include any song by these artists: ${avoidArtists.joinToString(", ")}. ")
+            }
+            if (segmentContinuation) {
+                append("This set continues a DJ session already in progress: open with a brief ")
+                append("spoken intro line on the first track that bridges from the previous set ")
+                append("into this one, so the join between sets is announced like any other shift. ")
+            }
             append("$libraryCount tracks: pick by their 1-based numbers from the lists above. ")
             append("$discoveryCount tracks: NEW discoveries NOT in the lists above — songs they have ")
             append("never heard that match their taste, from popular charts or deep cuts. ")
@@ -1077,6 +1106,17 @@ class AiDjRepository(context: Context) {
         private const val INSTANT_MIX_RECENT = 30
         private const val INSTANT_MIX_LIKED = 200
         val TRACK_COUNT_OPTIONS = listOf(10, 15, 20, 25, 40, 60)
+
+        /** Discovery angles, one per day so a mix never repeats itself. */
+        val DISCOVERY_ANGLES = listOf(
+            "deep cuts and B-sides they have never considered",
+            "current chart climbers across their favorite genres",
+            "one-hit wonders and forgotten gems from the last three decades",
+            "live versions and acoustic reimaginings of familiar sounds",
+            "rising underground artists about to break through",
+            "cross-genre collaborations and unexpected features",
+            "songs that sample or interpolate artists they love",
+        )
 
         /** The default; the API reports older models as retired, so this stays current. */
         const val DEFAULT_MODEL = "gemini-3.8-flash"
