@@ -572,7 +572,10 @@ class AiDjRepository(context: Context) {
             .put("generationConfig", JSONObject()
                 .put("temperature", 0.95)
                 .put("response_mime_type", "application/json")
-                .put("maxOutputTokens", 8192)
+                // 60-track sets with lines run long; a clipped tail used to
+                // fail the whole parse. The parser now salvages partial
+                // replies, but headroom is cheaper than salvage.
+                .put("maxOutputTokens", 16384)
             )
             .toString()
 
@@ -610,6 +613,20 @@ class AiDjRepository(context: Context) {
      * discoveries ({"new": {"title": ..., "artist": ...}}). Discoveries are
      * resolved to playable songs via YouTube search, in parallel.
      */
+    /**
+     * Parse a mix that interleaves library picks ({"n": ...}) with new
+     * discoveries ({"new": {"title": ..., "artist": ...}}). Discoveries are
+     * resolved to playable songs via YouTube search, in parallel.
+     *
+     * The parser is deliberately tolerant: a generation that comes back in a
+     * slightly different shape (a bare track array, a bare-number entry, a
+     * truncated tail) still yields a playable mix from whatever complete
+     * entries it carries, instead of failing the whole regeneration with a
+     * generic error. Only a response with zero usable entries fails, and
+     * every failure branch logs its class under the AiDj tag (shapes and
+     * short snippets only — never keys, prompts, or full responses) so the
+     * next failure is diagnosable from a bug report instead of a guess.
+     */
     private suspend fun parseMixWithDiscoveries(
         responseBody: String,
         pool: List<Song>,
@@ -619,6 +636,146 @@ class AiDjRepository(context: Context) {
             val discovery: AiDjDiscovery?,
             val line: String?,
         )
+        // One entry of the model's track list, in whatever shape it arrived.
+        // Library picks are {"n": k}; discoveries are {"new": {...}}.
+        // Tolerated variants: a bare number (the pick itself), "index" for
+        // "n", and "discovery" for "new". Anything else is dropped, never
+        // fatal — a single odd entry must not kill a 60-track mix.
+        fun parseEntry(raw: Any?): ParsedItem? {
+            val lineOf: (JSONObject) -> String? = { entry ->
+                entry.optString("line").takeIf { it.isNotBlank() }?.let(::stripSessionNumberFromLine)
+            }
+            when (raw) {
+                is Number -> {
+                    val n = raw.toInt()
+                    return if (n in 1..pool.size) ParsedItem(n, null, null) else null
+                }
+                is JSONObject -> {
+                    val entry = raw
+                    val line = lineOf(entry)
+                    val n = entry.optInt("n", -1).takeIf { it >= 1 }
+                        ?: entry.optInt("index", -1).takeIf { it >= 1 }
+                    if (n != null && n <= pool.size) {
+                        return ParsedItem(libraryIndex = n, discovery = null, line = line)
+                    }
+                    val newObj = entry.optJSONObject("new") ?: entry.optJSONObject("discovery")
+                    if (newObj != null) {
+                        val dTitle = newObj.optString("title").trim()
+                        val dArtist = newObj.optString("artist").trim()
+                        if (dTitle.isBlank() || dArtist.isBlank()) return null
+                        // Skip discoveries already in the library.
+                        if (pool.any {
+                                it.title.equals(dTitle, ignoreCase = true) &&
+                                    it.artist.equals(dArtist, ignoreCase = true)
+                            }
+                        ) return null
+                        return ParsedItem(
+                            libraryIndex = null,
+                            discovery = AiDjDiscovery(dTitle, dArtist, line),
+                            line = line,
+                        )
+                    }
+                    return null
+                }
+                else -> return null
+            }
+        }
+        // Parse one track-list JSON value (object with a "tracks" array, or
+        // a bare array of entries). Returns null when the value is not a
+        // track list at all.
+        fun parseTrackListValue(value: Any?): Pair<String, List<ParsedItem>>? {
+            val seen = HashSet<Int>()
+            when (value) {
+                is JSONObject -> {
+                    val tracksJson = value.optJSONArray("tracks") ?: value.optJSONArray("songs")
+                        ?: return null
+                    val items = (0 until tracksJson.length()).mapNotNull { i ->
+                        val item = parseEntry(tracksJson.opt(i))
+                        if (item?.libraryIndex != null && !seen.add(item.libraryIndex)) null else item
+                    }
+                    val title = stripSessionNumberFromTitle(
+                        value.optString("title").ifBlank { "AI DJ Mix" }
+                    )
+                    return title to items
+                }
+                is JSONArray -> {
+                    val items = (0 until value.length()).mapNotNull { i ->
+                        val item = parseEntry(value.opt(i))
+                        if (item?.libraryIndex != null && !seen.add(item.libraryIndex)) null else item
+                    }
+                    return "AI DJ Mix" to items
+                }
+                else -> return null
+            }
+        }
+        // Salvage pass for a truncated or otherwise unparseable reply: scan
+        // for balanced {...} objects (string-aware) and keep every complete
+        // track entry found, in order. A mix cut off mid-tail still yields
+        // its complete head instead of nothing.
+        fun salvageEntries(text: String): Pair<String, List<ParsedItem>>? {
+            val seen = HashSet<Int>()
+            val items = mutableListOf<ParsedItem>()
+            var title: String? = null
+            var i = 0
+            while (i < text.length) {
+                if (text[i] != '{') {
+                    i++
+                    continue
+                }
+                var depth = 0
+                var inString = false
+                var escaped = false
+                var j = i
+                var closed = false
+                while (j < text.length) {
+                    val c = text[j]
+                    if (inString) {
+                        if (escaped) escaped = false
+                        else if (c == '\\') escaped = true
+                        else if (c == '"') inString = false
+                    } else {
+                        when (c) {
+                            '"' -> inString = true
+                            '{' -> depth++
+                            '}' -> {
+                                depth--
+                                if (depth == 0) {
+                                    closed = true
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    j++
+                }
+                if (!closed) break
+                val candidate = runCatching { JSONObject(text.substring(i, j + 1)) }.getOrNull()
+                if (candidate != null) {
+                    val asList = parseTrackListValue(candidate)
+                    if (asList != null) {
+                        if (title == null && candidate.optString("title").isNotBlank()) {
+                            title = stripSessionNumberFromTitle(candidate.optString("title"))
+                        }
+                        for (item in asList.second) {
+                            if (item.libraryIndex != null && !seen.add(item.libraryIndex)) continue
+                            items += item
+                        }
+                    } else {
+                        val single = parseEntry(candidate)
+                        if (single != null) {
+                            if (single.libraryIndex != null && !seen.add(single.libraryIndex)) {
+                                // Duplicate pick: skip, keep scanning.
+                            } else {
+                                items += single
+                            }
+                        }
+                    }
+                }
+                i = j + 1
+            }
+            if (items.isEmpty()) return null
+            return (title ?: "AI DJ Mix") to items
+        }
         val (title, items) = try {
             val root = JSONObject(responseBody)
             root.optJSONObject("usageMetadata")?.let { usage ->
@@ -627,54 +784,70 @@ class AiDjRepository(context: Context) {
                     outputTokens = usage.optLong("candidatesTokenCount", 0L),
                 )
             }
+            // Surface safety blocks explicitly, like the library parser does:
+            // a blocked prompt used to fall through to a generic parse error.
+            root.optJSONObject("promptFeedback")?.optString("blockReason")?.takeIf { it.isNotBlank() }?.let { reason ->
+                KLog.w(TAG, "AI DJ instant mix prompt blocked: $reason")
+                return@withContext Result.failure(IllegalStateException("The DJ's request was blocked ($reason)"))
+            }
             val candidates = root.optJSONArray("candidates")
             if (candidates == null || candidates.length() == 0) {
-                KLog.w(TAG, "AI DJ instant mix: no candidates: ${responseBody.take(300)}")
+                KLog.w(TAG, "AI DJ instant mix: no candidates")
                 return@withContext Result.failure(IllegalStateException("The DJ came back empty-handed"))
             }
-            val text = candidates.getJSONObject(0)
-                .getJSONObject("content")
-                .getJSONArray("parts")
-                .getJSONObject(0)
-                .getString("text")
-            val start = text.indexOf('{')
-            val end = text.lastIndexOf('}')
-            if (start < 0 || end <= start) {
-                KLog.w(TAG, "AI DJ instant mix: no JSON in text: ${text.take(300)}")
+            val first = candidates.getJSONObject(0)
+            val finishReason = first.optString("finishReason").ifBlank { "unknown" }
+            val parts = first.optJSONObject("content")?.optJSONArray("parts")
+            if (parts == null || parts.length() == 0) {
+                KLog.w(TAG, "AI DJ instant mix: no content parts (finishReason=$finishReason)")
+                return@withContext Result.failure(IllegalStateException("The DJ came back empty-handed"))
+            }
+            val text = parts.getJSONObject(0).optString("text").orEmpty()
+            if (text.isBlank()) {
+                KLog.w(TAG, "AI DJ instant mix: empty text part (finishReason=$finishReason)")
+                return@withContext Result.failure(IllegalStateException("The DJ came back empty-handed"))
+            }
+            val trimmed = text.trim()
+                .removePrefix("```json").removePrefix("```")
+                .removeSuffix("```").trim()
+            val parsed = runCatching {
+                val start = trimmed.indexOf('{')
+                val arrayStart = trimmed.indexOf('[')
+                when {
+                    // Bare array reply: the whole text is the track list.
+                    trimmed.startsWith("[") -> parseTrackListValue(JSONArray(trimmed))
+                    start >= 0 -> {
+                        val end = trimmed.lastIndexOf('}')
+                        if (end <= start) null
+                        else parseTrackListValue(JSONObject(trimmed.substring(start, end + 1)))
+                    }
+                    arrayStart >= 0 -> parseTrackListValue(
+                        JSONArray(trimmed.substring(arrayStart, trimmed.lastIndexOf(']') + 1))
+                    )
+                    else -> null
+                }
+            }.getOrNull()
+            val result = parsed?.takeIf { it.second.isNotEmpty() }
+                ?: salvageEntries(text)
+            if (result == null) {
+                KLog.w(
+                    TAG,
+                    "AI DJ instant mix: unusable reply " +
+                        "(finishReason=$finishReason, textLen=${text.length}, " +
+                        "head=${text.take(200)})"
+                )
                 return@withContext Result.failure(IllegalStateException("Couldn't understand the DJ's reply"))
             }
-            val jsonText = text.substring(start, end + 1)
-            val mix = JSONObject(jsonText)
-            val mixTitle = stripSessionNumberFromTitle(mix.optString("title").ifBlank { "AI DJ Mix" })
-            val tracksJson = mix.getJSONArray("tracks")
-            val seen = HashSet<Int>()
-            val parsedItems = (0 until tracksJson.length()).mapNotNull { i ->
-                val entry = tracksJson.getJSONObject(i)
-                val line = entry.optString("line").takeIf { it.isNotBlank() }?.let(::stripSessionNumberFromLine)
-                val n = entry.optInt("n", -1)
-                if (n >= 1 && n <= pool.size && seen.add(n)) {
-                    ParsedItem(libraryIndex = n, discovery = null, line = line)
-                } else {
-                    val newObj = entry.optJSONObject("new") ?: return@mapNotNull null
-                    val dTitle = newObj.optString("title").trim()
-                    val dArtist = newObj.optString("artist").trim()
-                    if (dTitle.isBlank() || dArtist.isBlank()) return@mapNotNull null
-                    // Skip discoveries already in the library.
-                    if (pool.any {
-                            it.title.equals(dTitle, ignoreCase = true) &&
-                                it.artist.equals(dArtist, ignoreCase = true)
-                        }
-                    ) return@mapNotNull null
-                    ParsedItem(
-                        libraryIndex = null,
-                        discovery = AiDjDiscovery(dTitle, dArtist, line),
-                        line = line,
-                    )
-                }
+            if (parsed == null) {
+                KLog.w(
+                    TAG,
+                    "AI DJ instant mix: salvaged ${result.second.size} entries " +
+                        "from a malformed reply (finishReason=$finishReason)"
+                )
             }
-            mixTitle to parsedItems
+            result
         } catch (e: Exception) {
-            KLog.w(TAG, "Failed to parse AI DJ response", e)
+            KLog.w(TAG, "Failed to parse AI DJ instant mix response: ${e.javaClass.simpleName}", e)
             return@withContext Result.failure(IllegalStateException("Couldn't understand the DJ's reply"))
         }
 
