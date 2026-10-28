@@ -99,7 +99,8 @@ fun AiDjScreen(
      * player. Called after onPlayDjMix in every branch, so the session
      * always follows a real play.
      */
-    onDjSessionStarted: (String, List<Song>, List<Song>, List<Song>, Boolean) -> Unit = {},
+    onDjSessionStarted: (String, List<Song>, List<Song>, List<Song>, Boolean) -> Unit =
+        { _, _, _, _, _ -> },
     onShuffleQueue: (List<Song>) -> Unit = {},
     onOpenSettings: () -> Unit,
     contentPadding: PaddingValues,
@@ -167,16 +168,19 @@ fun AiDjScreen(
     LaunchedEffect(cachedMix) {
         // Never steal a mix that generate() is still warming up: the gate
         // is the whole point, and cacheMix lands before warmup finishes.
+        // A local, not a smart cast: cachedMix is a delegated property,
+        // which the compiler cannot smart-cast across the null check.
         if (mix == null && !generating && !warmingUp) {
-            mix = cachedMix
+            val cached = cachedMix
+            mix = cached
             // Silent background warmup for the cached mix, so the first
             // play after opening the tab is instant. No UI state: the mix
             // is already shown; this only fills the voice cache.
-            if (cachedMix != null && djVoiceEnabled &&
-                warmedMixKey != djMixKey(cachedMix)
+            if (cached != null && djVoiceEnabled &&
+                warmedMixKey != djMixKey(cached)
             ) {
-                voiceRepository.warmupMix(cachedMix) {}
-                warmedMixKey = djMixKey(cachedMix)
+                voiceRepository.warmupMix(cached) {}
+                warmedMixKey = djMixKey(cached)
             }
         }
     }

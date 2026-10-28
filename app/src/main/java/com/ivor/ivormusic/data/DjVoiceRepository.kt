@@ -189,7 +189,6 @@ class DjVoiceRepository(context: Context) {
 
     suspend fun buildQueueWithIntros(
         mix: AiDjMix,
-        onProgress: (Float) -> Unit = {},
         /**
          * When false (a mix that already went through [warmupMix]), intros
          * with no cached file are skipped instead of synthesized inline —
@@ -198,6 +197,7 @@ class DjVoiceRepository(context: Context) {
          * synthesize-inline behavior.
          */
         synthesizeMissing: Boolean = true,
+        onProgress: (Float) -> Unit = {},
     ): List<Song> = withContext(Dispatchers.IO) {
         val voiceDir = java.io.File(appContext.cacheDir, "dj_voice").apply { mkdirs() }
         // The voice is part of the key: changing voices in Settings must

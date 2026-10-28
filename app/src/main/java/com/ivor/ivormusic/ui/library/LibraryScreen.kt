@@ -167,6 +167,9 @@ fun LibraryContent(
     onShuffleQueue: (List<Song>) -> Unit,
     /** Play a curated AI DJ mix: strictly ordered, shuffle unavailable. */
     onPlayDjMix: (List<Song>) -> Unit,
+    /** Start infinite extension for a mix just played; see AiDjScreen. */
+    onDjSessionStarted: (String, List<Song>, List<Song>, List<Song>, Boolean) -> Unit =
+        { _, _, _, _, _ -> },
     contentPadding: PaddingValues,
     viewModel: HomeViewModel,
     isDarkMode: Boolean,
@@ -611,6 +614,7 @@ fun LibraryContent(
                     onBack = { back() },
                     onPlayQueue = { songs, song -> onPlayQueue(songs, song) },
                     onPlayDjMix = onPlayDjMix,
+                    onDjSessionStarted = onDjSessionStarted,
                     onShuffleQueue = onShuffleQueue,
                     onOpenSettings = onOpenAiDjSettings,
                     contentPadding = contentPadding,
