@@ -99,6 +99,15 @@ fun PodcastsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var feedMenuFor by remember { mutableStateOf<String?>(null) }
 
+    // Auto-refresh when the tab becomes visible: the New episodes rail used
+    // to update only when a podcast's detail page was opened. The tab leaves
+    // composition on every switch (LibraryScreen's when branch), so this
+    // re-runs on each return to the tab; the repository debounces it to one
+    // round per hour, shared with the app-foreground and background triggers.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.refreshAllFeeds()
+    }
+
     // New episodes rail: anything published in the last 7 days, newest first.
     val newEpisodes = remember(episodesByFeed) {
         val now = System.currentTimeMillis()

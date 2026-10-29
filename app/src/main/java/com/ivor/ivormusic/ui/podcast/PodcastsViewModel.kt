@@ -102,6 +102,11 @@ class PodcastsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { repository.refreshFeed(feedId) }
     }
 
+    /** Refreshes all feeds (debounced in the repository): the tab-visible trigger. */
+    fun refreshAllFeeds() {
+        viewModelScope.launch { repository.refreshAllFeeds() }
+    }
+
     fun removeFeed(feedId: String) {
         viewModelScope.launch { repository.removeFeed(feedId) }
     }

@@ -35,7 +35,6 @@ class PodcastRepository(context: Context) {
         PREFS_NAME, Context.MODE_PRIVATE
     )
     private val storeFile: File = File(appContext.filesDir, "$STORE_FILE_BASE.json")
-    private val mutex = Mutex()
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -48,6 +47,14 @@ class PodcastRepository(context: Context) {
         internal const val PREFS_NAME = "ivor_music_podcasts"
         internal const val STORE_FILE_BASE = "podcast_store"
         private const val KEY_FEED_IDS = "feed_ids"
+        private const val KEY_LAST_REFRESH_ALL = "last_refresh_all_ms"
+
+        // Store mutex, shared process-wide: the foreground trigger, the
+        // tab-visible trigger, and the background worker each build their
+        // own repository instance, and per-instance locks would let two
+        // rounds interleave their state updates and store writes.
+        private val mutex = Mutex()
+        private var refreshAllInFlight = false
 
         private val json = Json {
             ignoreUnknownKeys = true
@@ -171,6 +178,50 @@ class PodcastRepository(context: Context) {
         } catch (e: Exception) {
             KLog.w(TAG, "Failed to refresh podcast feed ${feed.feedUrl}", e)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Re-fetches every subscribed feed, so the New episodes rail updates
+     * without opening any podcast's page. Debounced through
+     * [PodcastRefreshPolicy]: at most one round per hour unless [force] is
+     * set, so the app-foreground, tab-visible, and worker triggers share
+     * one budget instead of refetching on every navigation. The timestamp
+     * lives in SharedPreferences so foreground and background rounds share
+     * it across processes, and it is set when the round finishes even if
+     * individual feeds failed (their failures are already logged by
+     * [refreshFeed]) so a dead feed cannot cause a refetch storm.
+     * Single-flight process-wide: a concurrent caller skips with success(0).
+     * Returns the total episode count across feeds refreshed this round, or
+     * 0 when the round was debounced away. Manual per-feed refresh and the
+     * detail page's refresh-on-open are unaffected.
+     */
+    suspend fun refreshAllFeeds(force: Boolean = false): Result<Int> {
+        ensureLoaded()
+        val now = System.currentTimeMillis()
+        val skip = mutex.withLock {
+            if (refreshAllInFlight) true
+            else if (!PodcastRefreshPolicy.shouldRefresh(
+                    prefs.getLong(KEY_LAST_REFRESH_ALL, 0L), now, force
+                )
+            ) true
+            else {
+                refreshAllInFlight = true
+                false
+            }
+        }
+        if (skip) return Result.success(0)
+        try {
+            var total = 0
+            for (feed in _feeds.value) {
+                refreshFeed(feed.id).onSuccess { total += it }
+            }
+            mutex.withLock {
+                prefs.edit().putLong(KEY_LAST_REFRESH_ALL, now).apply()
+            }
+            return Result.success(total)
+        } finally {
+            mutex.withLock { refreshAllInFlight = false }
         }
     }
 
