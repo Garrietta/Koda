@@ -43,7 +43,7 @@ class WidgetButtonReceiver : BroadcastReceiver() {
             try {
                 when (action) {
                     WidgetActionActivity.ACTION_TOGGLE -> {
-                        val snapshot = withController(context) { controller ->
+                        val snapshot = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                             if (controller.mediaItemCount == 0) {
                                 if (!controller.ensureRestored(playWhenRestored = true)) {
                                     return@withController null
@@ -76,7 +76,7 @@ class WidgetButtonReceiver : BroadcastReceiver() {
                         // later. The later publish's full render reads the
                         // advanced index, so it cannot undo the morph.
                         VinylClassic.cycleNextShape(context)
-                        val sent = withController(context) { controller ->
+                        val sent = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                             if (!controller.ensureRestored(playWhenRestored = false)) {
                                 return@withController false
                             }
@@ -85,24 +85,24 @@ class WidgetButtonReceiver : BroadcastReceiver() {
                         } ?: false
                         if (sent) {
                             delay(500L)
-                            val settled = withController(context) { it.toSnapshot() }
+                            val settled = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { it.toSnapshot() }
                             if (settled != null) PlayerWidgets.publish(context, settled)
                         }
                     }
                     WidgetActionActivity.ACTION_PREVIOUS -> {
-                        withController(context) { controller ->
+                        withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                             controller.seekToPrevious()
                             PlayerWidgets.publish(context, controller.toSnapshot())
                         }
                     }
                     WidgetActionActivity.ACTION_SHUFFLE -> {
-                        withController(context) { controller ->
+                        withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                             controller.shuffleModeEnabled = !controller.shuffleModeEnabled
                             PlayerWidgets.publish(context, controller.toSnapshot())
                         }
                     }
                     WidgetActionActivity.ACTION_CYCLE_REPEAT -> {
-                        withController(context) { controller ->
+                        withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                             controller.repeatMode = when (controller.repeatMode) {
                                 androidx.media3.common.Player.REPEAT_MODE_OFF ->
                                     androidx.media3.common.Player.REPEAT_MODE_ALL
@@ -115,7 +115,7 @@ class WidgetButtonReceiver : BroadcastReceiver() {
                     }
                     WidgetActionActivity.ACTION_PLAY_INDEX -> {
                         if (index >= 0) {
-                            withController(context) { controller ->
+                            withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
                                 controller.seekTo(index, 0)
                                 controller.play()
                                 PlayerWidgets.publish(context, controller.toSnapshot())

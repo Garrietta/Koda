@@ -66,7 +66,7 @@ private suspend fun runTransport(
     settle: Boolean,
     command: (MediaController) -> Unit,
 ) {
-    val sent = withController(context) { controller ->
+    val sent = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
         if (!controller.ensureRestored(playWhenRestored = false)) {
             return@withController false
         }
@@ -77,7 +77,7 @@ private suspend fun runTransport(
 
     if (settle) {
         delay(SETTLE_MS)
-        val settled = withController(context) { it.toSnapshot() } ?: return
+        val settled = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { it.toSnapshot() } ?: return
         PlayerWidgets.publish(context, settled)
     }
     // Without a settle the command masked locally and runImmediate already
@@ -92,7 +92,7 @@ private suspend fun runImmediate(
     context: Context,
     command: (MediaController) -> Unit,
 ) {
-    val snapshot = withController(context) { controller ->
+    val snapshot = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
         if (!controller.ensureRestored(playWhenRestored = false)) {
             return@withController null
         }
@@ -104,7 +104,7 @@ private suspend fun runImmediate(
 
 class TogglePlaybackAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val snapshot = withController(context) { controller ->
+        val snapshot = withController(context, timeoutMs = WidgetRevivePolicy.TAP_BIND_TIMEOUT_MS) { controller ->
             if (controller.mediaItemCount == 0) {
                 // play() is the request that tells Media3 this restore should
                 // begin playing once onPlaybackResumption supplies the queue.

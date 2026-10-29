@@ -69,6 +69,15 @@ internal object PlayerWidgetHost {
     private var seeded = false
 
     /**
+     * Key of the artwork last persisted to [WidgetArtworkDiskCache], so a
+     * live process does not re-encode the same cover on every publish. Reset
+     * with the process: a fresh process re-persists once, which also repairs
+     * a disk copy lost to a failed write.
+     */
+    @Volatile
+    private var lastPersistedArtKey: String? = null
+
+    /**
      * Make sure [state] holds something real before the first composition of a
      * session. Reads the store, and only falls back to a session bind when the
      * store has never held a real track - a widget added before this build ever ran.
@@ -85,8 +94,26 @@ internal object PlayerWidgetHost {
         loadLock.withLock {
             if (seeded) return
             val stored = PlayerWidgetStore.read(context)?.takeIf { it.hasMedia }
-            val snapshot = stored
-                ?: withController(context) { it.toSnapshot() }?.takeIf { it.hasMedia }
+            val snapshot = if (stored != null) {
+                // A stored frame is only trustworthy if the session behind it
+                // still exists. A process killed in the background leaves the
+                // store claiming "playing" with no service left to correct it,
+                // and a session that answers but holds no media ended without
+                // a clean onDestroy - both render as a lie until a next publish
+                // that may never come. Verify once, per process, and persist
+                // the correction synchronously (see writeSync).
+                val live = withController(
+                    context,
+                    timeoutMs = WidgetRevivePolicy.SEED_LIVENESS_TIMEOUT_MS,
+                ) { it.toSnapshot() }
+                val resolved = WidgetRevivePolicy.resolveSeedSnapshot(stored, live)
+                if (resolved != stored) {
+                    PlayerWidgetStore.writeSync(context, resolved)
+                }
+                resolved
+            } else {
+                withController(context) { it.toSnapshot() }?.takeIf { it.hasMedia }
+            }
             if (snapshot != null) {
                 // The colour enrichment (128px load + Palette) and the
                 // display artwork load (384px) are independent Coil
@@ -100,11 +127,12 @@ internal object PlayerWidgetHost {
                             snapshot
                         }
                     }
-                    val artworkDeferred = async { loadArtwork(context, snapshot) }
+                    val artworkDeferred = async { loadArtworkOrCached(context, snapshot) }
                     enrichedDeferred.await() to artworkDeferred.await()
                 }
                 PlayerWidgetStore.write(context, enriched)
                 _state.value = PlayerWidgetUi(enriched, artwork)
+                if (artwork != null) persistArtwork(context, enriched, artwork)
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
@@ -122,14 +150,51 @@ internal object PlayerWidgetHost {
         // is tried again on the next push rather than staying blank for as
         // long as the song plays.
         val sameCover = current.snapshot.artworkUri == snapshot.artworkUri && current.artwork != null
-        val artwork = if (sameCover) current.artwork else loadArtwork(context, snapshot)
+        val artwork = if (sameCover) current.artwork else loadArtworkOrCached(context, snapshot)
         _state.value = PlayerWidgetUi(snapshot, artwork)
         seeded = true
+        if (artwork != null) persistArtwork(context, snapshot, artwork)
     }
 
     private suspend fun loadArtwork(context: Context, snapshot: PlayerWidgetSnapshot): Bitmap? {
         val uri = snapshot.artworkUri ?: return null
         return PlayerWidgetReader.loadArtwork(context, uri, ARTWORK_PX)
+    }
+
+    /**
+     * Coil first: the network cover is the truth. The disk copy is only the
+     * fallback for a dead-service reseed or a transient load failure, so one
+     * failed load can no longer latch a placeholder until a next publish
+     * that may never come.
+     */
+    private suspend fun loadArtworkOrCached(
+        context: Context,
+        snapshot: PlayerWidgetSnapshot,
+    ): Bitmap? {
+        val uri = snapshot.artworkUri ?: return null
+        return loadArtwork(context, snapshot)
+            ?: WidgetArtworkDiskCache.read(context, uri.toString())
+    }
+
+    /**
+     * Persist the cover that just rendered, once per URI per process. Disk IO
+     * stays off the render path: this runs on the publish job's dispatcher,
+     * never inside a composition.
+     */
+    private suspend fun persistArtwork(
+        context: Context,
+        snapshot: PlayerWidgetSnapshot,
+        artwork: Bitmap,
+    ) {
+        val uri = snapshot.artworkUri?.toString() ?: return
+        val key = WidgetRevivePolicy.artworkCacheKey(uri)
+        if (key == lastPersistedArtKey) return
+        withContext(Dispatchers.IO) {
+            WidgetArtworkDiskCache.write(context, uri, artwork)
+        }
+        if (WidgetArtworkDiskCache.fileFor(context, uri).exists()) {
+            lastPersistedArtKey = key
+        }
     }
 }
 
