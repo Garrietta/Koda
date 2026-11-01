@@ -453,6 +453,7 @@ private fun EmptyMark(size: Dp) {
 
 // Restored from the pre-merge WidgetKit: upstream's rework deleted these,
 // but the kept Deck/Console widgets (and WidgetModeToggles) still call them.
+@Composable
 internal fun WidgetToggleButton(
     @DrawableRes iconRes: Int,
     description: String,
@@ -479,7 +480,6 @@ internal fun WidgetToggleButton(
 }
 
 /** Shuffle and repeat, the pair every widget that has one has both of. */
-@Composable
 @Composable
 internal fun WidgetTransportRow(
     snapshot: PlayerWidgetSnapshot,

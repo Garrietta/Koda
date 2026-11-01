@@ -142,6 +142,20 @@ import com.ivor.ivormusic.ui.components.rememberQueueReorderState
 import com.ivor.ivormusic.ui.theme.MontserratFamily
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.zIndex
+import coil.compose.AsyncImage
+import com.ivor.ivormusic.data.LyricsResult
+import com.ivor.ivormusic.data.MusicQueueItem
 
 /**
  * I do not fucking ned that many slop comments thank you

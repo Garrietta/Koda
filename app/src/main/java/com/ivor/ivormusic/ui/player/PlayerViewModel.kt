@@ -950,7 +950,7 @@ class PlayerViewModel(private val context: Context) : ViewModel() {
      */
     fun getCurrentQueueIndex(): Int {
         val currentId = _currentQueueItemId.value ?: return 0
-        val queue = playOrderQueue.value
+        val queue = currentQueue.value
         return queue.indexOfFirst { item -> item.id == currentId }.coerceAtLeast(0)
     }
 

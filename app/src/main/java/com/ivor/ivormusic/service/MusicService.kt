@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -51,7 +52,9 @@ import com.ivor.ivormusic.data.LikedSongsRepository
 import com.ivor.ivormusic.data.MusicQueueItem
 import com.ivor.ivormusic.data.arrangedBy
 import com.ivor.ivormusic.data.PlaybackSessionRepository
+import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.data.SongRepository
+import com.ivor.ivormusic.data.SongSource
 import com.ivor.ivormusic.data.StatsRepository
 import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.data.YouTubeRepository
@@ -391,6 +394,10 @@ class MusicService : MediaLibraryService() {
 
         /** Marks a MediaItem as part of a curated AI DJ mix (strictly ordered, no shuffle). */
         const val EXTRA_DJ_MIX = "com.ivor.ivormusic.DJ_MIX"
+
+        // android.media.browse.ContentStyle values: how Auto renders items.
+        private const val LIST_ITEM = 1
+        private const val GRID_ITEM = 2
 
         /** Session-extras keys the timer state is published under. */
         const val EXTRA_SLEEP_TIMER_ENDS_AT = "sleep_timer_ends_at"
@@ -1695,6 +1702,11 @@ class MusicService : MediaLibraryService() {
          * carry: local and podcast URIs preserved, YouTube ids turned into
          * placeholders that the stream resolver swaps for a real stream.
          */
+    // HEAD's browse-cache lookup; the cache now lives in MusicBrowseTree.
+    private fun findSongInCache(videoId: String): Song? {
+        return browseTree.cachedSong(videoId)
+    }
+
         private fun preparePlaybackItem(item: MediaItem): MediaItem {
             val existingUri = item.localConfiguration?.uri
 
