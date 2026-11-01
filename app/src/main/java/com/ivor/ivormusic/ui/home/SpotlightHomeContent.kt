@@ -130,13 +130,16 @@ fun SpotlightHomeContent(
     showModeToggle: Boolean = true,
     modeToggleState: MusicVideoToggleState = rememberMusicVideoToggleState(videoMode),
     listState: LazyListState = rememberLazyListState(),
+    /**
+     * The chip row's choice, held by the caller beside [listState]. A Home tab
+     * switch takes this screen out of composition, so state kept in here -
+     * even saveable state - came back as All every time the Library was
+     * visited and left. No default, so a new call site cannot forget it.
+     */
+    filter: SpotlightFilter,
+    onFilterChange: (SpotlightFilter) -> Unit,
 ) {
     val isRefreshing by viewModel.isLoading.collectAsState()
-
-    // rememberSaveable, not remember: the filter is a place in the screen, and
-    // losing it on a tab switch or a rotation is the same annoyance as losing a
-    // scroll position.
-    var filter by rememberSaveable { mutableStateOf(SpotlightFilter.All) }
 
     val discoverySongs by viewModel.discoverySongs.collectAsState()
     val discoveryCollections by viewModel.discoveryCollections.collectAsState()
@@ -211,7 +214,7 @@ fun SpotlightHomeContent(
             }
 
             item(key = "chips") {
-                SpotlightFilterChips(selected = filter, onSelect = { filter = it })
+                SpotlightFilterChips(selected = filter, onSelect = onFilterChange)
             }
 
             // AI DJ moved to a floating action button next to the nav pill
@@ -492,7 +495,7 @@ private const val SHORTCUT_COUNT = 6
  * this screen resolves everything from flows that already exist, so the chips
  * scope what is genuinely on the device instead of implying a catalogue.
  */
-internal enum class SpotlightFilter(val label: String, val quickPickCaption: String?) {
+enum class SpotlightFilter(val label: String, val quickPickCaption: String?) {
     All("All", null),
 
     /**

@@ -821,6 +821,13 @@ fun PlaylistDetailScreen(
      */
     onEnqueueSong: ((Song, Boolean) -> Unit)? = null,
     /**
+     * Shown when the fetch comes back empty: what the Library already holds of
+     * this playlist or release, so an album opened offline still lists the
+     * songs that are here rather than a load failure. Empty for most callers,
+     * which is a safe default - it only ever stands in for nothing.
+     */
+    fallbackSongs: List<Song> = emptyList(),
+    /**
      * Open the "add from your playlists" flow for this playlist. Only offered
      * on local playlists, which are the ones whose track list this app owns.
      * Deliberately no default: a null default is the half-wired-feature trap,
@@ -1005,7 +1012,7 @@ fun PlaylistDetailScreen(
         if (preloadedSongs == null) {
             isFetching.value = true
             songRows = playlistSongRows(
-                viewModel.fetchPlaylistSongs(resolvedPlaylist.id),
+                viewModel.fetchPlaylistSongs(resolvedPlaylist.id).ifEmpty { fallbackSongs },
                 trackKeyPrefix
             )
             isFetching.value = false

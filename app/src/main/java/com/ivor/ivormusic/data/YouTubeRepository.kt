@@ -130,7 +130,13 @@ class YouTubeRepository(private val context: Context) {
          * URL's `c=`. See [PlayerClient].
          */
         fun uaForPlaybackUri(uri: Uri): String {
-            val client = try { uri.getQueryParameter("c") } catch (_: Exception) { null }
+            val client = try {
+                uri.getQueryParameter("c")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             return userAgentForStreamClient(client, BROWSER_USER_AGENT)
         }
 
@@ -229,7 +235,8 @@ class YouTubeRepository(private val context: Context) {
         youtubeAccount.fetchAccountInfo()
     }
 
-    suspend fun getNotifications(): List<NotificationItem> = youtubeAccount.getNotifications()
+    suspend fun getNotificationsPage(continuation: String? = null): NotificationPage? =
+        youtubeAccount.getNotificationsPage(continuation)
 
     // --- Music search (MusicSearch) ---
 

@@ -1,4 +1,5 @@
 package com.ivor.ivormusic.ui.library
+import com.ivor.ivormusic.ui.components.AdaptiveModalSheet
 import com.ivor.ivormusic.ui.components.DismissibleSnackbarHost
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -275,6 +276,45 @@ fun LibraryContent(
     var returnsToCaller by remember { mutableStateOf(false) }
     var selectedAlbumName by remember { mutableStateOf<String?>(null) }
     var selectedAlbumSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    // What the Library already holds of a YouTube album opened as a release
+    // page, shown if the full track list cannot be fetched (offline). Keyed by
+    // the release id, so it never reaches a playlist opened any other way.
+    var selectedPlaylistFallback by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+
+    /**
+     * Open an album from the Library's own songs.
+     *
+     * The Albums tab groups the songs the Library holds - history, likes,
+     * downloads - so for a YouTube album that is often one song, the one that
+     * was played. Opening it as that group showed an album of one. When the
+     * songs name their release (`albumId`, an MPRE browse id) and none is a
+     * device file, the release page opens instead: the whole album, in its
+     * order, with what is already here as the offline fallback. A device
+     * album is its files, so it opens as before.
+     */
+    fun openAlbum(album: String, albumSongs: List<Song>) {
+        val releaseId = albumSongs
+            .mapNotNull { it.albumId?.takeIf { id -> id.startsWith("MPRE") } }
+            .groupingBy { it }.eachCount()
+            .maxByOrNull { it.value }?.key
+        if (releaseId != null && albumSongs.none { it.source == SongSource.LOCAL }) {
+            val first = albumSongs.first()
+            selectedPlaylist = PlaylistDisplayItem(
+                name = album,
+                url = releaseId,
+                uploaderName = first.artist,
+                thumbnailUrl = first.highResThumbnailUrl ?: first.thumbnailUrl,
+                releaseType = first.releaseType,
+                releaseYear = first.releaseYear
+            )
+            selectedPlaylistFallback = releaseId to albumSongs
+            currentRoute = LibraryRoute.Playlist
+        } else {
+            selectedAlbumName = album
+            selectedAlbumSongs = albumSongs
+            currentRoute = LibraryRoute.Album
+        }
+    }
 
     // Handle initial deep link to artist
     LaunchedEffect(initialArtist) {
@@ -319,10 +359,8 @@ fun LibraryContent(
                 it.album.trim().equals(requested, ignoreCase = true)
             }.sortedInAlbumOrder()
             if (albumSongs.isNotEmpty()) {
-                selectedAlbumName = initialAlbum
-                selectedAlbumSongs = albumSongs
                 returnsToCaller = initialReturnToCaller
-                currentRoute = LibraryRoute.Album
+                openAlbum(initialAlbum, albumSongs)
                 onInitialAlbumConsumed()
             }
         }
@@ -436,13 +474,19 @@ fun LibraryContent(
             LibraryRoute.Main -> Spacer(Modifier.fillMaxSize())
             LibraryRoute.Playlist -> {
                 selectedPlaylist?.let { playlist ->
+                    // A release opened from the Library (a saved album, a
+                    // hand-off from Spotlight) reads as an album: its kind,
+                    // artist and year in the header, and no playlist editing.
+                    val isAlbumRelease = playlist.releaseType != null || playlist.id.startsWith("MPRE")
                     PlaylistDetailScreen(
                         playlist = playlist,
                         onBack = { back() },
                         onPlayQueue = onPlayQueue,
                         onShuffleQueue = onShuffleQueue,
                         viewModel = viewModel,
-                        isAlbum = false,
+                        isAlbum = isAlbumRelease,
+                        fallbackSongs = selectedPlaylistFallback
+                            ?.takeIf { it.first == playlist.id }?.second.orEmpty(),
                         onSongLongPress = onSongLongPress,
                         onEnqueueSong = onEnqueueSong,
                         onAddSongsRequest = { currentRoute = LibraryRoute.ImportSongs },
@@ -502,11 +546,7 @@ fun LibraryContent(
                         onPlayQueue = onPlayQueue,
                         onShuffleQueue = onShuffleQueue,
                         onSongClick = onSongClick,
-                        onAlbumClick = { album, songs ->
-                            selectedAlbumName = album
-                            selectedAlbumSongs = songs
-                            currentRoute = LibraryRoute.Album
-                        },
+                        onAlbumClick = { album, songs -> openAlbum(album, songs) },
                         onOpenAlbum = { albumItem ->
                             selectedPlaylist = albumItem
                             currentRoute = LibraryRoute.Playlist
@@ -807,51 +847,106 @@ private fun GroupSortHeader(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Box {
-            var open by remember { mutableStateOf(false) }
-            val sortLabel = stringResource(sort.label)
-            FilledTonalIconButton(
-                onClick = { open = true },
-                modifier = Modifier.size(40.dp),
-                shapes = IconButtonDefaults.shapes()
-            ) {
-                Icon(
-                    Icons.Rounded.SwapVert,
-                    contentDescription = stringResource(R.string.lib_group_sort_cd, sortLabel),
-                    modifier = Modifier.size(20.dp)
+        LibrarySortButton(
+            options = LibraryGroupSort.entries,
+            selected = sort,
+            label = { it.label },
+            icon = { it.icon },
+            onSelect = onSortChange
+        )
+    }
+}
+
+/**
+ * The sort button the Library's tabs share: a tonal swap icon and a menu of
+ * the tab's orders, the current one ticked. One control so Artists, Albums
+ * and Playlists sort the same way.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun <T> LibrarySortButton(
+    options: List<T>,
+    selected: T,
+    label: (T) -> Int,
+    icon: (T) -> ImageVector,
+    onSelect: (T) -> Unit
+) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        val sortLabel = stringResource(label(selected))
+        FilledTonalIconButton(
+            onClick = { open = true },
+            modifier = Modifier.size(40.dp),
+            shapes = IconButtonDefaults.shapes()
+        ) {
+            Icon(
+                Icons.Rounded.SwapVert,
+                contentDescription = stringResource(R.string.lib_group_sort_cd, sortLabel),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                val isSelected = option == selected
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(label(option)),
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    onClick = {
+                        onSelect(option)
+                        open = false
+                    },
+                    leadingIcon = {
+                        Icon(
+                            icon(option),
+                            contentDescription = null,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        if (isSelected) {
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 )
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                LibraryGroupSort.entries.forEach { option ->
-                    val selected = option == sort
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(option.label),
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        onClick = {
-                            onSortChange(option)
-                            open = false
-                        },
-                        leadingIcon = {
-                            Icon(
-                                option.icon,
-                                contentDescription = null,
-                                tint = if (selected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        trailingIcon = {
-                            if (selected) {
-                                Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    )
-                }
-            }
         }
+    }
+}
+
+/**
+ * Sort orders for the Playlists tab. Default is the Library's own order -
+ * device playlists, then saved ones, then the account's in YouTube's order -
+ * which says something none of the others can. Persisted by name, so the
+ * constants are frozen.
+ */
+enum class LibraryPlaylistSort(val label: Int, val icon: ImageVector) {
+    Default(R.string.lib_pl_sort_default, Icons.Rounded.Restore),
+    Name(R.string.lib_group_sort_name, Icons.Rounded.SortByAlpha),
+    MostSongs(R.string.lib_group_sort_songs, Icons.Rounded.LibraryMusic),
+    Creator(R.string.lib_pl_sort_creator, Icons.Rounded.Person);
+
+    fun apply(playlists: List<PlaylistDisplayItem>): List<PlaylistDisplayItem> {
+        val byName = compareBy<PlaylistDisplayItem> { (it.name ?: "").lowercase() }
+        return when (this) {
+            Default -> playlists
+            Name -> playlists.sortedWith(byName)
+            // An unknown count (-1) sorts last rather than as an empty list.
+            MostSongs -> playlists.sortedWith(compareByDescending<PlaylistDisplayItem> { it.itemCount }.then(byName))
+            Creator -> playlists.sortedWith(
+                compareBy<PlaylistDisplayItem> { it.uploaderName.isBlank() }
+                    .thenBy { it.uploaderName.lowercase() }
+                    .then(byName)
+            )
+        }
+    }
+
+    companion object {
+        fun from(name: String?): LibraryPlaylistSort = entries.firstOrNull { it.name == name } ?: Default
     }
 }
 
@@ -1165,7 +1260,9 @@ fun LibraryMainScreen(
                             isLoggedIn = isYouTubeConnected,
                             importAction = { PlaylistImportButton(viewModel) },
                             onCreatePlaylist = onCreatePlaylist,
-                            fromVideoMode = viewModel.videoPlaylistsForMusic.collectAsState().value
+                            fromVideoMode = viewModel.videoPlaylistsForMusic.collectAsState().value,
+                            sort = LibraryPlaylistSort.from(themePreferences.libraryPlaylistSort.collectAsState().value),
+                            onSortChange = { themePreferences.setLibraryPlaylistSort(it.name) }
                         )
                     }
                     LibraryTab.Artists -> {
@@ -1724,12 +1821,18 @@ fun PlaylistsGrid(
     /** The empty state's own way out: it tells the user to make a playlist. */
     onCreatePlaylist: () -> Unit,
     /** Video mode's device playlists; see HomeViewModel.videoPlaylistsForMusic. */
-    fromVideoMode: List<PlaylistDisplayItem> = emptyList()
+    fromVideoMode: List<PlaylistDisplayItem> = emptyList(),
+    /** The tab's sort, persisted by the caller. No default: one call site, wired. */
+    sort: LibraryPlaylistSort,
+    onSortChange: (LibraryPlaylistSort) -> Unit
 ) {
     var showHiddenSheet by remember { mutableStateOf(false) }
+    val sortedPlaylists = remember(playlists, sort) { sort.apply(playlists) }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        // 150dp cells: two across any phone, as the grid always was, and more
+        // as the window widens. 200dp gave one cover the width of the screen.
+        columns = GridCells.Adaptive(150.dp),
         contentPadding = PaddingValues(
             top = 8.dp,
             bottom = contentPadding.calculateBottomPadding() + 16.dp,
@@ -1769,6 +1872,15 @@ fun PlaylistsGrid(
                         modifier = Modifier.weight(1f)
                     )
                     importAction()
+                    if (playlists.size > 1) {
+                        LibrarySortButton(
+                            options = LibraryPlaylistSort.entries,
+                            selected = sort,
+                            label = { it.label },
+                            icon = { it.icon },
+                            onSelect = onSortChange
+                        )
+                    }
                     if (hiddenPlaylists.isNotEmpty()) {
                         TextButton(onClick = { showHiddenSheet = true }) {
                             Icon(
@@ -1805,7 +1917,7 @@ fun PlaylistsGrid(
             }
         }
 
-        items(playlists) { playlist ->
+        items(sortedPlaylists) { playlist ->
             val isLocalPlaylist = localPlaylistIds.contains(playlist.id)
             // Kept, not owned: renaming or deleting one would be a write
             // against somebody else's playlist, so it gets "Remove from
@@ -1897,7 +2009,7 @@ private fun HiddenPlaylistsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    AdaptiveModalSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainer,

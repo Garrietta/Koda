@@ -15,6 +15,12 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
+/** Songs a generated mix (`RD...`) is read to; its continuation chain need not end. */
+private const val MIX_SONG_CEILING = 500
+
+/** Continuation pages any playlist walk follows before it stops. */
+private const val MAX_PLAYLIST_PAGES = 80
+
 /**
  * The songs of a YouTube Music playlist or album, and the account's own
  * library of playlists and likes.
@@ -73,7 +79,47 @@ internal class MusicPlaylists(
      * following its first token can add recommendations to the library.
      */
     suspend fun getLikedMusic(): List<Song> = withContext(Dispatchers.IO) {
-        getPlaylistInternal("LM").distinctBy { it.id }
+        if (!sessionManager.isLoggedIn()) {
+            return@withContext getPlaylistInternal("LM")
+        }
+        
+        try {
+            val allSongs = mutableListOf<Song>()
+            var continuationToken: String? = null
+            var pageCount = 0
+            val maxPages = 500 // Increased limit to fetch all liked songs
+            
+            do {
+                val json = if (continuationToken == null) {
+                    musicApi.fetchInternalApi("FEmusic_liked_videos")
+                } else {
+                    musicApi.fetchContinuation(continuationToken)
+                }
+                
+                if (json.isEmpty()) break
+                
+                val songs = parseSongsFromInternalJson(json)
+                allSongs.addAll(songs)
+                
+                // Extract continuation token for next page
+                continuationToken = extractContinuationToken(json)
+                pageCount++
+                
+                KLog.d(YOUTUBE_TAG, "Liked songs page $pageCount: ${songs.size} songs, total: ${allSongs.size}")
+                
+            } while (continuationToken != null && pageCount < maxPages)
+            
+            if (allSongs.isNotEmpty()) {
+                return@withContext allSongs.distinctBy { it.id }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            KLog.e(YOUTUBE_TAG, "Error fetching liked music", e)
+        }
+        
+        // Fallback to NewPipe method
+        getPlaylistInternal("LM")
     }
 
     /**
@@ -111,6 +157,8 @@ internal class MusicPlaylists(
 
             // The library grid can include "Your Likes" (VLLM) which we already synthesized
             playlists.distinctBy { it.id }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             KLog.e(YOUTUBE_TAG, "Error fetching user playlists", e)
             emptyList()
@@ -145,6 +193,8 @@ internal class MusicPlaylists(
                 try {
                     currentPage = playlistExtractor.getPage(currentPage.nextPage)
                     allItems.addAll(currentPage.items.filterIsInstance<StreamInfoItem>())
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     newPipeComplete = false
                     KLog.w(
@@ -209,6 +259,7 @@ internal class MusicPlaylists(
         } else {
             "VL$playlistId"
         }
+        val isMix = browseId.removePrefix("VL").startsWith("RD")
         val allSongs = mutableListOf<Song>()
         val seenTokens = mutableSetOf<String>()
         var json = musicApi.browseMusic(browseId)
@@ -217,11 +268,33 @@ internal class MusicPlaylists(
 
         while (true) {
             if (json.isBlank()) return PlaylistLoadResult(allSongs, complete = false)
-            allSongs += parseSongsFromInternalJson(
+            val page = parseSongsFromInternalJson(
                 json,
                 preserveDuplicates = !likedSongs,
                 listItemsOnly = likedSongs,
             )
+            if (isMix) {
+                // A mix is topped up as it is read and repeats songs to do it;
+                // a repeat there is filler, not a second occurrence.
+                val seen = allSongs.mapTo(HashSet()) { it.id }
+                page.filterTo(allSongs) { seen.add(it.id) }
+                // [verified October 2026] A mix's chain need not end: one
+                // personal mix still offered a token after 110 pages and 2,600
+                // songs, and the walk below would follow it for as long as the
+                // screen waited. The ceiling still holds a Replay Mix whole
+                // (412 songs, a chain that does end).
+                if (allSongs.size >= MIX_SONG_CEILING) {
+                    return PlaylistLoadResult(allSongs.take(MIX_SONG_CEILING), complete = true)
+                }
+            } else {
+                allSongs += page
+            }
+            if (seenTokens.size >= MAX_PLAYLIST_PAGES) {
+                // Past YouTube's 5,000-item playlist limit at 100 rows a page:
+                // whatever this is, it is not ending.
+                KLog.w(YOUTUBE_TAG, "Stopped playlist $playlistId at ${allSongs.size} songs, page limit")
+                return PlaylistLoadResult(allSongs, complete = true)
+            }
             val token = extractPlaylistContinuationToken(json)
                 ?: return PlaylistLoadResult(allSongs, complete = true)
             if (!seenTokens.add(token)) {

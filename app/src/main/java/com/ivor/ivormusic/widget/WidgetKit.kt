@@ -46,8 +46,9 @@ import com.ivor.ivormusic.MainActivity
 import com.ivor.ivormusic.R
 
 /**
- * The widget family's design kit. Six widgets share it; none of them draws a
- * control of its own.
+ * The widget family's design kit. Every widget shares it; only Pixel draws a
+ * control of its own, because a Material button on pixel art is two styles in
+ * one cell.
  *
  * **Controls are Material components, decoration is expressive.** Glance draws
  * a ripple for every click target as a rectangle over the view bounds, and 1.1
@@ -65,9 +66,8 @@ import com.ivor.ivormusic.R
  * round primary-filled control per widget, everything else tonal and square.
  *
  * **Color is Koda's palette**, resolved by [KodaWidgetTheme], not raw system
- * dynamic color and not sampled out of the artwork. The single literal color is
- * the scrim over full-bleed art, which is an image-legibility device rather
- * than a palette choice.
+ * dynamic color and not sampled out of the artwork. There is no literal color
+ * in widget content: nothing is drawn over the cover, so nothing needs a scrim.
  *
  * Container radii come from tinted shape drawables because
  * `GlanceModifier.cornerRadius` is a no-op below API 31 and minSdk here is 30;
@@ -211,16 +211,20 @@ internal fun WidgetSquareButton(
 }
 
 /**
- * A mode toggle. Selected fills with secondaryContainer against the plain
- * surfaceVariant of everything around it, so the state is legible without a
- * label and without borrowing the hero's primary.
+ * A secondary control on a card, one tonal step off the card itself.
+ *
+ * [WidgetSquareButton]'s surfaceVariant default is for controls standing on
+ * the wallpaper (Bloom, Vinyl). On a card it is the wrong family:
+ * `widgetBackground` is secondaryContainer moved five tones lighter in light
+ * and ten darker in dark (Glance's own adjustment, read off the AAR), so the
+ * unadjusted secondaryContainer is exactly one visible step from the card in
+ * both themes and stays in its hue, where surfaceVariant read as a grey patch.
  */
 @Composable
-internal fun WidgetToggleButton(
+internal fun CardSquareButton(
     @DrawableRes iconRes: Int,
     description: String,
     action: Action,
-    selected: Boolean,
     size: Dp = 44.dp,
 ) {
     WidgetSquareButton(
@@ -228,16 +232,8 @@ internal fun WidgetToggleButton(
         description = description,
         action = action,
         size = size,
-        background = if (selected) {
-            GlanceTheme.colors.secondaryContainer
-        } else {
-            GlanceTheme.colors.surfaceVariant
-        },
-        content = if (selected) {
-            GlanceTheme.colors.onSecondaryContainer
-        } else {
-            GlanceTheme.colors.onSurfaceVariant
-        },
+        background = GlanceTheme.colors.secondaryContainer,
+        content = GlanceTheme.colors.onSecondaryContainer,
     )
 }
 
@@ -278,28 +274,32 @@ internal fun WidgetModeToggles(
 }
 
 /**
- * Previous, hero, next - five children, which matters: a Glance container
- * silently truncates past ten, so groups are kept small and composed rather
- * than flattened into their parent.
+ * Previous, hero, next on a card - five children, which matters: a Glance
+ * container silently truncates past ten, so groups are kept small and composed
+ * rather than flattened into their parent. [withPrevious] false drops to hero
+ * and next, for a column too narrow to hold all three at real touch sizes.
  */
 @Composable
-internal fun WidgetTransportRow(
+internal fun CardTransportRow(
     snapshot: PlayerWidgetSnapshot,
-    heroSize: Dp = 56.dp,
-    sideSize: Dp = 48.dp,
+    heroSize: Dp = 48.dp,
+    sideSize: Dp = 40.dp,
     gap: Dp = 6.dp,
+    withPrevious: Boolean = true,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        WidgetSquareButton(
-            iconRes = R.drawable.ic_media_previous,
-            description = widgetString(R.string.widget_action_previous),
-            action = widgetTransportAction(WidgetActionActivity.ACTION_PREVIOUS),
-            size = sideSize,
-        )
-        Spacer(modifier = GlanceModifier.width(gap))
+        if (withPrevious) {
+            CardSquareButton(
+                iconRes = R.drawable.ic_media_previous,
+                description = widgetString(R.string.widget_action_previous),
+                action = actionRunCallback<SkipPreviousAction>(),
+                size = sideSize,
+            )
+            Spacer(modifier = GlanceModifier.width(gap))
+        }
         HeroPlayButton(isPlaying = snapshot.isPlaying, size = heroSize)
         Spacer(modifier = GlanceModifier.width(gap))
-        WidgetSquareButton(
+        CardSquareButton(
             iconRes = R.drawable.ic_media_next,
             description = widgetString(R.string.widget_action_next),
             action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
@@ -307,6 +307,10 @@ internal fun WidgetTransportRow(
         )
     }
 }
+
+/** The width [CardTransportRow] needs with all three controls. */
+internal fun cardTransportWidth(heroSize: Dp, sideSize: Dp, gap: Dp): Dp =
+    sideSize * 2 + heroSize + gap * 2
 
 // -------------------------------------------------------------------- artwork
 
@@ -351,17 +355,6 @@ internal fun WidgetArtwork(
     }
 }
 
-/**
- * The one place a literal color is allowed: legibility over arbitrary album
- * art. Black at alpha with white on top clears 4.5:1 against every cover, which
- * no theme role can promise over an image.
- */
-internal object OverArtwork {
-    val scrim: ColorProvider = ColorProvider(Color(0f, 0f, 0f, 0.62f))
-    val primaryText: ColorProvider = ColorProvider(Color.White)
-    val secondaryText: ColorProvider = ColorProvider(Color(1f, 1f, 1f, 0.76f))
-}
-
 // ----------------------------------------------------------------------- text
 
 @Composable
@@ -369,11 +362,13 @@ internal fun WidgetTitle(
     text: String,
     color: ColorProvider = GlanceTheme.colors.onSurface,
     fontSize: TextUnit = 16.sp,
+    fontWeight: FontWeight = FontWeight.Bold,
+    maxLines: Int = 1,
 ) {
     Text(
         text = text,
-        style = TextStyle(color = color, fontSize = fontSize, fontWeight = FontWeight.Bold),
-        maxLines = 1,
+        style = TextStyle(color = color, fontSize = fontSize, fontWeight = fontWeight),
+        maxLines = maxLines,
     )
 }
 
@@ -446,6 +441,102 @@ private fun EmptyMark(size: Dp) {
         )
     }
 }
+
+/*
+ * There is no progress strip in the kit on purpose. The snapshot's position is
+ * the one read at the last playback event, and nothing ticks it forward in a
+ * RemoteViews tree, so a bar drawn from it sat at wherever the song was when it
+ * started or was last paused - a number that was wrong almost all the time it
+ * was on screen. Duration and position stay in the snapshot for anything that
+ * can be honest about them.
+ */
+
+// Restored from the pre-merge WidgetKit: upstream's rework deleted these,
+// but the kept Deck/Console widgets (and WidgetModeToggles) still call them.
+internal fun WidgetToggleButton(
+    @DrawableRes iconRes: Int,
+    description: String,
+    action: Action,
+    selected: Boolean,
+    size: Dp = 44.dp,
+) {
+    WidgetSquareButton(
+        iconRes = iconRes,
+        description = description,
+        action = action,
+        size = size,
+        background = if (selected) {
+            GlanceTheme.colors.secondaryContainer
+        } else {
+            GlanceTheme.colors.surfaceVariant
+        },
+        content = if (selected) {
+            GlanceTheme.colors.onSecondaryContainer
+        } else {
+            GlanceTheme.colors.onSurfaceVariant
+        },
+    )
+}
+
+/** Shuffle and repeat, the pair every widget that has one has both of. */
+@Composable
+@Composable
+internal fun WidgetTransportRow(
+    snapshot: PlayerWidgetSnapshot,
+    heroSize: Dp = 56.dp,
+    sideSize: Dp = 48.dp,
+    gap: Dp = 6.dp,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        WidgetSquareButton(
+            iconRes = R.drawable.ic_media_previous,
+            description = widgetString(R.string.widget_action_previous),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_PREVIOUS),
+            size = sideSize,
+        )
+        Spacer(modifier = GlanceModifier.width(gap))
+        HeroPlayButton(isPlaying = snapshot.isPlaying, size = heroSize)
+        Spacer(modifier = GlanceModifier.width(gap))
+        WidgetSquareButton(
+            iconRes = R.drawable.ic_media_next,
+            description = widgetString(R.string.widget_action_next),
+            action = widgetTransportAction(WidgetActionActivity.ACTION_NEXT),
+            size = sideSize,
+        )
+    }
+}
+
+// -------------------------------------------------------------------- artwork
+
+
+/**
+ * The one place a literal color is allowed: legibility over arbitrary album
+ * art. Black at alpha with white on top clears 4.5:1 against every cover, which
+ * no theme role can promise over an image.
+ */
+internal object OverArtwork {
+    val scrim: ColorProvider = ColorProvider(Color(0f, 0f, 0f, 0.62f))
+    val primaryText: ColorProvider = ColorProvider(Color.White)
+    val secondaryText: ColorProvider = ColorProvider(Color(1f, 1f, 1f, 0.76f))
+}
+
+// ----------------------------------------------------------------------- text
+
+@Composable
+internal fun WidgetTitle(
+    text: String,
+    color: ColorProvider = GlanceTheme.colors.onSurface,
+    fontSize: TextUnit = 16.sp,
+) {
+    Text(
+        text = text,
+        style = TextStyle(color = color, fontSize = fontSize, fontWeight = FontWeight.Bold),
+        maxLines = 1,
+    )
+}
+
+
+
 
 /** The thin progress strip. Its own composable so all six agree on the look. */
 @Composable

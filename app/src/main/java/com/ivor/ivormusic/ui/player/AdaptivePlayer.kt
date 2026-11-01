@@ -309,7 +309,7 @@ internal fun PlayerQueuePane(
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val queue by viewModel.playOrderQueue.collectAsState()
+    val queue by viewModel.currentQueue.collectAsState()
     val currentQueueItemId by viewModel.currentQueueItemId.collectAsState()
     val isDjMixPlaying by viewModel.isDjMixPlaying.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
@@ -322,8 +322,8 @@ internal fun PlayerQueuePane(
     val reorder = rememberQueueReorderState(
         listState = listState,
         keys = rowKeys,
-        onMove = { from, to -> viewModel.movePlayOrderItem(from, to, persist = false) },
-        onSettle = { viewModel.commitQueueOrder() },
+        onMove = { from, to -> viewModel.moveQueueItem(from, to) },
+        onSettle = {},
         dragEnabled = !isDjMixPlaying,
     )
     val removal = rememberQueueRemoval(onUndo = { viewModel.undoQueueRemoval() })

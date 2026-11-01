@@ -203,6 +203,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun resolvePlaylistPageFromLink(playlistId: String): PlaylistPageInfo? {
         return try {
             youtubeRepository.getPlaylistHeader(playlistId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -507,6 +509,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (!fetchedCollections.isEmpty() || _discoveryCollections.value.isEmpty()) {
                     _discoveryCollections.value = fetchedCollections
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 KLog.w("HomeViewModel", "Discovery recommendations failed", e)
             } finally {
@@ -1335,6 +1339,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _hiddenNotificationCount = MutableStateFlow(0)
     val hiddenNotificationCount: StateFlow<Int> = _hiddenNotificationCount.asStateFlow()
 
+    /** The inbox pages read since the sheet last loaded, in YouTube's order. */
+    private var freshNotifications: List<com.ivor.ivormusic.data.NotificationItem> = emptyList()
+
+    /** Where the next inbox page starts; null once the last page has been read, or before the first. */
+    private var notificationsCursor: String? = null
+
+    private val _hasMoreNotifications = MutableStateFlow(false)
+    val hasMoreNotifications: StateFlow<Boolean> = _hasMoreNotifications.asStateFlow()
+
+    private val _isNotificationsLoadingMore = MutableStateFlow(false)
+    val isNotificationsLoadingMore: StateFlow<Boolean> = _isNotificationsLoadingMore.asStateFlow()
+
+    /** The last request for an older page failed; the sheet offers it again rather than retrying alone. */
+    private val _notificationsLoadMoreFailed = MutableStateFlow(false)
+    val notificationsLoadMoreFailed: StateFlow<Boolean> = _notificationsLoadMoreFailed.asStateFlow()
+
     // Video library tab state. This half is the signed-in account's own
     // playlists; the device's are merged in by [videoPlaylists] below.
     private val _videoPlaylists = MutableStateFlow<List<com.ivor.ivormusic.data.VideoPlaylist>>(emptyList())
@@ -1607,9 +1627,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _isVideoPlaylistsLoading.value = false
         _videoPlaylists.value = emptyList()
         notificationsJob?.cancel()
+        notificationsMoreJob?.cancel()
         _isNotificationsLoading.value = false
+        _isNotificationsLoadingMore.value = false
+        _notificationsLoadMoreFailed.value = false
         _notifications.value = emptyList()
         allNotifications = emptyList()
+        freshNotifications = emptyList()
+        notificationsCursor = null
+        _hasMoreNotifications.value = false
         _hiddenNotificationCount.value = 0
         _selectedGroupId.value = null
 
@@ -1711,6 +1737,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork)
         caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
             caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (e: Exception) {
         // Unknown is treated as connected, so a permissions or API oddity does
         // not turn every empty feed into a bogus "check your connection".
@@ -1816,6 +1844,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 KLog.w("HomeViewModel", "Subscription feed refresh rate limited", e)
                 rateLimited = true
                 _subscriptionFeedError.value = rateLimitMessage()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 KLog.e("HomeViewModel", "Subscription feed refresh failed", e)
                 _subscriptionFeedError.value =
@@ -2038,6 +2068,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _selectedChannelFeedError.value =
                         app.getString(R.string.hvm_channel_feed_error, channel.name)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 KLog.e("HomeViewModel", "Selected channel feed failed", e)
                 _selectedChannelFeedError.value =
@@ -2433,6 +2465,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
                 backfillLocalChannelProfiles()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 KLog.e("HomeViewModel", "Subscription import failed", e)
                 onResult(
@@ -2493,6 +2527,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         unresolved = 0
                     )
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 KLog.e("HomeViewModel", "Account subscription copy failed", e)
                 onResult(
@@ -2523,6 +2559,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     getApplication<Application>().contentResolver
                         .openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                     true
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     KLog.e("HomeViewModel", "Subscription export failed", e)
                     false
@@ -2916,22 +2954,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var notificationsJob: kotlinx.coroutines.Job? = null
+    private var notificationsMoreJob: kotlinx.coroutines.Job? = null
 
     private val notificationHistory by lazy {
         com.ivor.ivormusic.data.NotificationHistoryStore(app)
     }
 
     /**
-     * Load the notification inbox. Requires login.
+     * Load the first page of the notification inbox. Requires login.
      *
      * What this device remembers is shown at once and the fresh inbox is
-     * folded into it when it arrives. The profile is read before the request
-     * and checked after it, so an inbox that lands after a switch is neither
-     * shown to nor remembered for the profile switched to.
+     * folded into it when it arrives; older pages follow as the sheet scrolls
+     * ([loadMoreNotifications]). The profile is read before the request and
+     * checked after it, so an inbox that lands after a switch is neither shown
+     * to nor remembered for the profile switched to.
      */
     fun loadNotifications(force: Boolean = false) {
         if (_isNotificationsLoading.value) return
         if (_notifications.value.isNotEmpty() && !force) return
+        // A refresh starts the inbox again; an older page still on its way
+        // would land after the new first page.
+        notificationsMoreJob?.cancel()
+        _isNotificationsLoadingMore.value = false
         notificationsJob = viewModelScope.launch {
             _isNotificationsLoading.value = true
             try {
@@ -2942,18 +2986,58 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         withContext(Dispatchers.IO) { notificationHistory.remembered(profileId) }
                     )
                 }
-                val fresh = youtubeRepository.getNotifications()
+                val page = youtubeRepository.getNotificationsPage()
                 if (com.ivor.ivormusic.data.ProfileManager.activeProfileId(app) != profileId) return@launch
-                // An empty answer is as likely a failed request as an empty
-                // inbox, and must not present the remembered items as gone.
-                if (fresh.isNotEmpty()) {
+                // An empty answer is as likely a session YouTube no longer
+                // accepts as an empty inbox, and must not present the
+                // remembered items as gone.
+                if (page != null && page.items.isNotEmpty()) {
+                    freshNotifications = page.items
+                    notificationsCursor = page.continuation
+                    _hasMoreNotifications.value = page.continuation != null
+                    _notificationsLoadMoreFailed.value = false
                     publishNotifications(
                         profileId,
-                        withContext(Dispatchers.IO) { notificationHistory.merge(profileId, fresh) }
+                        withContext(Dispatchers.IO) { notificationHistory.merge(profileId, freshNotifications) }
                     )
                 }
             } finally {
                 _isNotificationsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Read the next, older page of the inbox, when the sheet has scrolled to
+     * the end of the ones it has. A failure keeps the cursor so the same page
+     * can be asked for again.
+     */
+    fun loadMoreNotifications() {
+        val cursor = notificationsCursor ?: return
+        if (_isNotificationsLoading.value || _isNotificationsLoadingMore.value) return
+        notificationsMoreJob = viewModelScope.launch {
+            _isNotificationsLoadingMore.value = true
+            _notificationsLoadMoreFailed.value = false
+            try {
+                val profileId = com.ivor.ivormusic.data.ProfileManager.activeProfileId(app)
+                val page = youtubeRepository.getNotificationsPage(cursor)
+                if (com.ivor.ivormusic.data.ProfileManager.activeProfileId(app) != profileId) return@launch
+                if (notificationsCursor != cursor) return@launch
+                if (page == null) {
+                    _notificationsLoadMoreFailed.value = true
+                    return@launch
+                }
+                val known = freshNotifications.mapTo(HashSet()) { it.id }
+                freshNotifications = freshNotifications +
+                    page.items.filter { it.id.isBlank() || known.add(it.id) }
+                notificationsCursor = page.continuation
+                _hasMoreNotifications.value = page.continuation != null
+                publishNotifications(
+                    profileId,
+                    withContext(Dispatchers.IO) { notificationHistory.merge(profileId, freshNotifications) }
+                )
+            } finally {
+                _isNotificationsLoadingMore.value = false
             }
         }
     }
@@ -2963,9 +3047,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         items: List<com.ivor.ivormusic.data.NotificationItem>,
     ) {
         val hidden = notificationHistory.hiddenIds(profileId)
+        // While YouTube still has older pages, an item only this device
+        // remembers may just be on one not read yet; "Kept on this device"
+        // waits for the inbox's real end rather than claim it was dropped.
+        val shown = if (notificationsCursor != null) items.filterNot { it.remembered } else items
         allNotifications = items
-        _notifications.value = items.filterNot { it.id in hidden }
-        _hiddenNotificationCount.value = items.count { it.id in hidden }
+        _notifications.value = shown.filterNot { it.id in hidden }
+        _hiddenNotificationCount.value = shown.count { it.id in hidden }
     }
 
     /** Take one notification out of the inbox on this device. YouTube is not told. */
@@ -3119,6 +3207,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (publishHomeRecommendations(fetched, rotate = false)) {
                     recommendationsLoadedAtMs = System.currentTimeMillis()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // The feed keeps whatever it already had - both branches above
                 // only assign a non-empty result - so a failure here is not
@@ -3222,6 +3312,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         songSearchCache.get(key)?.let { return it }
         return try {
             youtubeRepository.search(query).also { songSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3237,6 +3329,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             youtubeRepository.searchNext(query).also {
                 songSearchCache.append(searchKey(query), it)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3265,7 +3359,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val likedLocalSongs = _songs.value.filter { it.id in likedIds }
             val ytLiked = _likedSongs.value.ifEmpty {
                 if (sessionManager.isLoggedIn()) {
-                    try { youtubeRepository.getLikedMusic() } catch (e: Exception) { emptyList() }
+                    try {
+                        youtubeRepository.getLikedMusic()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
                 } else emptyList()
             }
             return (manuallyLiked + ytLiked + likedLocalSongs).distinctBy { it.id }
@@ -3308,6 +3408,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         artistSearchCache.get(key)?.let { return it }
         return try {
             youtubeRepository.searchArtists(query).also { artistSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3319,6 +3421,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         albumSearchCache.get(key)?.let { return it }
         return try {
             youtubeRepository.searchAlbums(query).also { albumSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3330,6 +3434,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         playlistSearchCache.get(key)?.let { return it }
         return try {
             youtubeRepository.searchPlaylists(query).also { playlistSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3341,6 +3447,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun searchArtistSongs(artistName: String): List<Song> {
         return try {
             youtubeRepository.search(artistName)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3349,6 +3457,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun getArtistDetails(artistId: String): Pair<List<Song>, List<PlaylistDisplayItem>> {
         return try {
             youtubeRepository.getArtistDetails(artistId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Pair(emptyList(), emptyList())
         }
@@ -3422,6 +3532,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun getRadioSongs(videoId: String): List<Song> {
         return try {
             youtubeRepository.getRelatedSongs(videoId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3496,6 +3608,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 // Reload local songs with exclusions and playlists
                 playlistRepository.refreshPlaylists()
                 _songs.value = localRepository.getSongs(excludedFolders, manualScan)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Silently fail
             } finally {
@@ -3694,6 +3808,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _trendingVideos.value = _trendingVideos.value + fresh
                     rememberShown(fresh)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Handle error silently; the next scroll will retry
             } finally {
@@ -3924,6 +4040,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             youtubeRepository.searchVideoPlaylists(query)
                 .also { videoPlaylistSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -3944,6 +4062,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (!channelId.startsWith("UC")) return null
         return try {
             youtubeRepository.getChannelPage(channelId)?.header
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -3956,6 +4076,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         channelSearchCache.get(key)?.let { return it }
         return try {
             youtubeRepository.searchChannels(query).also { channelSearchCache.put(key, it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -4064,6 +4186,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 videoFeedContinuation = continuation
                 videoFeedExhausted = false
                 rememberShown(result)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Handle error silently; the list keeps its previous contents
             } finally {
@@ -4083,6 +4207,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun resolveVideoFromLink(videoId: String): VideoItem? {
         return try {
             youtubeRepository.getWatchNextData(videoId).updatedVideoItem
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -4092,6 +4218,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun resolvePlaylistSongsFromLink(playlistId: String): List<Song> {
         return try {
             youtubeRepository.getPlaylist(playlistId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -4101,6 +4229,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun resolvePlaylistVideosFromLink(playlistId: String): List<VideoItem> {
         return try {
             youtubeRepository.getPlaylistVideos(playlistId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
