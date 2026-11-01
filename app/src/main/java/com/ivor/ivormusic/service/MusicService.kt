@@ -1831,6 +1831,9 @@ class MusicService : MediaLibraryService() {
     // (the inline browse tree moved to MusicBrowseTree; these feed
     // the onAddMediaItems intercepts above).
 
+    private fun String?.toArtworkUri(): Uri? =
+        this?.takeIf { it.isNotBlank() }?.let(Uri::parse)
+
     private fun mapSongToMediaItem(song: Song): MediaItem {
         val builder = MediaItem.Builder()
             .setMediaId(song.id)

@@ -1952,6 +1952,7 @@ private fun ExpressiveQueueView(
     }
 }
 
+@Composable
 private fun ClassicPanelEntry(
     onSelect: (ClassicTab) -> Unit,
     modifier: Modifier = Modifier
