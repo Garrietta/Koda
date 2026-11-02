@@ -1257,11 +1257,20 @@ fun SettingsScreen(
         // it has not covered yet shows the hub - search pill first - on
         // every forward navigation. The backdrop covers the hub the moment
         // a page is open, so the strip shows background color instead.
-        // Hidden while peeling or while a peel is committed, so the peel
-        // preview still reveals the hub, and gone on the hub itself so the
-        // back-to-hub reveal is unchanged. At rest behind an opaque page
-        // it is invisible and harmless.
-        if (page != SettingsPage.HUB && !isPeeling && !peelCommitted) {
+        // Hidden only while peeling to the hub, so that preview still
+        // reveals the hub itself. A peel to a parent page (a nested page
+        // going back to Customization, or Video home to Content) keeps the
+        // backdrop up: the shrinking page then reveals background color,
+        // never the hub, which would be the wrong screen flashing first.
+        // Gone on the hub itself so the back-to-hub reveal is unchanged.
+        // At rest behind an opaque page it is invisible and harmless.
+        // A cancelled nested peel springs back over the backdrop with no
+        // pop, since the backdrop never left; a cancelled hub peel springs
+        // back over the hub preview and the backdrop returns behind the
+        // opaque page, invisibly.
+        if (page != SettingsPage.HUB &&
+            !((isPeeling || peelCommitted) && page.parent == SettingsPage.HUB)
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
