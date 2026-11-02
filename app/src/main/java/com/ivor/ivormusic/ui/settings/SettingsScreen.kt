@@ -157,6 +157,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -216,6 +217,8 @@ import com.ivor.ivormusic.data.PlayerStyle
 import com.ivor.ivormusic.ui.theme.ThemeMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -612,8 +615,27 @@ fun SettingsScreen(
             }
             when {
                 // Committed a real drag: finish the move it started.
+                // The swap to the parent happens when the page is
+                // visually gone, not when the spring settles: a
+                // critically damped spring's exponential tail is
+                // visually finished long before it reports done, and
+                // waiting for it leaves ~100ms of pure backdrop
+                // between the faded-out page and the parent popping
+                // in. At value 1.9 the page is at alpha 0.1 and
+                // translated 95% off-screen, so the pop replaces a
+                // sliver, not a page. The remaining tail is cancelled
+                // by the landing cleanup (LaunchedEffect(page) snaps
+                // the value to 0), and the cancelled animateTo falls
+                // into the catch below, whose spring-back is a no-op
+                // at value 0.
                 hasPage && dragged -> {
                     peelCommitted = true
+                    coroutineScope.launch {
+                        snapshotFlow { peel.value }
+                            .filter { it >= 1.9f }
+                            .first()
+                        page = page.parent
+                    }
                     peel.animateTo(
                         targetValue = 2f,
                         animationSpec = spring(
@@ -621,6 +643,8 @@ fun SettingsScreen(
                             stiffness = Spring.StiffnessMedium
                         )
                     )
+                    // Fallback if the threshold above somehow never
+                    // fired: never strand the page on a finished drag.
                     page = page.parent
                 }
                 // A button press, or three-button navigation: no gesture to
