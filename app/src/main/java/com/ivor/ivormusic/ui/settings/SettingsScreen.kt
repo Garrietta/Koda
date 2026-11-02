@@ -1289,16 +1289,28 @@ fun SettingsScreen(
                         peelCommitted -> EnterTransition.None togetherWith ExitTransition.None
                         // Going deeper slides in from the trailing edge; coming
                         // back reverses it, so the hierarchy stays legible.
+                        // Slides only, no fades, on purpose: the hub stays
+                        // composed underneath this layer for the peel preview,
+                        // and a fading page goes translucent over it, so the
+                        // hub - search pill first - bleeds straight through
+                        // every tap navigation. An opaque sliding page can
+                        // only ever reveal the hub by leaving, never through
+                        // itself, so the search bar stays put on the hub.
                         targetState != SettingsPage.HUB ->
-                            (slideInHorizontally(slide) { it / 5 } + fadeIn(tween(200))) togetherWith
-                                (fadeOut(tween(130)) + slideOutHorizontally(slide) { -it / 12 })
+                            slideInHorizontally(slide) { it / 5 } togetherWith
+                                slideOutHorizontally(slide) { -it / 12 }
                         // Returning by button. The page now carries the whole
                         // movement, where it used to share it with a hub that
                         // slid in from the leading edge - the hub is underneath
                         // and staying put, so a token 1/12 nudge would read as
                         // the page dissolving rather than leaving.
-                        else -> fadeIn(tween(200)) togetherWith
-                            (fadeOut(tween(180)) + slideOutHorizontally(slide) { it / 3 })
+                        // Same no-fade rule as above, for the way out: the
+                        // outgoing page must stay opaque while it slides
+                        // away, or the hub shows through it on the way out.
+                        // The entering content here is the layer's empty hub
+                        // state, so None reads exactly like the old fade-in.
+                        else -> EnterTransition.None togetherWith
+                            slideOutHorizontally(slide) { it / 3 }
                     }
                     // No size animation, and no clipping to one. The hub state
                     // of this layer is empty, so the default SizeTransform
