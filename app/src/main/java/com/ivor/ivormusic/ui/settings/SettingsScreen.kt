@@ -1251,6 +1251,24 @@ fun SettingsScreen(
 
         }
 
+        // Opaque backdrop between the hub and the page layer. The hub stays
+        // composed underneath for the peel preview, but a sliding page
+        // starts offset from the trailing edge, so without this the strip
+        // it has not covered yet shows the hub - search pill first - on
+        // every forward navigation. The backdrop covers the hub the moment
+        // a page is open, so the strip shows background color instead.
+        // Hidden while peeling or while a peel is committed, so the peel
+        // preview still reveals the hub, and gone on the hub itself so the
+        // back-to-hub reveal is unchanged. At rest behind an opaque page
+        // it is invisible and harmless.
+        if (page != SettingsPage.HUB && !isPeeling && !peelCommitted) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            )
+        }
+
         // The open page, riding on top of the hub.
         Box(
             modifier = Modifier
