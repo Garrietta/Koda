@@ -101,7 +101,13 @@ internal fun stripSessionNumberFromLine(line: String): String? {
 
 internal fun sanitizeAiDjMix(mix: AiDjMix): AiDjMix = AiDjMix(
     title = stripSessionNumberFromTitle(mix.title),
-    tracks = mix.tracks.map { it.copy(djLine = it.djLine?.let(::stripSessionNumberFromLine)) },
+    // Duplicate guard: the DJ page keys its rows by song id, so a mix
+    // carrying the same song twice crashes the list on scroll
+    // (IllegalArgumentException: Key ... was already used) — and a cached
+    // copy crashes again on every relaunch. Drop later copies, keep the
+    // first. This also heals mixes cached before the builder dedup below.
+    tracks = mix.tracks.distinctBy { it.song.id }
+        .map { it.copy(djLine = it.djLine?.let(::stripSessionNumberFromLine)) },
 )
 
 /**
@@ -889,7 +895,7 @@ class AiDjRepository(context: Context) {
         }
 
         // Resolve discoveries in parallel via YouTube search.
-        val tracks = items.map { item ->
+        val resolved = items.map { item ->
             async {
                 val song = when {
                     item.libraryIndex != null -> pool[item.libraryIndex - 1]
@@ -899,6 +905,17 @@ class AiDjRepository(context: Context) {
                 song?.let { AiDjTrack(song = it, djLine = item.line) }
             }
         }.awaitAll().filterNotNull()
+        // Duplicate guard: the model can return the same library index
+        // twice, and a "discovery" can resolve via search to a song already
+        // in the mix. The page keys rows by song id, so a duplicate id
+        // crashes the list on scroll — keep the first occurrence only.
+        val tracks = resolved.distinctBy { it.song.id }
+        if (tracks.size < resolved.size) {
+            KLog.i(
+                TAG,
+                "AI DJ instant mix: dropped ${resolved.size - tracks.size} duplicate track(s)",
+            )
+        }
 
         if (tracks.isEmpty()) {
             Result.failure(IllegalStateException("The DJ came back with no playable picks"))
