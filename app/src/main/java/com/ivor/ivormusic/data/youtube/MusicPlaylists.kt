@@ -79,47 +79,7 @@ internal class MusicPlaylists(
      * following its first token can add recommendations to the library.
      */
     suspend fun getLikedMusic(): List<Song> = withContext(Dispatchers.IO) {
-        if (!sessionManager.isLoggedIn()) {
-            return@withContext getPlaylistInternal("LM")
-        }
-        
-        try {
-            val allSongs = mutableListOf<Song>()
-            var continuationToken: String? = null
-            var pageCount = 0
-            val maxPages = 500 // Increased limit to fetch all liked songs
-            
-            do {
-                val json = if (continuationToken == null) {
-                    musicApi.fetchInternalApi("FEmusic_liked_videos")
-                } else {
-                    musicApi.fetchContinuation(continuationToken)
-                }
-                
-                if (json.isEmpty()) break
-                
-                val songs = parseSongsFromInternalJson(json)
-                allSongs.addAll(songs)
-                
-                // Extract continuation token for next page
-                continuationToken = extractContinuationToken(json)
-                pageCount++
-                
-                KLog.d(YOUTUBE_TAG, "Liked songs page $pageCount: ${songs.size} songs, total: ${allSongs.size}")
-                
-            } while (continuationToken != null && pageCount < maxPages)
-            
-            if (allSongs.isNotEmpty()) {
-                return@withContext allSongs.distinctBy { it.id }
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            KLog.e(YOUTUBE_TAG, "Error fetching liked music", e)
-        }
-        
-        // Fallback to NewPipe method
-        getPlaylistInternal("LM")
+        getPlaylistInternal("LM").distinctBy { it.id }
     }
 
     /**
