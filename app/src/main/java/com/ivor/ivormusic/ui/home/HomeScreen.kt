@@ -60,6 +60,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -741,6 +742,20 @@ fun HomeScreen(
     // level, and the Library's sub-routes would each otherwise need their own.
     var songOptionsTarget by remember { mutableStateOf<Song?>(null) }
 
+    // Songs picked to act on together. It belongs to the page it was started
+    // on, so another tab, the other mode or the full player ends it; and while
+    // it is on, the navigation bar is the deck of actions, so it is brought
+    // back into view if a scroll had sent it away.
+    val songSelection = com.ivor.ivormusic.ui.components.LocalSongSelection.current
+    LaunchedEffect(selectedTab, videoMode) { songSelection.clear() }
+    LaunchedEffect(showPlayerSheet) { if (showPlayerSheet) songSelection.clear() }
+    LaunchedEffect(songSelection.isActive) {
+        if (songSelection.isActive) {
+            floatingToolbarState.offset = 0f
+            floatingToolbarState.contentOffset = 0f
+        }
+    }
+
     // Update check state
     val updateRepository = remember { UpdateRepository() }
     var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
@@ -861,6 +876,17 @@ fun HomeScreen(
         else -> HOME_FLOATING_RAIL_RESERVE
     }
     val contentEndInset = safeEndInset
+    // The pages themselves run past the camera cutout on the end edge: on a
+    // phone on its side the notch is a small hole, and keeping the whole page
+    // clear of it left an empty band down that side. A system bar there
+    // (three-button navigation) is still kept clear. The start edge needs
+    // nothing new, since the rail already stands between the cutout and the
+    // page, and the floating chrome (rail, mini player, the shell top bar)
+    // keeps the full safe area.
+    val pageEndInset = WindowInsets.systemBars
+        .only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal)
+        .asPaddingValues()
+        .calculateEndPadding(shellLayoutDirection)
     // The standard non-expressive NavigationBar is 80dp tall. The expressive
     // toolbar occupies 84dp including its bottom breathing room. Keep the same
     // clearance above either variant so overlaid controls do not jump or
@@ -1140,7 +1166,7 @@ fun HomeScreen(
         // Main content
         if (!loadLocalSongs || permissionState.isGranted) {
             androidx.compose.animation.AnimatedContent(
-                modifier = Modifier.padding(start = contentStartInset, end = contentEndInset),
+                modifier = Modifier.padding(start = contentStartInset, end = pageEndInset),
                 // Keyed on the mode as well as the tab so the spec below can
                 // tell a tab move from a mode switch. They deserve different
                 // motion and used to share one.
@@ -1220,6 +1246,10 @@ fun HomeScreen(
                                 )
                             } else if (videoModeContent) {
                                 VideoHomeContent(
+                                    navigationHiddenFraction = {
+                                        if (nonExpressiveNavigationBar || useRail || !barHidesOnScroll) 1f
+                                        else floatingToolbarState.hiddenFraction()
+                                    },
                                     compact = compactVideoHome,
                                     inlinePreviews = inlinePreviews,
                                     // Recommendations off: a shuffle across the
@@ -1287,7 +1317,7 @@ fun HomeScreen(
                                         // tab differs, which is the move the video toggle
                                         // already established.
                                         if (spotlightHome) {
-                                            val spotlightPlaylists by viewModel.userPlaylists.collectAsState()
+                                            val spotlightPlaylists by viewModel.musicModePlaylists.collectAsState()
                                             val spotlightLiked by viewModel.likedSongs.collectAsState()
                                             SpotlightHomeContent(
                                                 songs = songs,
@@ -1355,7 +1385,7 @@ fun HomeScreen(
                                             // data-backed sections rather than a full-screen
                                             // spinner - the top bar, titles and nav have
                                             // nothing to wait for.
-                                            val classicPlaylists by viewModel.userPlaylists.collectAsState()
+                                            val classicPlaylists by viewModel.musicModePlaylists.collectAsState()
                                             val classicRecentAlbums by viewModel.recentAlbums.collectAsState()
                                             val classicLiked by viewModel.likedSongs.collectAsState()
                                             val classicTopArtists by viewModel.topArtists.collectAsState()
@@ -1989,11 +2019,20 @@ fun HomeScreen(
                 }
             }
         } else {
+            // Gives way to the selection deck in the same place, so the bar
+            // reads as changing what it holds rather than being replaced.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !songSelection.isActive,
+                enter = androidx.compose.animation.fadeIn() +
+                    androidx.compose.animation.scaleIn(initialScale = 0.9f),
+                exit = androidx.compose.animation.fadeOut() +
+                    androidx.compose.animation.scaleOut(targetScale = 0.9f),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
             HorizontalFloatingToolbar(
                 expanded = true,
                 scrollBehavior = if (barHidesOnScroll) floatingToolbarScrollBehavior else null,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(bottom = 20.dp)
                     .navBarScrub(navScrub),
@@ -2075,6 +2114,23 @@ fun HomeScreen(
                         }
                     }
                 }
+            )
+            }
+        }
+
+        // Where the bar for picked songs stands: in the floating bar's own
+        // place, and above a standard bar or the mini player beside a rail,
+        // which stay where they are.
+        if (!videoMode) {
+            SongSelectionDeck(
+                homeViewModel = viewModel,
+                playerViewModel = playerViewModel,
+                bottomPadding = when {
+                    useRail -> 96.dp
+                    nonExpressiveNavigationBar -> 92.dp
+                    else -> 20.dp
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
 
@@ -2271,7 +2327,8 @@ fun HomeScreen(
             } else null,
             onBlockArtist = if (song.source == com.ivor.ivormusic.data.SongSource.YOUTUBE) {
                 { viewModel.blockArtist(song) }
-            } else null
+            } else null,
+            onSelect = { songSelection.start(song) }
         )
     }
 

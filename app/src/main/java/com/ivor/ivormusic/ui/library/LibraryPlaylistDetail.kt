@@ -123,14 +123,29 @@ import kotlin.math.roundToInt
  * Falls back to a plain `clickable` when there is no long-press action, because
  * `combinedClickable` with a null `onLongClick` still consumes the long press
  * and swallows it from anything underneath.
+ *
+ * Given its [song], the row also takes part in picking songs
+ * ([com.ivor.ivormusic.ui.components.SongSelection]): while songs are being
+ * picked, a tap or a hold ticks this one instead of playing it.
  */
 @Composable
 internal fun Modifier.songRowClick(
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)?
+    onLongClick: (() -> Unit)?,
+    song: Song? = null
 ): Modifier {
-    if (onLongClick == null) return this.clickable(onClick = onClick)
     val haptics = com.ivor.ivormusic.util.rememberKodaHaptics()
+    val selection = com.ivor.ivormusic.ui.components.LocalSongSelection.current
+    if (song != null && selection.isActive) {
+        val pick = {
+            haptics.performHapticFeedback(
+                if (selection.isSelected(song)) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn
+            )
+            selection.toggle(song)
+        }
+        return this.combinedClickable(onClick = pick, onLongClick = pick)
+    }
+    if (onLongClick == null) return this.clickable(onClick = onClick)
     return this.combinedClickable(
         onClick = onClick,
         onLongClick = {
@@ -138,6 +153,35 @@ internal fun Modifier.songRowClick(
             onLongClick()
         }
     )
+}
+
+/**
+ * Tells the song selection what this page lists, for Select all, and what
+ * Remove means here. Withdrawn when the page leaves, so the deck never offers
+ * a page's songs, or its removal, from somewhere else. A selection made here
+ * ends with the page as well: leaving it is the user moving on.
+ */
+@Composable
+internal fun OfferSongsForSelection(
+    songs: List<Song>,
+    remove: ((List<Song>) -> Unit)? = null
+) {
+    val selection = com.ivor.ivormusic.ui.components.LocalSongSelection.current
+    val currentRemove by rememberUpdatedState(remove)
+    val hasRemove = remove != null
+    DisposableEffect(selection, songs, hasRemove) {
+        selection.available = songs
+        selection.removeAction = if (hasRemove) { picked -> currentRemove?.invoke(picked) } else null
+        onDispose {
+            if (selection.available === songs) {
+                selection.available = emptyList()
+                selection.removeAction = null
+            }
+        }
+    }
+    DisposableEffect(selection) {
+        onDispose { selection.clear() }
+    }
 }
 
 /** Compact "when was this added" label for the Recently added sort. */

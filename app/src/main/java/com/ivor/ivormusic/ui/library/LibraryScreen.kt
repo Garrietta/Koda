@@ -92,6 +92,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalContext
 import com.ivor.ivormusic.ui.components.PredictiveBackStack
 import com.ivor.ivormusic.data.PlaylistDisplayItem
+import com.ivor.ivormusic.data.PlaylistMode
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.data.SongSource
 import com.ivor.ivormusic.data.ThemePreferences
@@ -570,6 +571,7 @@ fun LibraryContent(
                 StatsScreen(
                     onBack = { back() },
                     viewModel = viewModel,
+                    onPlayQueue = onPlayQueue,
                     contentPadding = contentPadding
                 )
             }
@@ -928,12 +930,21 @@ enum class LibraryPlaylistSort(val label: Int, val icon: ImageVector) {
     Default(R.string.lib_pl_sort_default, Icons.Rounded.Restore),
     Name(R.string.lib_group_sort_name, Icons.Rounded.SortByAlpha),
     MostSongs(R.string.lib_group_sort_songs, Icons.Rounded.LibraryMusic),
-    Creator(R.string.lib_pl_sort_creator, Icons.Rounded.Person);
+    Creator(R.string.lib_pl_sort_creator, Icons.Rounded.Person),
+    Custom(R.string.lib_pl_sort_custom, Icons.Rounded.DragHandle);
 
-    fun apply(playlists: List<PlaylistDisplayItem>): List<PlaylistDisplayItem> {
+    /** @param order the listener's arrangement, read by [Custom] alone. */
+    fun apply(playlists: List<PlaylistDisplayItem>, order: List<String> = emptyList()): List<PlaylistDisplayItem> {
         val byName = compareBy<PlaylistDisplayItem> { (it.name ?: "").lowercase() }
         return when (this) {
             Default -> playlists
+            // A playlist not arranged yet leads, so a new one is not lost at
+            // the end of a long list. The sort is stable, so those keep the
+            // Library's own order among themselves.
+            Custom -> {
+                val position = order.withIndex().associate { it.value to it.index }
+                playlists.sortedBy { position[it.id] ?: -1 }
+            }
             Name -> playlists.sortedWith(byName)
             // An unknown count (-1) sorts last rather than as an empty list.
             MostSongs -> playlists.sortedWith(compareByDescending<PlaylistDisplayItem> { it.itemCount }.then(byName))
@@ -990,7 +1001,8 @@ fun LibraryMainScreen(
     onSongLongPress: ((Song) -> Unit)? = null,
     allSongsListState: LazyListState = rememberLazyListState()
 ) {
-    val userPlaylists by viewModel.userPlaylists.collectAsState()
+    val musicModePlaylists by viewModel.musicModePlaylists.collectAsState()
+    val playlistModes by viewModel.playlistModes.collectAsState()
     val localPlaylistIds by viewModel.localPlaylistIds.collectAsState()
     val savedPlaylistIds by viewModel.savedPlaylistIds.collectAsState()
     val hiddenPlaylists by viewModel.hiddenPlaylists.collectAsState()
@@ -1228,7 +1240,7 @@ fun LibraryMainScreen(
                     }
                     LibraryTab.Playlists -> {
                         PlaylistsGrid(
-                            playlists = userPlaylists,
+                            playlists = musicModePlaylists,
                             localPlaylistIds = localPlaylistIds,
                             savedPlaylistIds = savedPlaylistIds,
                             likedSongs = likedSongs,
@@ -1256,13 +1268,17 @@ fun LibraryMainScreen(
                             hiddenPlaylists = hiddenPlaylists,
                             onHidePlaylist = { playlist -> viewModel.hidePlaylist(playlist) },
                             onUnhidePlaylist = { id -> viewModel.unhidePlaylist(id) },
+                            playlistModes = playlistModes,
+                            onPlaylistModeChange = viewModel::setPlaylistMode,
                             contentPadding = contentPadding,
                             isLoggedIn = isYouTubeConnected,
                             importAction = { PlaylistImportButton(viewModel) },
                             onCreatePlaylist = onCreatePlaylist,
                             fromVideoMode = viewModel.videoPlaylistsForMusic.collectAsState().value,
                             sort = LibraryPlaylistSort.from(themePreferences.libraryPlaylistSort.collectAsState().value),
-                            onSortChange = { themePreferences.setLibraryPlaylistSort(it.name) }
+                            onSortChange = { themePreferences.setLibraryPlaylistSort(it.name) },
+                            customOrder = themePreferences.libraryPlaylistOrder.collectAsState().value,
+                            onCustomOrderChange = themePreferences::setLibraryPlaylistOrder
                         )
                     }
                     LibraryTab.Artists -> {
@@ -1343,6 +1359,7 @@ fun AllSongsList(
     val yesterdayLabel = stringResource(R.string.lh_yesterday)
     val likedIds = remember(likedSongs) { likedSongs.map { it.id }.toSet() }
     val downloadedIds = remember(downloadedSongs) { downloadedSongs.map { it.id }.toSet() }
+    OfferSongsForSelection(songs)
 
     LazyColumn(
         state = listState,
@@ -1815,6 +1832,9 @@ fun PlaylistsGrid(
     hiddenPlaylists: List<com.ivor.ivormusic.data.HiddenPlaylist> = emptyList(),
     onHidePlaylist: (PlaylistDisplayItem) -> Unit = {},
     onUnhidePlaylist: (String) -> Unit = {},
+    /** Playlists kept to one mode, and the way to change that (#357). One call site, wired. */
+    playlistModes: Map<String, PlaylistMode>,
+    onPlaylistModeChange: (String, PlaylistMode?) -> Unit,
     /** Signed in, so the account's own playlists live on YouTube for real. */
     isLoggedIn: Boolean = false,
     importAction: @Composable () -> Unit,
@@ -1824,10 +1844,14 @@ fun PlaylistsGrid(
     fromVideoMode: List<PlaylistDisplayItem> = emptyList(),
     /** The tab's sort, persisted by the caller. No default: one call site, wired. */
     sort: LibraryPlaylistSort,
-    onSortChange: (LibraryPlaylistSort) -> Unit
+    onSortChange: (LibraryPlaylistSort) -> Unit,
+    /** Playlist ids in the listener's order, for [LibraryPlaylistSort.Custom]. */
+    customOrder: List<String>,
+    onCustomOrderChange: (List<String>) -> Unit
 ) {
     var showHiddenSheet by remember { mutableStateOf(false) }
-    val sortedPlaylists = remember(playlists, sort) { sort.apply(playlists) }
+    var showArrangeSheet by remember { mutableStateOf(false) }
+    val sortedPlaylists = remember(playlists, sort, customOrder) { sort.apply(playlists, customOrder) }
 
     LazyVerticalGrid(
         // 150dp cells: two across any phone, as the grid always was, and more
@@ -1878,7 +1902,18 @@ fun PlaylistsGrid(
                             selected = sort,
                             label = { it.label },
                             icon = { it.icon },
-                            onSelect = onSortChange
+                            onSelect = { choice ->
+                                // Custom starts from what is on screen rather
+                                // than jumping somewhere unasked, and choosing
+                                // it again is the way back into the sheet.
+                                if (choice == LibraryPlaylistSort.Custom) {
+                                    if (customOrder.isEmpty()) {
+                                        onCustomOrderChange(sortedPlaylists.map { it.id })
+                                    }
+                                    showArrangeSheet = true
+                                }
+                                onSortChange(choice)
+                            }
                         )
                     }
                     if (hiddenPlaylists.isNotEmpty()) {
@@ -1946,6 +1981,9 @@ fun PlaylistsGrid(
                 onDeleteConfirmed = { onDeletePlaylist(playlist) },
                 onRemoveSaved = { onRemoveSavedPlaylist(playlist) },
                 onHide = { onHidePlaylist(playlist) },
+                modeAction = PlaylistModeAction(playlistModes[playlist.id], PlaylistMode.MUSIC) { mode ->
+                    onPlaylistModeChange(playlist.id, mode)
+                },
                 selected = LocalLibraryOpenItem.current?.playlistId == playlist.id,
                 onClick = { onPlaylistClick(playlist) }
             )
@@ -1970,6 +2008,9 @@ fun PlaylistsGrid(
                     subtitle = playlist.displaySubtitle(),
                     thumbnailUrl = playlist.thumbnailUrl,
                     onHide = { onHidePlaylist(playlist) },
+                    modeAction = PlaylistModeAction(playlistModes[playlist.id], PlaylistMode.MUSIC) { mode ->
+                        onPlaylistModeChange(playlist.id, mode)
+                    },
                     selected = LocalLibraryOpenItem.current?.playlistId == playlist.id,
                     onClick = { onPlaylistClick(playlist) }
                 )
@@ -1983,6 +2024,143 @@ fun PlaylistsGrid(
             onUnhide = onUnhidePlaylist,
             onDismiss = { showHiddenSheet = false }
         )
+    }
+
+    if (showArrangeSheet) {
+        ArrangePlaylistsSheet(
+            playlists = sortedPlaylists,
+            onOrderChange = onCustomOrderChange,
+            onDismiss = { showArrangeSheet = false }
+        )
+    }
+}
+
+/**
+ * Puts the Playlists tab in the listener's own order. A list in a sheet rather
+ * than a drag on the grid: the shared queue reorder works on a list, and two
+ * columns of covers leave no handle to hold and no one direction to drag in.
+ * Each drop is saved at once, so there is nothing to confirm and the grid
+ * behind is already right when the sheet closes.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArrangePlaylistsSheet(
+    playlists: List<PlaylistDisplayItem>,
+    onOrderChange: (List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The sheet's own copy: a drag moves it every frame, and only a drop saves.
+    val rows = remember { playlists.distinctBy { it.id }.toMutableStateList() }
+    val listState = rememberLazyListState()
+    val keys = rows.map { it.id }
+    val reorder = com.ivor.ivormusic.ui.components.rememberQueueReorderState(
+        listState = listState,
+        keys = keys,
+        onMove = { from, to -> rows.add(to, rows.removeAt(from)) },
+        onSettle = { onOrderChange(rows.map { it.id }) }
+    )
+
+    AdaptiveModalSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.lib_pl_arrange_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.lib_pl_arrange_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(rows, key = { it.id }) { playlist ->
+                    val dragging = reorder.isDragging(playlist.id)
+                    com.ivor.ivormusic.ui.components.QueueRowContainer(
+                        isDragging = dragging,
+                        dragOffset = reorder.offsetFor(playlist.id),
+                        removeEnabled = false,
+                        onRemove = {},
+                        modifier = if (dragging) Modifier else Modifier.animateItem()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val density = LocalDensity.current
+                                val thumbnail = remember(playlist.thumbnailUrl, density) {
+                                    com.ivor.ivormusic.data.googleImageAtSize(
+                                        playlist.thumbnailUrl,
+                                        with(density) { 44.dp.roundToPx() }
+                                    )
+                                }
+                                if (thumbnail != null) {
+                                    AsyncImage(
+                                        model = thumbnail,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = playlist.name ?: stringResource(R.string.untitled_song),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            com.ivor.ivormusic.ui.components.QueueDragHandle(
+                                state = reorder,
+                                rowKey = playlist.id,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2416,6 +2594,8 @@ fun ExpressivePlaylistCard(
      * non-null it is offered on every card, editable or not.
      */
     onHide: (() -> Unit)? = null,
+    /** Keep this playlist to one mode (#357); null where the card offers no such choice. */
+    modeAction: PlaylistModeAction? = null,
     onEditConfirmed: (String, String?) -> Unit = { _, _ -> },
     onDeleteConfirmed: () -> Unit = {},
     onRemoveSaved: () -> Unit = {},
@@ -2548,7 +2728,7 @@ fun ExpressivePlaylistCard(
                     maxLines = 1
                 )
             }
-            if (isEditable || isSaved || onHide != null) {
+            if (isEditable || isSaved || onHide != null || modeAction != null) {
                 Box {
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Rounded.MoreVert, contentDescription = "Playlist options", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2571,6 +2751,9 @@ fun ExpressivePlaylistCard(
                                 }
                             )
                         }
+                        modeAction?.let { action ->
+                            PlaylistModeMenuItem(action, onDone = { showMenu = false })
+                        }
                         if (isSaved) {
                             // Removing the reference, not the playlist: no
                             // confirmation dialog, because nothing is destroyed
@@ -2585,7 +2768,7 @@ fun ExpressivePlaylistCard(
                                     Icon(Icons.Rounded.BookmarkRemove, contentDescription = null)
                                 }
                             )
-                        } else {
+                        } else if (isEditable) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_edit)) },
                                 onClick = {
@@ -2742,10 +2925,13 @@ fun SongListItem(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(48.dp)
                 ) {
-                    if (song.albumArtUri != null || song.thumbnailUrl != null)
-                        AsyncImage(model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop)
-                    else
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Box {
+                        if (song.albumArtUri != null || song.thumbnailUrl != null)
+                            AsyncImage(model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        else
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        com.ivor.ivormusic.ui.components.SongSelectedMark(song, Modifier.matchParentSize())
+                    }
                 }
             },
             trailingContent = trailingContent ?: if (isLiked || isDownloaded || showDuration || trailingLabel != null) {
@@ -2787,7 +2973,7 @@ fun SongListItem(
                     }
                 }
             } else null,
-            modifier = Modifier.songRowClick(onClick = onClick, onLongClick = onLongClick),
+            modifier = Modifier.songRowClick(onClick = onClick, onLongClick = onLongClick, song = song),
             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
         )
     }

@@ -1111,6 +1111,19 @@ fun MusicApp(
      * A's "Featured channels" shelf has to push a second entry, or back from B
      * would leave the app rather than return to A.
      */
+    // The page under the player when a commenter's channel was opened. Back
+    // landing on it again, however many channels deep it went, is the way back
+    // to the comments.
+    var commentsReturnEntryId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(navController) {
+        navController.currentBackStackEntryFlow.collect { entry ->
+            if (entry.id == commentsReturnEntryId) {
+                commentsReturnEntryId = null
+                videoPlayerViewModel.returnToComments()
+            }
+        }
+    }
+
     val openChannel: (String) -> Unit = openChannel@{ channelId ->
         if (channelId.isBlank()) return@openChannel
         videoPlayerViewModel.setExpanded(false)
@@ -1227,8 +1240,12 @@ fun MusicApp(
     // composition, in onUserLeaveHint on Android 11. Match the same proven 4.5
     // eligibility used by VideoPipController: bounds and playback state are not
     // prerequisites for entering PiP.
+    val isShortsOpen by shortsPlayerViewModel.isActive.collectAsState()
+    val currentShort by shortsPlayerViewModel.currentVideo.collectAsState()
     androidx.compose.runtime.SideEffect {
-        onPipStateChanged(overlayVideo != null && isVideoOverlayExpanded)
+        onPipStateChanged(
+            (overlayVideo != null && isVideoOverlayExpanded) || (isShortsOpen && currentShort != null)
+        )
     }
 
     // Keep the ViewModel's PiP flag current so it can suppress auto-play
@@ -1290,14 +1307,22 @@ fun MusicApp(
     // Drives the PiP window's shape and its transport controls. Composed above
     // the early return so the package-scoped receiver remains alive when the
     // normal app UI is replaced by the dedicated video-only PiP surface.
-    com.ivor.ivormusic.ui.video.VideoPipController(viewModel = videoPlayerViewModel)
+    com.ivor.ivormusic.ui.video.VideoPipController(
+        viewModel = videoPlayerViewModel,
+        suspended = isShortsOpen
+    )
+    com.ivor.ivormusic.ui.shorts.ShortsPipController(viewModel = shortsPlayerViewModel)
 
     // In system PiP the app is just a video surface. Returning here keeps the
     // NavHost, both players and every overlay out of the composition entirely,
     // rather than letting them draw and animate behind a window nobody can see
     // them in.
     if (isInPipMode) {
-        com.ivor.ivormusic.ui.video.PipVideoSurface(viewModel = videoPlayerViewModel)
+        if (isShortsOpen) {
+            com.ivor.ivormusic.ui.shorts.ShortsPipSurface(viewModel = shortsPlayerViewModel)
+        } else {
+            com.ivor.ivormusic.ui.video.PipVideoSurface(viewModel = videoPlayerViewModel)
+        }
         return
     }
 
@@ -1781,6 +1806,7 @@ fun MusicApp(
                 com.ivor.ivormusic.ui.library.StatsScreen(
                     onBack = { navController.popBackStack() },
                     viewModel = homeViewModel,
+                    onPlayQueue = { songs, song -> playerViewModel.playQueue(songs, song) },
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 160.dp)
                 )
             }
@@ -1859,7 +1885,12 @@ fun MusicApp(
             viewModel = videoPlayerViewModel,
             timedCommentsEnabled = timedCommentsEnabled,
             showRelatedVideos = showRelatedVideos,
-            onOpenChannel = openChannel,
+            onOpenChannel = { channelId ->
+                val leftFrom = navController.currentBackStackEntry?.id
+                val fromComments = videoPlayerViewModel.isLeavingComments
+                openChannel(channelId)
+                if (fromComments) commentsReturnEntryId = leftFrom
+            },
             onListenAsMusic = moveVideoToMusic,
             hostBottomChrome = videoMiniBottomChrome,
             hostChromeFollowOffsetPx = videoMiniFollowOffsetPx,
@@ -1881,6 +1912,9 @@ fun MusicApp(
         // both players and Shorts; its offer sits just under it.
         com.ivor.ivormusic.ui.standby.StandbySuggestion(viewModel = playerViewModel)
         com.ivor.ivormusic.ui.standby.StandbyOverlay(viewModel = playerViewModel)
+        // Opened from the player's menu or a lyric line in any player style,
+        // and drawn the same whichever one it came from.
+        com.ivor.ivormusic.ui.lyricsshare.LyricsShareOverlay(viewModel = playerViewModel)
 
         // One confirmation host covers the player controls and every song
         // options sheet. Download requests carry the chosen song through the

@@ -87,7 +87,7 @@ MVVM with StateFlow and **no DI framework**: ViewModels build repositories direc
 |---|---|---|
 | Stream resolution, feeds, parsers | `data/youtube/`, `data/stream/`, behind the `data/YouTubeRepository.kt` front | `youtube-data.md`, `playback-streams.md` |
 | Music playback, queue, notification, crossfade | `service/MusicService.kt`, `CrossfadeEngine` | `playback-music.md` |
-| Video playback, PiP, captions, chapters | `ui/video/VideoPlayerViewModel.kt` | `playback-video.md` |
+| Video playback, PiP, captions, chapters | `ui/video/VideoPlayerViewModel.kt`, `video/` | `playback-video.md` |
 | Screens, tabs, overlays | `MainActivity.kt`, `ui/home/HomeScreen.kt` | `screens.md` |
 | Adding a setting | `data/ThemePreferences.kt` + 4 files + search index | `settings.md` |
 | Sign-in, accounts, incognito, backup | `SessionManager`, `ProfileManager`, `AccountSwitcher`, `IncognitoMode`, `BackupRepository` | `identity.md` |
@@ -219,14 +219,15 @@ The rules most often needed in each area. Each is a summary; open the doc before
 
 ### YouTube data layer -> `docs/youtube-data.md`
 - **`YouTubeRepository` is a front that only delegates.** The code is in `data/youtube/` (transport, one class per area, parsers as top-level functions) and `data/stream/`; a new call goes in its area's piece plus a one-line function on the front. Parsers are pinned by `ParserFixturesTest` against reduced live responses (`.probe/parser_fixtures.py`).
-- Two mechanisms: **NewPipe** (video/artist/playlist search, stream URLs, fallbacks) and **raw InnerTube JSON over OkHttp** parsed by hand with `org.json` (`findObjectsByKey`, `findContinuationTokens`, `getRunText()`), no kotlinx-serialization.
+- **Every search asks InnerTube first**; `searchFallbackAllowed` keeps NewPipe out of a real "no results", a 429 hold and a bot-check verdict.
+- Two mechanisms: **NewPipe** (stream and search fallbacks) and **raw InnerTube JSON over OkHttp** parsed by hand with `org.json` (`findObjectsByKey`, `findContinuationTokens`, `getRunText()`), no kotlinx-serialization.
 - **Probe first, never parse from memory**: `py .probe/probe.py <endpoint> '<json>' [--music]` (never commit `.probe/`). Signed-in probes sign SAPISIDHASH **per origin**; confirm a session by `logged_in: 1`, never HTTP 200. Note "verified <month year>" in the parser's KDoc.
 - Clients: WEB for browse/next/engagement, WEB_REMIX for music.youtube.com, **one direct visionOS `/player` under Koda's own visitorData for music, video and Shorts** (NewPipe's Android-reel/visionOS chain only as the fallback - each extraction mints three fresh visitor ids), ANDROID_VR -> IOS only as last-resort fallback and caption source. `YouTubeRequestLedger` logs per-open request counts under `YTRequests`. **Plain `ANDROID` is SABR-only - no URLs.** Pinned client versions need periodic bumps (HTTP 400 on browse = too old).
 - **`visitorData` rides on every InnerTube call**; a missing one now gets `LOGIN_REQUIRED`, and a googlevideo 403 means remint (`refreshVisitorDataAfterPlaybackFailure(failedUrl)`), not a UA problem. A refusal is traced to the token that signed it through the URL's `ei`, so a stale URL replaces nothing; a new token is vetted by its last byte before music or video plays on it (`PlayerSession.visionOsVetted`).
 - Music metadata comes from **links and page types** (`MUSIC_PAGE_TYPE_ARTIST/ALBUM`), never subtitle positions; release type/year are data (`Song.albumId`, `releaseType`, `releaseYear`).
 - Signed out: public browse ids work anonymously, **account browse ids return a valid empty shell** (gate on `isLoggedIn()`), playlists come back as `lockupViewModel`s. Continuations answer under `appendContinuationItemsAction` (`continuationItemsOrNull`), and token scoping matters.
 - **Missing text is blank, never invented**, and a value with one home is read from its container (`firstObjectByKey`), an entity by its key (`entityKeyNames`); `findObjectsByKey` is for collecting a list.
-- **Only HTTP 429 arms `YouTubeRateLimit`**, which gates discretionary fan-out and Shorts prefetch only. One `/next` feeds many features - be frugal per user action.
+- **Only HTTP 429 arms `YouTubeRateLimit`**, which gates discretionary fan-out and Shorts prefetch only. Work nobody asked for runs under `RequestPriority.Automatic`, so a hold keeps it on the device; what a person asked for always goes out. One `/next` feeds many features - be frugal per user action.
 
 ### Music playback -> `docs/playback-music.md`
 - `MusicService` (Media3 `MediaLibraryService`) + `PlayerViewModel` over a `MediaController`. Video is a separate pipeline: the ViewModel owns the player and `VideoPlaybackService` only wraps it in a media session.
@@ -238,7 +239,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 - `replaceMusicSource` keeps index, position and play intent - replacing a stream is not a restart. Queue replacement is one atomic `setMediaItems`.
 - Crossfades cancel on seeks and mode changes; clock checks use a net-displacement budget (1100ms), not a tight absolute cap - two earlier caps abandoned every fade. [scar]
 - AutoMix: a failed silence probe is unknown audio (0), not silence; `TransitionPlanner` only does long overlaps with reliable tempo evidence.
-- The user's speed is the engine's baseline (`setBaseSpeed`, floor 0.1x from Media3); session extras are replaced, not merged - publish via `publishSessionState`.
+- The user's speed is the engine's baseline (`setBaseSpeed`, floor 0.1x from Media3), and so is pitch (`setBasePitch`, behind the off-by-default Pitch control; off means the recorded key at once); session extras are replaced, not merged - publish via `publishSessionState`.
 - Visualizer reads Koda's own PCM (`VisualizerAudioProcessor`), so no RECORD_AUDIO. Lyrics layout belongs to `SyncedLyricsView`, which reads the alignment setting itself (left by default), rests the sung line a third of the way down, cascades line changes, and draws a duet as a conversation from the provider's per-line singer (`LrcLine.voice`). `notify()` catches `SecurityException`.
 
 ### Streams, caching, quality -> `docs/playback-streams.md`
@@ -252,12 +253,13 @@ The rules most often needed in each area. Each is a summary; open the doc before
 
 ### Video playback -> `docs/playback-video.md`
 - `VideoPlayerViewModel` owns its `ExoPlayer` (built lazily); `VideoPlaybackService` borrows it for the media session and never releases it. Load is two phases: stream qualities, then one `/next` for everything else - add no extractions.
+- `VideoPlayerViewModel` is split into `video/` (`CommentThreadController`, `LiveSession`, `VideoRecovery`, `VideoLoader`), with pure logic in `video/core/` (`VideoRecoveryPolicy`, `LiveChatBuffer`, `pickStartingVideoQuality`). It keeps the `ExoPlayer` and the media source; a new responsibility gets a part, not more ViewModel.
 - `VideoWatchTracker` owns history qualification, local progress and authenticated watch-time reports, rechecking history-off/incognito/profile before remote writes.
 - Mini-to-expanded is the music player's container transform (`PlayerContainerTransform.kt`, shared with `ExpandablePlayer`); portrait uses a TextureView except HDR and vertical live, which keep the curtain (`supportsAnimatedMinimize`). Never read transition progress in composition; only one view holds the surface.
 - `VideoQueue` is index-addressed; `playQueue` establishes it and `playVideo` clears it. Resume has two stores (active session vs per-video history). Chromecast is gone; do not reintroduce a `Player` indirection.
 - Every `PlayerView` Koda draws captions over calls `disableBuiltInSubtitles()`. A video download keeps the caption tracks picked in the download sheet (`DownloadedCaptionStore`), read when it is played from disk.
 - SponsorBlock: opt-in, sends only a hash prefix, per-category skip/manual/ignore, read-only, not on live.
-- Playback settings are a control panel (`PlayerSettingsSections`): value tabs over one deck, switches as tiles, shortcuts beneath, on four shared columns; the fullscreen panel does not dim the video.
+- Playback settings are a control panel (`PlayerSettingsSections`): value tabs over one deck, switches as tiles, shortcuts beneath, on four shared columns; the fullscreen panel does not dim the video. Captions are one of its tabs, and the CC button opens the panel on it (`openPlaybackSettings`); there is no captions sheet.
 - Video shaders (`VideoShaderEffect`, opt-in) are a second stage in Smooth motion's effect graph, installed when the player is built and read per frame from one snapshot (`VideoShaderControl`); the switch waits for the next player and HDR is withheld while it is on. Every built-in look is a shared header, its own `look()` and a shared tail, so Sharpen and the picture sliders tune all of them. Validate and render a shader offline before it ships.
 - Live: detected by formats, not by `hlsManifestUrl`; behind-live measured from `liveTargetOffsetMs`; quality is a track cap; comments hidden on live; a live item in Shorts is handed off (emit before `close()`).
 
@@ -267,7 +269,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 - The Home top bars are a `Box`: profile picture, `HomeGreeting`, then `ModeMorphButton` and the buttons, with downloads shown only while downloading unless Customization keeps it there (`TopBarDownloadsButton`, which carries its own gap). The start screen (`getStartHomeTab`) and start mode (`applyStartMode`, fresh launcher launch only) are settings.
 - Library sub-screens are opened by hand-off (`initialArtist`/`initialPlaylist` + consumed callbacks). A YouTube album in the Albums tab opens its release page (`openAlbum`), not the songs the Library holds of it. A playlist's track sort is a per-playlist view (`PlaylistTrackSort`), never a rewrite.
 - Device videos use `device:` ids through the local-playback path; `singleTask` exists because of PiP; quality/HDR come from the decoder.
-- **Three playlist kinds**: local, the account's own, saved (references). A `PL` prefix does not mean yours - use `savedPlaylistIds`. Local video playlists use the `localvp_` prefix; routing lives in `addVideoToPlaylist`. Hidden playlists are a filter over the merged list.
+- **Three playlist kinds**: local, the account's own, saved (references). A `PL` prefix does not mean yours - use `savedPlaylistIds`. Local video playlists use the `localvp_` prefix; routing lives in `addVideoToPlaylist`. Hidden playlists are a filter over the merged list; a playlist kept to one mode (`PlaylistModeStore`) is filtered only from the lists drawn (`musicModePlaylists`, `videoModePlaylists`), never from `userPlaylists`/`videoPlaylists`, which also answer ownership.
 - `VideoOptionsSheet` is two panes; every surface uses `VideoOptionsSheetHost`.
 - The notification inbox is the website's `FEnotifications_inbox` (the old `get_notification_menu` is frozen), read a page at a time as the sheet scrolls, with what `NotificationHistoryStore` remembers under it once the last page is in; a hide is local. The video feeds are filtered where they are drawn (`VideoFeedFilter`), never in the fetch.
 - Taste setup is one route (`taste`), opened from the `home` route once per install (new users arrive there from onboarding) and from Settings; it marks itself seen on every way out.
@@ -276,7 +278,7 @@ The rules most often needed in each area. Each is a summary; open the doc before
 - Account and device subscription stores; `SubscriptionActions` alone decides what a tap means. Unsubscribe clears both; the button binds to `isSubscribedToChannel`.
 - The account bell (`ChannelBellActions`) shows only for account subscriptions, writes YouTube's served params back, and drives `UploadCheckWorker` for channels on All.
 - The local feed is per-channel Atom RSS with a browse fallback (never on 429), 6 at a time, namespace-unaware parser.
-- Only the account feed pages (`loadMoreSubscriptionFeed`); its first page is taken whole. Community posts in Home and Subscriptions are fetched from followed channels' Posts tabs as the feed scrolls (`ensureFeedPosts`, `ui/video/FeedPosts.kt`) - the feeds themselves carry none.
+- Only the account feed pages (`loadMoreSubscriptionFeed`); its first page is taken whole. Community posts in Home and Subscriptions are fetched from followed channels' Posts tabs as the feed scrolls (`ensureFeedPosts`, `ui/video/FeedPosts.kt`) - the feeds themselves carry none. In Subscriptions they are a Posts view of their own, newest first. Likes and poll votes go through `PostInteractions`, on tokens only a signed-in fetch carries.
 - Imports are sniffed by content (NewPipe JSON, PipePipe/NewPipe zip, Takeout CSV, OPML); handles resolve to UC ids.
 - `NotInterestedRepository` is the engine, applied as a **derived filter, never a write into the fetch** (Shorts filter on ingestion). Signed-in dismissals also go to YouTube, fire-and-forget. Music shares the store; the device library is never filtered.
 
@@ -315,7 +317,8 @@ The rules most often needed in each area. Each is a summary; open the doc before
 - The music pill is `primaryContainer`, 68dp (the bubble's size), and its played part is a wave-edged fill carried between samples by `rememberSmoothProgress`; it latches into a bubble after 56dp down and reopens after 200dp up or on returning to where the scroll began.
 - The mini player draws from `MiniPlayerCustomization` (buttons, cover tap and motion, second line, touch and hold, swipes, colour, bubble); its content colour follows its container, and Home reads only `shrink`.
 - The mini player's cover spins and morphs in the draw phase, fitted to a circle so no shape leaves its slot; progress is the shape's outline revealed by a fixed wedge from the top, never a trimmed path.
-- **Standby** (`ui/standby/`) is opened from `NowPlayingOptionsSheet` through `PlayerViewModel.openStandby()`, hosted above everything in `MainActivity`, always dark, and owns the window while open (bars, keep-on, rotation, all handed back). Its motion is Apple's two-parameter spring (`appleSpring`), one `Animatable` for rise, swipe, fling and exit; `StandbyStack` grows the paused clock into the room the other rows leave. The charging offer keys on the phone being on its side, not the window.
+- **Standby** (`ui/standby/`) is opened from `NowPlayingOptionsSheet` through `PlayerViewModel.openStandby()`, hosted above everything in `MainActivity`, always dark, and owns the window while open (bars, keep-on, rotation, all handed back). Its motion is Apple's two-parameter spring (`appleSpring`), one `Animatable` for rise, swipe, fling and exit; `StandbyStack` grows the paused clock into the room the other rows leave. The charging offer keys on the phone being on its side, not the window. It is four faces in a pager (`StandbyFace`), with smart-stack widgets, a long-press picker and look choices (`StandbyLook`); its lyrics are display-only (`interactive = false`).
+- **Lyrics share** (`ui/lyricsshare/`) opens from the player's menu or a long press on a lyric line (`LocalLyricLongPress`, provided by `ExpandablePlayer`), through `PlayerViewModel.openLyricsShare`, which snapshots the song and lines; it is hosted above everything in `MainActivity`. The card is laid out at export size (1080 wide, `CardUnits`) and only the preview is scaled, so Share and Save capture its `GraphicsLayer` at full resolution; images leave through the `FileProvider` on `cache/shared`.
 
 ### Widgets -> `docs/widgets.md`
 - Commands go through `withController` (main thread). Rendering reads the `PlayerWidgetStore` snapshot written in `MusicService.onEvents`, never a live session.

@@ -96,6 +96,7 @@ class BackupRepository(context: Context) {
             "ivor_music_theme_prefs",   // every setting, palette and player style
             "saved_playlists",          // playlists kept as references, both modes
             "hidden_playlists",         // playlists the user told Koda not to show
+            "playlist_modes",           // playlists kept to music or video mode
             "ivor_track_loudness",      // measured per-track gain
             "koda_icon_styles"          // icon looks the user mixed themselves
         )
@@ -225,7 +226,8 @@ class BackupRepository(context: Context) {
                     handle = profile.handle,
                     avatarUrl = profile.avatarUrl,
                     datasyncId = profile.datasyncId,
-                    addedAt = profile.addedAt
+                    addedAt = profile.addedAt,
+                    pageId = profile.pageId
                 )
             },
             activeProfileId = profileManager.activeProfileId.value.takeIf { it.isNotBlank() },
@@ -495,6 +497,7 @@ class BackupRepository(context: Context) {
                     handle = backup.handle,
                     avatarUrl = backup.avatarUrl,
                     datasyncId = backup.datasyncId,
+                    pageId = backup.pageId,
                     addedAt = backup.addedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
                     // A restored YouTube profile has an identity and no
                     // session, which is exactly what the expired badge already
