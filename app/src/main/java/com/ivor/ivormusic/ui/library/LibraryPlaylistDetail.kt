@@ -1006,7 +1006,7 @@ fun PlaylistDetailScreen(
         ActivityResultContracts.CreateDocument("audio/x-mpegurl")
     ) { uri ->
         if (uri != null) scope.launch {
-            val ok = viewModel.exportLocalPlaylist(songRows.map { it.song }, uri)
+            val ok = viewModel.exportPlaylist(songRows.map { it.song }, uri)
             snackbarHostState.showSnackbar(
                 shareContext.getString(if (ok) R.string.pl_export_done else R.string.pl_export_failed)
             )
