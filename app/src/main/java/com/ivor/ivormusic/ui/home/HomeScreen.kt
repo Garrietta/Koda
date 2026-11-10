@@ -792,7 +792,8 @@ fun HomeScreen(
             updateResult = result
             if (result is UpdateResult.UpdateAvailable) {
                 latestVersion = result.latestVersion
-                if (updatePrompts.shouldPromptFor(result.latestVersion)) showUpdatePrompt = true
+                // Update dialog suppressed while staying on 5.2 (re-enable when returning to 5.3).
+                // if (updatePrompts.shouldPromptFor(result.latestVersion)) showUpdatePrompt = true
             }
         }
     }
@@ -2166,7 +2167,7 @@ fun HomeScreen(
         // overlays (shared bottomOverlayInset) rather than the top bar, where it
         // used to sit on top of the settings/profile icons.
         androidx.compose.animation.AnimatedVisibility(
-            visible = updateResult is UpdateResult.UpdateAvailable,
+            visible = false, // update ticker hidden while staying on 5.2
             enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(
                 initialScale = 0.8f,
                 animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
