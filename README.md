@@ -18,8 +18,9 @@ Rondo is a fork of [Koda](https://github.com/ivorisnoob/Koda) by ivorisnoob, and
 
 What is different here:
 
-- **Its own identity.** A new name and mark, icon presets redrawn to match, a signature palette (iris, orchid and the orange of the play triangle) and one bundled typeface, Google Sans Flex, in place of fonts fetched at first launch.
-- **Home opens on shelves.** The shortcut grid and artwork shelves are the default Home. Two shelves are new: **On repeat**, the songs you played three times or more in the last four weeks, and **New episodes**, the newest from the shows you follow. A **Podcasts** filter sits beside For you.
+- **Its own identity.** A new name and mark, icon presets redrawn to match, and one bundled typeface, Google Sans Flex, in place of fonts fetched at first launch.
+- **Home is blocks.** A few large flat tiles, each a place to go: the DJ, **On repeat** (the songs you played three times or more in the last four weeks), Liked, **New episodes** from the shows you follow, and what you played last. Quick picks, For you, Playlists, Charts, New and Explore are one tap below. Color tells the tiles apart, so artwork is an accent rather than the layout.
+- **Its own colors.** Iris, orange, orchid and cream as flat blocks on a near-black ground, written out role by role instead of grown from a seed. The app keeps them while music plays; the player takes the album's.
 - **AI DJ.** A DJ that builds a rolling queue from what you listen to and talks between songs, one tap from the navigation bar.
 - **Podcasts.** Follow any show by its RSS feed; new episodes arrive on their own.
 - **Fixes carried here**, including the one that brought liked songs back.

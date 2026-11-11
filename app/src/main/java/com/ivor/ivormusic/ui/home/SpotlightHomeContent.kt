@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -115,6 +116,8 @@ fun SpotlightHomeContent(
     onRecentClick: (Song) -> Unit,
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onOpenLiked: () -> Unit = {},
+    /** Opens the DJ. Required: a tile left unwired is a dead tile. */
+    onOpenDj: () -> Unit,
     onShowAllInLibrary: () -> Unit = {},
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
@@ -148,6 +151,23 @@ fun SpotlightHomeContent(
     val musicBrowse by viewModel.musicBrowse.collectAsState()
     val onRepeat by viewModel.onRepeat.collectAsState()
     val newEpisodes by viewModel.newEpisodes.collectAsState()
+
+    // Home opens on the blocks. Each tile opens a page: one of the
+    // filters, or the quick picks and shelves that used to be the
+    // whole unfiltered Home, which now sit behind their own tile.
+    var quickPicksOpen by rememberSaveable { mutableStateOf(false) }
+    val landing = filter == SpotlightFilter.All && !quickPicksOpen
+    val backToBlocks = {
+        quickPicksOpen = false
+        onFilterChange(SpotlightFilter.All)
+    }
+    BackHandler(enabled = !landing, onBack = backToBlocks)
+    // A page opens at its top, not at wherever the blocks were scrolled
+    // to. The first pass is skipped so coming back to this tab keeps its place.
+    var pageSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(landing, filter) {
+        if (pageSeen) listState.scrollToItem(0) else pageSeen = true
+    }
 
     // Fetched when its tab is opened rather than with the rest of Home: it is
     // several searches plus a radio call, and most sessions never look at it.
@@ -217,293 +237,338 @@ fun SpotlightHomeContent(
                 )
             }
 
-            item(key = "chips") {
-                SpotlightFilterChips(selected = filter, onSelect = onFilterChange)
-            }
-
-            // AI DJ moved to a floating action button next to the nav pill
-            // (see HomeScreen) — no banner on Home anymore.
-
-            // The shortcut grid only makes sense unfiltered - a two-column grid
-            // of "your most reached-for things" is not a thing you scope.
-            if (filter == SpotlightFilter.All && shortcuts.isNotEmpty()) {
-                item(key = "shortcuts") {
-                    SpotlightShortcutGrid(
-                        shortcuts = shortcuts,
-                        onClick = { shortcut ->
-                            when (shortcut) {
-                                is Shortcut.Liked -> onOpenLiked()
-                                is Shortcut.Playlist -> onPlaylistClick(shortcut.playlist)
-                                is Shortcut.Track -> onRecentClick(shortcut.song)
+            if (landing) {
+                item(key = "blocks") {
+                    BlocksHome(
+                        onRepeat = onRepeat,
+                        likedCount = likedSongs.size,
+                        newEpisodes = newEpisodes,
+                        recent = recentlyPlayed,
+                        onDj = onOpenDj,
+                        onPlayOnRepeat = { onPlaySongs(onRepeat, onRepeat.firstOrNull()) },
+                        onLiked = onOpenLiked,
+                        onPodcasts = { onFilterChange(SpotlightFilter.Podcasts) },
+                        onRecent = onRecentClick,
+                        onOpen = { destination ->
+                            when (destination) {
+                                BlocksDestination.QuickPicks -> quickPicksOpen = true
+                                BlocksDestination.ForYou -> onFilterChange(SpotlightFilter.Recommended)
+                                BlocksDestination.Playlists -> onFilterChange(SpotlightFilter.Playlists)
+                                BlocksDestination.Charts -> onFilterChange(SpotlightFilter.Charts)
+                                BlocksDestination.NewReleases -> onFilterChange(SpotlightFilter.NewReleases)
+                                BlocksDestination.Explore -> onFilterChange(SpotlightFilter.Explore)
+                                BlocksDestination.Recent -> onFilterChange(SpotlightFilter.Recent)
                             }
                         },
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
-            }
-
-            // First load of the discovery tab: the grid below is empty and
-            // will be for a second or two of network, and an empty page reads
-            // as "nothing to suggest" rather than "still asking".
-            if (filter == SpotlightFilter.Recommended && isDiscoveryLoading && quickPicks.isEmpty()) {
-                item(key = "discovery-loading") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 56.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LoadingIndicator()
-                    }
-                }
-            }
-
-            if (quickPicks.isNotEmpty()) {
-                item(key = "quick-header") {
-                    SpotlightSectionHeader(
-                        title = if (filter == SpotlightFilter.Recommended) {
-                            stringResource(R.string.spotlight_new_for_you)
-                        } else if (filter == SpotlightFilter.Podcasts) {
-                            stringResource(R.string.home_section_new_episodes)
-                        } else {
+            } else {
+                item(key = "page-header") {
+                    BlocksPageHeader(
+                        title = if (filter == SpotlightFilter.All) {
                             stringResource(R.string.spotlight_quick_picks)
-                        },
-                        subtitle = spotlightQuickPickCaption(filter),
-                        actionLabel = stringResource(R.string.action_play_all),
-                        onAction = { onPlaySongs(quickPicks, quickPicks.firstOrNull()) },
-                        // Spin these: the wheel opens on the pool this header
-                        // is showing, beside the other way to start it.
-                        onSpin = if (filter == SpotlightFilter.Podcasts) {
-                            null
                         } else {
-                            { onSpinClick(filter.spinSource()) }
+                            spotlightFilterLabel(filter)
                         },
+                        onBack = backToBlocks,
                     )
                 }
-                item(key = "quick-picks") {
-                    SpotlightQuickPicks(
-                        songs = quickPicks,
-                        onSongClick = { onPlaySongs(quickPicks, it) },
-                        onSongLongPress = onSongLongPress,
+                // On a page the chips are the way across to another page;
+                // All is the way back to the blocks.
+                item(key = "chips") {
+                    SpotlightFilterChips(
+                        selected = filter,
+                        onSelect = { if (it == SpotlightFilter.All) backToBlocks() else onFilterChange(it) },
                     )
                 }
             }
 
-            // The discovery tab's shelves. A grid of songs answers "what do I
-            // play next" and nothing else; a record, an hour somebody curated
-            // and a whole catalogue are the other three ways people find music,
-            // and none of them was reachable from this tab.
-            if (filter == SpotlightFilter.Recommended) {
-                if (discoveryCollections.albums.isNotEmpty()) {
-                    item(key = "discovery-albums-header") {
-                        SpotlightSectionHeader(
-                            title = stringResource(R.string.spotlight_albums_to_explore),
-                            subtitle = stringResource(R.string.spotlight_albums_to_explore_sub),
-                        )
-                    }
-                    item(key = "discovery-albums") {
-                        SpotlightShelf(
-                            items = discoveryCollections.albums.map { it.toShelfItem() },
-                            onClick = { id ->
-                                discoveryCollections.albums.find { it.id == id }
-                                    ?.let(onPlaylistClick)
+            if (!landing) {
+                // AI DJ moved to a floating action button next to the nav pill
+                // (see HomeScreen) — no banner on Home anymore.
+
+                // The shortcut grid only makes sense unfiltered - a two-column grid
+                // of "your most reached-for things" is not a thing you scope.
+                if (filter == SpotlightFilter.All && shortcuts.isNotEmpty()) {
+                    item(key = "shortcuts") {
+                        SpotlightShortcutGrid(
+                            shortcuts = shortcuts,
+                            onClick = { shortcut ->
+                                when (shortcut) {
+                                    is Shortcut.Liked -> onOpenLiked()
+                                    is Shortcut.Playlist -> onPlaylistClick(shortcut.playlist)
+                                    is Shortcut.Track -> onRecentClick(shortcut.song)
+                                }
                             },
                         )
                     }
                 }
 
-                if (discoveryCollections.artists.isNotEmpty()) {
-                    item(key = "discovery-artists-header") {
-                        SpotlightSectionHeader(
-                            title = stringResource(R.string.spotlight_artists_for_you),
-                            subtitle = stringResource(R.string.spotlight_artists_for_you_sub),
-                        )
-                    }
-                    item(key = "discovery-artists") {
-                        SpotlightArtistRail(
-                            artists = discoveryCollections.artists,
-                            // The artist page lives in the Library tab, so this
-                            // is the hand-off the player and the channel page
-                            // already use rather than a route of its own.
-                            onClick = { viewModel.requestArtistPage(it.name) },
-                        )
+                // First load of the discovery tab: the grid below is empty and
+                // will be for a second or two of network, and an empty page reads
+                // as "nothing to suggest" rather than "still asking".
+                if (filter == SpotlightFilter.Recommended && isDiscoveryLoading && quickPicks.isEmpty()) {
+                    item(key = "discovery-loading") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 56.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            LoadingIndicator()
+                        }
                     }
                 }
 
-                if (discoveryCollections.playlists.isNotEmpty()) {
-                    item(key = "discovery-playlists-header") {
+                if (quickPicks.isNotEmpty()) {
+                    item(key = "quick-header") {
                         SpotlightSectionHeader(
-                            title = stringResource(R.string.spotlight_playlists_to_try),
-                            subtitle = stringResource(R.string.spotlight_playlists_to_try_sub),
-                        )
-                    }
-                    item(key = "discovery-playlists") {
-                        SpotlightShelf(
-                            items = discoveryCollections.playlists.map { it.toShelfItem() },
-                            onClick = { id ->
-                                discoveryCollections.playlists.find { it.id == id }
-                                    ?.let(onPlaylistClick)
+                            title = if (filter == SpotlightFilter.Recommended) {
+                                stringResource(R.string.spotlight_new_for_you)
+                            } else if (filter == SpotlightFilter.Podcasts) {
+                                stringResource(R.string.home_section_new_episodes)
+                            } else {
+                                stringResource(R.string.spotlight_quick_picks)
+                            },
+                            subtitle = spotlightQuickPickCaption(filter),
+                            actionLabel = stringResource(R.string.action_play_all),
+                            onAction = { onPlaySongs(quickPicks, quickPicks.firstOrNull()) },
+                            // Spin these: the wheel opens on the pool this header
+                            // is showing, beside the other way to start it.
+                            onSpin = if (filter == SpotlightFilter.Podcasts) {
+                                null
+                            } else {
+                                { onSpinClick(filter.spinSource()) }
                             },
                         )
                     }
-                }
-            }
-
-            // The two shelves Home works out for itself, on the unfiltered
-            // page only: every filter is already one view of the library.
-            if (filter == SpotlightFilter.All && onRepeat.size >= ON_REPEAT_SHELF_MIN) {
-                item(key = "repeat-header") {
-                    SpotlightSectionHeader(
-                        title = stringResource(R.string.home_section_on_repeat),
-                        subtitle = stringResource(R.string.home_section_on_repeat_caption),
-                        actionLabel = stringResource(R.string.action_play_all),
-                        onAction = { onPlaySongs(onRepeat, onRepeat.firstOrNull()) },
-                    )
-                }
-                item(key = "repeat-shelf") {
-                    SpotlightShelf(
-                        items = onRepeat.map {
-                            ShelfItem(
-                                it.id,
-                                it.title,
-                                it.artist,
-                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
-                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
-                            )
-                        },
-                        onClick = { id ->
-                            onRepeat.find { it.id == id }?.let { onPlaySongs(onRepeat, it) }
-                        },
-                    )
-                }
-            }
-
-            if (filter == SpotlightFilter.All && newEpisodes.isNotEmpty()) {
-                item(key = "episodes-header") {
-                    SpotlightSectionHeader(
-                        title = stringResource(R.string.home_section_new_episodes),
-                        subtitle = stringResource(R.string.spotlight_caption_podcasts),
-                        actionLabel = stringResource(R.string.action_see_all),
-                        onAction = { onFilterChange(SpotlightFilter.Podcasts) },
-                    )
-                }
-                item(key = "episodes-shelf") {
-                    SpotlightShelf(
-                        items = newEpisodes.map {
-                            ShelfItem(
-                                it.id,
-                                it.title,
-                                it.artist,
-                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
-                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
-                            )
-                        },
-                        onClick = { id ->
-                            newEpisodes.find { it.id == id }?.let { onPlaySongs(newEpisodes, it) }
-                        },
-                    )
-                }
-            }
-
-            if (filter != SpotlightFilter.Playlists &&
-                filter != SpotlightFilter.Recommended &&
-                filter != SpotlightFilter.Podcasts &&
-                filter.browseKey() == null &&
-                recentlyPlayed.isNotEmpty()
-            ) {
-                item(key = "recent-header") {
-                    SpotlightSectionHeader(title = stringResource(R.string.home_section_jump_back_in))
-                }
-                item(key = "recent-shelf") {
-                    SpotlightShelf(
-                        items = recentlyPlayed.take(SHELF_ITEMS).map {
-                            ShelfItem(
-                                it.id,
-                                it.title,
-                                it.artist,
-                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
-                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
-                            )
-                        },
-                        onClick = { id ->
-                            recentlyPlayed.find { it.id == id }?.let(onRecentClick)
-                        },
-                    )
-                }
-            }
-
-            if (filter == SpotlightFilter.All || filter == SpotlightFilter.Playlists) {
-                if (ownPlaylists.isNotEmpty()) {
-                    item(key = "playlists-header") {
-                        SpotlightSectionHeader(title = stringResource(R.string.spotlight_your_playlists))
+                    item(key = "quick-picks") {
+                        SpotlightQuickPicks(
+                            songs = quickPicks,
+                            onSongClick = { onPlaySongs(quickPicks, it) },
+                            onSongLongPress = onSongLongPress,
+                        )
                     }
-                    item(key = "playlists-shelf") {
+                }
+
+                // The discovery tab's shelves. A grid of songs answers "what do I
+                // play next" and nothing else; a record, an hour somebody curated
+                // and a whole catalogue are the other three ways people find music,
+                // and none of them was reachable from this tab.
+                if (filter == SpotlightFilter.Recommended) {
+                    if (discoveryCollections.albums.isNotEmpty()) {
+                        item(key = "discovery-albums-header") {
+                            SpotlightSectionHeader(
+                                title = stringResource(R.string.spotlight_albums_to_explore),
+                                subtitle = stringResource(R.string.spotlight_albums_to_explore_sub),
+                            )
+                        }
+                        item(key = "discovery-albums") {
+                            SpotlightShelf(
+                                items = discoveryCollections.albums.map { it.toShelfItem() },
+                                onClick = { id ->
+                                    discoveryCollections.albums.find { it.id == id }
+                                        ?.let(onPlaylistClick)
+                                },
+                            )
+                        }
+                    }
+
+                    if (discoveryCollections.artists.isNotEmpty()) {
+                        item(key = "discovery-artists-header") {
+                            SpotlightSectionHeader(
+                                title = stringResource(R.string.spotlight_artists_for_you),
+                                subtitle = stringResource(R.string.spotlight_artists_for_you_sub),
+                            )
+                        }
+                        item(key = "discovery-artists") {
+                            SpotlightArtistRail(
+                                artists = discoveryCollections.artists,
+                                // The artist page lives in the Library tab, so this
+                                // is the hand-off the player and the channel page
+                                // already use rather than a route of its own.
+                                onClick = { viewModel.requestArtistPage(it.name) },
+                            )
+                        }
+                    }
+
+                    if (discoveryCollections.playlists.isNotEmpty()) {
+                        item(key = "discovery-playlists-header") {
+                            SpotlightSectionHeader(
+                                title = stringResource(R.string.spotlight_playlists_to_try),
+                                subtitle = stringResource(R.string.spotlight_playlists_to_try_sub),
+                            )
+                        }
+                        item(key = "discovery-playlists") {
+                            SpotlightShelf(
+                                items = discoveryCollections.playlists.map { it.toShelfItem() },
+                                onClick = { id ->
+                                    discoveryCollections.playlists.find { it.id == id }
+                                        ?.let(onPlaylistClick)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                // The two shelves Home works out for itself, on the unfiltered
+                // page only: every filter is already one view of the library.
+                if (filter == SpotlightFilter.All && onRepeat.size >= ON_REPEAT_SHELF_MIN) {
+                    item(key = "repeat-header") {
+                        SpotlightSectionHeader(
+                            title = stringResource(R.string.home_section_on_repeat),
+                            subtitle = stringResource(R.string.home_section_on_repeat_caption),
+                            actionLabel = stringResource(R.string.action_play_all),
+                            onAction = { onPlaySongs(onRepeat, onRepeat.firstOrNull()) },
+                        )
+                    }
+                    item(key = "repeat-shelf") {
                         SpotlightShelf(
-                            items = ownPlaylists.take(SHELF_ITEMS).map {
+                            items = onRepeat.map {
                                 ShelfItem(
                                     it.id,
-                                    it.name,
-                                    if (it.itemCount >= 0) "${it.itemCount} songs" else it.uploaderName,
-                                    it.thumbnailUrl,
-                                    com.ivor.ivormusic.data.googleImageAtSize(it.thumbnailUrl, 512),
+                                    it.title,
+                                    it.artist,
+                                    it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                    it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
                                 )
                             },
                             onClick = { id ->
-                                ownPlaylists.find { it.id == id }?.let(onPlaylistClick)
+                                onRepeat.find { it.id == id }?.let { onPlaySongs(onRepeat, it) }
                             },
                         )
                     }
                 }
-            }
 
-            if (filter == SpotlightFilter.All && songs.isNotEmpty()) {
-                item(key = "library-header") {
-                    SpotlightSectionHeader(
-                        title = stringResource(R.string.spotlight_from_your_library),
-                        actionLabel = stringResource(R.string.action_see_all),
-                        onAction = onShowAllInLibrary,
-                    )
+                if (filter == SpotlightFilter.All && newEpisodes.isNotEmpty()) {
+                    item(key = "episodes-header") {
+                        SpotlightSectionHeader(
+                            title = stringResource(R.string.home_section_new_episodes),
+                            subtitle = stringResource(R.string.spotlight_caption_podcasts),
+                            actionLabel = stringResource(R.string.action_see_all),
+                            onAction = { onFilterChange(SpotlightFilter.Podcasts) },
+                        )
+                    }
+                    item(key = "episodes-shelf") {
+                        SpotlightShelf(
+                            items = newEpisodes.map {
+                                ShelfItem(
+                                    it.id,
+                                    it.title,
+                                    it.artist,
+                                    it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                    it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                )
+                            },
+                            onClick = { id ->
+                                newEpisodes.find { it.id == id }?.let { onPlaySongs(newEpisodes, it) }
+                            },
+                        )
+                    }
                 }
-                item(key = "library-shelf") {
-                    SpotlightShelf(
-                        items = songs.take(SHELF_ITEMS).map {
-                            ShelfItem(
-                                it.id,
-                                it.title,
-                                it.artist,
-                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
-                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+
+                if (filter != SpotlightFilter.Playlists &&
+                    filter != SpotlightFilter.Recommended &&
+                    filter != SpotlightFilter.Podcasts &&
+                    filter.browseKey() == null &&
+                    recentlyPlayed.isNotEmpty()
+                ) {
+                    item(key = "recent-header") {
+                        SpotlightSectionHeader(title = stringResource(R.string.home_section_jump_back_in))
+                    }
+                    item(key = "recent-shelf") {
+                        SpotlightShelf(
+                            items = recentlyPlayed.take(SHELF_ITEMS).map {
+                                ShelfItem(
+                                    it.id,
+                                    it.title,
+                                    it.artist,
+                                    it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                    it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                )
+                            },
+                            onClick = { id ->
+                                recentlyPlayed.find { it.id == id }?.let(onRecentClick)
+                            },
+                        )
+                    }
+                }
+
+                if (filter == SpotlightFilter.All || filter == SpotlightFilter.Playlists) {
+                    if (ownPlaylists.isNotEmpty()) {
+                        item(key = "playlists-header") {
+                            SpotlightSectionHeader(title = stringResource(R.string.spotlight_your_playlists))
+                        }
+                        item(key = "playlists-shelf") {
+                            SpotlightShelf(
+                                items = ownPlaylists.take(SHELF_ITEMS).map {
+                                    ShelfItem(
+                                        it.id,
+                                        it.name,
+                                        if (it.itemCount >= 0) "${it.itemCount} songs" else it.uploaderName,
+                                        it.thumbnailUrl,
+                                        com.ivor.ivormusic.data.googleImageAtSize(it.thumbnailUrl, 512),
+                                    )
+                                },
+                                onClick = { id ->
+                                    ownPlaylists.find { it.id == id }?.let(onPlaylistClick)
+                                },
                             )
-                        },
-                        onClick = { id -> songs.find { it.id == id }?.let(onSongClick) },
+                        }
+                    }
+                }
+
+                if (filter == SpotlightFilter.All && songs.isNotEmpty()) {
+                    item(key = "library-header") {
+                        SpotlightSectionHeader(
+                            title = stringResource(R.string.spotlight_from_your_library),
+                            actionLabel = stringResource(R.string.action_see_all),
+                            onAction = onShowAllInLibrary,
+                        )
+                    }
+                    item(key = "library-shelf") {
+                        SpotlightShelf(
+                            items = songs.take(SHELF_ITEMS).map {
+                                ShelfItem(
+                                    it.id,
+                                    it.title,
+                                    it.artist,
+                                    it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                    it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                )
+                            },
+                            onClick = { id -> songs.find { it.id == id }?.let(onSongClick) },
+                        )
+                    }
+                }
+
+                // A filter that turned up nothing is a real state, and a blank page
+                // reads as a bug rather than as an answer.
+                filter.browseKey()?.let { key ->
+                    val mood = musicBrowse[BROWSE_MOOD]
+                    val showingMood = filter == SpotlightFilter.Explore && mood != null
+                    musicBrowseItems(
+                        state = if (showingMood) mood!! else musicBrowse[key],
+                        moodTitle = if (showingMood) mood!!.title else null,
+                        onCloseMood = { viewModel.closeMood() },
+                        onRetry = { viewModel.loadMusicBrowse(if (showingMood) BROWSE_MOOD else key, force = true) },
+                        onLoadMore = { viewModel.loadMoreMusicBrowse(if (showingMood) BROWSE_MOOD else key) },
+                        onPlaylistClick = onPlaylistClick,
+                        onArtistClick = { viewModel.requestArtistPage(it.name) },
+                        onPlayTracks = onPlaySongs,
+                        onMoodClick = { viewModel.openMood(it) },
+                        onSongLongPress = onSongLongPress,
                     )
                 }
-            }
 
-            // A filter that turned up nothing is a real state, and a blank page
-            // reads as a bug rather than as an answer.
-            filter.browseKey()?.let { key ->
-                val mood = musicBrowse[BROWSE_MOOD]
-                val showingMood = filter == SpotlightFilter.Explore && mood != null
-                musicBrowseItems(
-                    state = if (showingMood) mood!! else musicBrowse[key],
-                    moodTitle = if (showingMood) mood!!.title else null,
-                    onCloseMood = { viewModel.closeMood() },
-                    onRetry = { viewModel.loadMusicBrowse(if (showingMood) BROWSE_MOOD else key, force = true) },
-                    onLoadMore = { viewModel.loadMoreMusicBrowse(if (showingMood) BROWSE_MOOD else key) },
-                    onPlaylistClick = onPlaylistClick,
-                    onArtistClick = { viewModel.requestArtistPage(it.name) },
-                    onPlayTracks = onPlaySongs,
-                    onMoodClick = { viewModel.openMood(it) },
-                    onSongLongPress = onSongLongPress,
-                )
-            }
-
-            if (filter.browseKey() == null && !isInitialLoading && !isDiscoveryLoading && quickPicks.isEmpty() &&
-                (filter == SpotlightFilter.Recommended || filter == SpotlightFilter.Podcasts || shortcuts.isEmpty()) &&
-                (filter != SpotlightFilter.Recommended || discoveryCollections.isEmpty()) &&
-                (filter != SpotlightFilter.Playlists || ownPlaylists.isEmpty())
-            ) {
-                item(key = "empty") { SpotlightEmptyState(filter) }
+                if (filter.browseKey() == null && !isInitialLoading && !isDiscoveryLoading && quickPicks.isEmpty() &&
+                    (filter == SpotlightFilter.Recommended || filter == SpotlightFilter.Podcasts || shortcuts.isEmpty()) &&
+                    (filter != SpotlightFilter.Recommended || discoveryCollections.isEmpty()) &&
+                    (filter != SpotlightFilter.Playlists || ownPlaylists.isEmpty())
+                ) {
+                    item(key = "empty") { SpotlightEmptyState(filter) }
+                }
             }
 
             item(key = "tail") { Spacer(Modifier.height(24.dp)) }

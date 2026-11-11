@@ -3,6 +3,8 @@ agp = "9.3.1"
 kotlin = "2.4.20"
 coreKtx = "1.17.0"
 junit = "4.13.2"
+robolectric = "4.17"
+roborazzi = "1.78.0"
 mockito = "5.14.2"
 jsonUnitTest = "20250107"
 junitVersion = "1.3.0"
@@ -36,6 +38,11 @@ aboutLibraries = "15.2.0"
 material-color-utilities = { group = "com.google.android.material", name = "material", version.ref = "materialComponents" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
+compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 json-unit-test = { group = "org.json", name = "json", version.ref = "jsonUnitTest" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -86,6 +93,7 @@ aboutlibraries-compose-m3 = { group = "com.mikepenz", name = "aboutlibraries-com
 
 
 [plugins]
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

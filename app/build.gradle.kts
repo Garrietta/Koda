@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.aboutlibraries.android)
+    alias(libs.plugins.roborazzi)
 }
 
 // Release signing credentials: CI supplies them as env vars, local builds read
@@ -139,6 +140,13 @@ android {
             // which is most of data/ - could not be unit tested at all. Return
             // defaults instead of throwing.
             isReturnDefaultValues = true
+            // Screenshot tests draw real resources (the typeface, strings)
+            // through Robolectric.
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.maxHeapSize = "2g"
+            }
         }
     }
 
@@ -230,6 +238,12 @@ dependencies {
     implementation(libs.jaudiotagger)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.mockito.core)
     // A real org.json on the unit-test classpath, shadowing the Android stub.
     // `isReturnDefaultValues` makes every stubbed android.jar method return a

@@ -33,8 +33,9 @@ const val DYNAMIC_PALETTE_ID = "dynamic"
  * there is a genuinely distinct pick for every taste.
  */
 val APP_PALETTES: List<AppPalette> = listOf(
-    // Rondo's own colors, and the default: the iris of the icon, an orchid
-    // beside it and the orange of the play triangle. The id is stored.
+    // Rondo's own colors, and the default. The scheme is written out in
+    // RondoScheme.kt; these three are what the palette picker previews.
+    // The id is stored.
     AppPalette("rondo", "Rondo", "Signature", Color(0xFF5B4BFF), Color(0xFFB45CE6), Color(0xFFFF7A45)),
     // Vibrant
     AppPalette("electric", "Electric", "Vibrant", Color(0xFF2F6BFF), Color(0xFF00C2FF), Color(0xFF7A5CFF)),
@@ -141,6 +142,9 @@ fun buildPaletteColorScheme(
     dark: Boolean,
     style: PaletteStyle = PaletteStyle.TONAL_SPOT,
 ): ColorScheme {
+    // Rondo's own colors are written out, not grown from a seed; the
+    // palette style does not apply to them.
+    if (palette.id == RONDO_PALETTE_ID) return rondoColorScheme(dark)
     val monochrome = palette.id == "black" || palette.id == "white"
     val scheme = buildSeedColorScheme(
         palette.seedPrimary,

@@ -141,6 +141,13 @@
     <string name="home_section_on_repeat">On repeat</string>
     <string name="home_section_on_repeat_caption">Songs you keep coming back to</string>
     <string name="home_section_new_episodes">New episodes</string>
+    <string name="blocks_dj">DJ</string>
+    <string name="blocks_dj_caption">A set from what you played this week</string>
+    <string name="blocks_liked_count">%1$d songs</string>
+    <string name="blocks_liked_empty">No songs yet</string>
+    <string name="blocks_episodes_count">%1$d from your shows</string>
+    <string name="blocks_episodes_empty">Follow a show</string>
+    <string name="blocks_for_you_caption">Songs you have not heard yet</string>
     <string name="home_section_top_artists">Your top artists</string>
     <string name="home_section_mixes">Mixes for you</string>
     <string name="home_offline_subtitle">You\'re offline. These play without a connection.</string>

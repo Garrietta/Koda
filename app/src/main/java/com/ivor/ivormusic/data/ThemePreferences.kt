@@ -1381,8 +1381,10 @@ class ThemePreferences(context: Context) {
      * value so that everyone who had album colours off keeps them off, and
      * every existing reader of that switch still means what it meant.
      */
+    // Off unless turned on: the player takes the album's colors and the
+    // rest of the app keeps its own, which is what tells its tiles apart.
     private fun getArtworkColorsWholeAppPreference(): Boolean =
-        prefs.getBoolean(KEY_ARTWORK_COLORS_WHOLE_APP, true)
+        prefs.getBoolean(KEY_ARTWORK_COLORS_WHOLE_APP, false)
 
     fun setArtworkColorsWholeApp(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_ARTWORK_COLORS_WHOLE_APP, enabled).apply()

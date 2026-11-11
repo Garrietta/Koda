@@ -1330,6 +1330,7 @@ fun HomeScreen(
                                                     selectedTab = TAB_LIBRARY
                                                 },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
+                                                onOpenDj = { selectedTab = TAB_AIDJ },
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
