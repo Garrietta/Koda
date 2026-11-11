@@ -277,3 +277,9 @@ What Koda's earlier engines took from it (both removed September 2026):
 - bilateral (symmetric) motion estimation at the midpoint, the basis of the portable GLES 2 engine;
 - accepting a finer vector only when it clearly beats the coarser one (a lesson learned while testing a thin-object pass that was later dropped);
 - weighting overlapping motion by how well each candidate fits.
+
+### Google Sans Flex
+
+<https://github.com/googlefonts/googlesans-flex>, copyright 2015 The Google Sans Flex Authors, licensed under the SIL Open Font License 1.1 (`licenses/GoogleSansFlex-OFL.txt`).
+
+Rondo's typeface, bundled as `app/src/main/res/font/google_sans_flex.ttf`: a subset of the variable font that keeps the weight, width, optical size and roundness axes.

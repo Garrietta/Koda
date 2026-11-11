@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Đang phát</string>
     <string name="video_playback_channel_name">Phát video</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Thư viện video cần internet. Tắt chế độ chỉ phát nội bộ trong Cài đặt để xem.</string>
     <string name="local_only_update_subtitle">Kiểm tra cập nhật cần internet. Tắt chế độ chỉ phát nội bộ trong Cài đặt để kiểm tra.</string>
 
-    <string name="crash_dialog_title">Koda đã gặp lỗi ở lần trước</string>
+    <string name="crash_dialog_title">Rondo đã gặp lỗi ở lần trước</string>
     <string name="crash_dialog_message">Đã có sự cố trong phiên trước của bạn. Bạn có thể gửi báo cáo lỗi kèm chi tiết - không có gì rời khỏi thiết bị trừ khi bạn chọn chia sẻ.</string>
     <string name="crash_dialog_view_report">Xem và báo cáo</string>
     <string name="crash_dialog_not_now"> Để sau</string>
@@ -313,7 +313,7 @@
     <string name="vh_youre_offline">Bạn đang ngoại tuyến</string>
     <string name="vh_removed_from_history">Đã xóa khỏi lịch sử xem</string>
     <string name="vh_clear_history">Xóa lịch sử xem</string>
-    <string name="vh_clear_history_body">Thao tác này xóa lịch sử xem của Koda trên máy này. Không xóa gì khỏi tài khoản YouTube của bạn.</string>
+    <string name="vh_clear_history_body">Thao tác này xóa lịch sử xem của Rondo trên máy này. Không xóa gì khỏi tài khoản YouTube của bạn.</string>
     <string name="vh_clear_history_confirm">Xóa</string>
     <string name="vh_no_videos_found">Không tìm thấy video</string>
     <string name="vh_downloaded_hint">Video đã tải sẽ hiện ở đây</string>

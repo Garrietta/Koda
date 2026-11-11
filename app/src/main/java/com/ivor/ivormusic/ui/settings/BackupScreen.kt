@@ -887,7 +887,7 @@ private fun manifestLine(manifest: BackupManifest): String {
         "an unknown date"
     }
     val from = manifest.device?.let { " from $it" }.orEmpty()
-    val version = manifest.appVersionName?.let { ", Koda $it" }.orEmpty()
+    val version = manifest.appVersionName?.let { ", Rondo $it" }.orEmpty()
     return "Taken $date$from$version."
 }
 

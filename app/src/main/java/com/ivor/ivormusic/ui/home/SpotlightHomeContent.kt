@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ToggleButton
@@ -145,6 +146,8 @@ fun SpotlightHomeContent(
     val discoveryCollections by viewModel.discoveryCollections.collectAsState()
     val isDiscoveryLoading by viewModel.isDiscoveryLoading.collectAsState()
     val musicBrowse by viewModel.musicBrowse.collectAsState()
+    val onRepeat by viewModel.onRepeat.collectAsState()
+    val newEpisodes by viewModel.newEpisodes.collectAsState()
 
     // Fetched when its tab is opened rather than with the rest of Home: it is
     // several searches plus a radio call, and most sessions never look at it.
@@ -153,11 +156,12 @@ fun SpotlightHomeContent(
         filter.browseKey()?.let { viewModel.loadMusicBrowse(it) }
     }
 
-    val quickPicks = remember(filter, songs, likedSongs, recentlyPlayed, discoverySongs) {
+    val quickPicks = remember(filter, songs, likedSongs, recentlyPlayed, discoverySongs, newEpisodes) {
         when (filter) {
             SpotlightFilter.Liked -> likedSongs
             SpotlightFilter.Recent -> recentlyPlayed
             SpotlightFilter.Recommended -> discoverySongs
+            SpotlightFilter.Podcasts -> newEpisodes
             SpotlightFilter.MusicHome, SpotlightFilter.Explore, SpotlightFilter.Charts, SpotlightFilter.NewReleases -> emptyList()
             else -> songs
         }.take(QUICK_PICK_PAGES * QUICK_PICK_ROWS)
@@ -258,6 +262,8 @@ fun SpotlightHomeContent(
                     SpotlightSectionHeader(
                         title = if (filter == SpotlightFilter.Recommended) {
                             stringResource(R.string.spotlight_new_for_you)
+                        } else if (filter == SpotlightFilter.Podcasts) {
+                            stringResource(R.string.home_section_new_episodes)
                         } else {
                             stringResource(R.string.spotlight_quick_picks)
                         },
@@ -266,7 +272,11 @@ fun SpotlightHomeContent(
                         onAction = { onPlaySongs(quickPicks, quickPicks.firstOrNull()) },
                         // Spin these: the wheel opens on the pool this header
                         // is showing, beside the other way to start it.
-                        onSpin = { onSpinClick(filter.spinSource()) },
+                        onSpin = if (filter == SpotlightFilter.Podcasts) {
+                            null
+                        } else {
+                            { onSpinClick(filter.spinSource()) }
+                        },
                     )
                 }
                 item(key = "quick-picks") {
@@ -338,8 +348,65 @@ fun SpotlightHomeContent(
                 }
             }
 
+            // The two shelves Home works out for itself, on the unfiltered
+            // page only: every filter is already one view of the library.
+            if (filter == SpotlightFilter.All && onRepeat.size >= ON_REPEAT_SHELF_MIN) {
+                item(key = "repeat-header") {
+                    SpotlightSectionHeader(
+                        title = stringResource(R.string.home_section_on_repeat),
+                        subtitle = stringResource(R.string.home_section_on_repeat_caption),
+                        actionLabel = stringResource(R.string.action_play_all),
+                        onAction = { onPlaySongs(onRepeat, onRepeat.firstOrNull()) },
+                    )
+                }
+                item(key = "repeat-shelf") {
+                    SpotlightShelf(
+                        items = onRepeat.map {
+                            ShelfItem(
+                                it.id,
+                                it.title,
+                                it.artist,
+                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                            )
+                        },
+                        onClick = { id ->
+                            onRepeat.find { it.id == id }?.let { onPlaySongs(onRepeat, it) }
+                        },
+                    )
+                }
+            }
+
+            if (filter == SpotlightFilter.All && newEpisodes.isNotEmpty()) {
+                item(key = "episodes-header") {
+                    SpotlightSectionHeader(
+                        title = stringResource(R.string.home_section_new_episodes),
+                        subtitle = stringResource(R.string.spotlight_caption_podcasts),
+                        actionLabel = stringResource(R.string.action_see_all),
+                        onAction = { onFilterChange(SpotlightFilter.Podcasts) },
+                    )
+                }
+                item(key = "episodes-shelf") {
+                    SpotlightShelf(
+                        items = newEpisodes.map {
+                            ShelfItem(
+                                it.id,
+                                it.title,
+                                it.artist,
+                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                            )
+                        },
+                        onClick = { id ->
+                            newEpisodes.find { it.id == id }?.let { onPlaySongs(newEpisodes, it) }
+                        },
+                    )
+                }
+            }
+
             if (filter != SpotlightFilter.Playlists &&
                 filter != SpotlightFilter.Recommended &&
+                filter != SpotlightFilter.Podcasts &&
                 filter.browseKey() == null &&
                 recentlyPlayed.isNotEmpty()
             ) {
@@ -432,7 +499,7 @@ fun SpotlightHomeContent(
             }
 
             if (filter.browseKey() == null && !isInitialLoading && !isDiscoveryLoading && quickPicks.isEmpty() &&
-                (filter == SpotlightFilter.Recommended || shortcuts.isEmpty()) &&
+                (filter == SpotlightFilter.Recommended || filter == SpotlightFilter.Podcasts || shortcuts.isEmpty()) &&
                 (filter != SpotlightFilter.Recommended || discoveryCollections.isEmpty()) &&
                 (filter != SpotlightFilter.Playlists || ownPlaylists.isEmpty())
             ) {
@@ -484,6 +551,9 @@ private object QuickPickPageSize : PageSize {
 }
 private const val QUICK_PICK_PAGES = 3
 private const val SHELF_ITEMS = 12
+
+/** Fewer than this on repeat is a coincidence, not a shelf. */
+private const val ON_REPEAT_SHELF_MIN = 3
 private const val SHORTCUT_COUNT = 6
 
 /* ------------------------------------------------------------------ */
@@ -506,6 +576,9 @@ enum class SpotlightFilter(val label: String, val quickPickCaption: String?) {
      * entry that answers "what should I listen to that I have not heard".
      */
     Recommended("For you", "Not in your library yet"),
+
+    /** The newest episodes of the shows followed in the Library. */
+    Podcasts("Podcasts", "Newest from the shows you follow"),
     MusicHome("Home", null),
     Explore("Explore", null),
     Charts("Charts", null),
@@ -589,6 +662,7 @@ private fun SpotlightFilterChips(
 private fun spotlightFilterLabel(filter: SpotlightFilter): String = when (filter) {
     SpotlightFilter.All -> stringResource(R.string.filter_all)
     SpotlightFilter.Recommended -> stringResource(R.string.filter_recommended)
+    SpotlightFilter.Podcasts -> stringResource(R.string.filter_podcasts)
     SpotlightFilter.Liked -> stringResource(R.string.filter_liked)
     SpotlightFilter.Recent -> stringResource(R.string.filter_recent)
     SpotlightFilter.Playlists -> stringResource(R.string.filter_playlists)
@@ -601,6 +675,7 @@ private fun spotlightFilterLabel(filter: SpotlightFilter): String = when (filter
 @Composable
 private fun spotlightQuickPickCaption(filter: SpotlightFilter): String? = when (filter) {
     SpotlightFilter.Recommended -> stringResource(R.string.spotlight_new_for_you_caption)
+    SpotlightFilter.Podcasts -> stringResource(R.string.spotlight_caption_podcasts)
     SpotlightFilter.Liked -> stringResource(R.string.spotlight_caption_liked)
     SpotlightFilter.Recent -> stringResource(R.string.spotlight_caption_recent)
     else -> null
@@ -1128,6 +1203,7 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
             imageVector = when (filter) {
                 SpotlightFilter.Liked -> Icons.Rounded.Favorite
                 SpotlightFilter.Recommended -> Icons.Rounded.AutoAwesome
+                SpotlightFilter.Podcasts -> Icons.Rounded.Podcasts
                 else -> Icons.Rounded.History
             },
             contentDescription = null,
@@ -1140,6 +1216,7 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
                 SpotlightFilter.Liked -> stringResource(R.string.spotlight_empty_no_liked)
                 SpotlightFilter.Recent -> stringResource(R.string.spotlight_empty_no_recent)
                 SpotlightFilter.Playlists -> stringResource(R.string.spotlight_empty_no_playlists)
+                SpotlightFilter.Podcasts -> stringResource(R.string.spotlight_empty_no_podcasts)
                 SpotlightFilter.Recommended -> stringResource(R.string.spotlight_discovery_empty)
                 else -> stringResource(R.string.spotlight_empty_generic)
             },
@@ -1151,6 +1228,7 @@ private fun SpotlightEmptyState(filter: SpotlightFilter) {
             text = when (filter) {
                 SpotlightFilter.Liked -> stringResource(R.string.spotlight_hint_liked)
                 SpotlightFilter.Playlists -> stringResource(R.string.spotlight_hint_playlists)
+                SpotlightFilter.Podcasts -> stringResource(R.string.spotlight_hint_podcasts)
                 SpotlightFilter.Recommended -> stringResource(R.string.spotlight_discovery_empty_sub)
                 else -> stringResource(R.string.spotlight_hint_all)
             },

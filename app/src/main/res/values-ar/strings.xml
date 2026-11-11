@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">قيد التشغيل الآن</string>
     <string name="video_playback_channel_name">تشغيل الفيديو</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">مكتبة الفيديو تحتاج إلى الإنترنت. أوقف وضع «محلي فقط» من الإعدادات لمشاهدتها.</string>
     <string name="local_only_update_subtitle">التحقق من التحديثات يحتاج إلى الإنترنت. أوقف وضع «محلي فقط» من الإعدادات للتحقق من التحديثات.</string>
 
-    <string name="crash_dialog_title">تعطّل Koda في المرة الأخيرة</string>
+    <string name="crash_dialog_title">تعطّل Rondo في المرة الأخيرة</string>
     <string name="crash_dialog_message">حدث خطأ ما في جلستك السابقة. يمكنك إرسال تقرير بالخطأ مع التفاصيل — لا شيء يخرج من جهازك إلا إذا اخترت المشاركة.</string>
     <string name="crash_dialog_view_report">عرض وإبلاغ</string>
     <string name="crash_dialog_not_now">ليس الآن</string>
@@ -328,7 +328,7 @@
     <string name="vh_youre_offline">أنت بلا اتصال</string>
     <string name="vh_removed_from_history">تمت الإزالة من سجل المشاهدة</string>
     <string name="vh_clear_history">مسح سجل المشاهدة</string>
-    <string name="vh_clear_history_body">يؤدي هذا إلى إفراغ سجل المشاهدة في Koda على هذا الجهاز دون حذف أي شيء من حسابك في YouTube.</string>
+    <string name="vh_clear_history_body">يؤدي هذا إلى إفراغ سجل المشاهدة في Rondo على هذا الجهاز دون حذف أي شيء من حسابك في YouTube.</string>
     <string name="vh_clear_history_confirm">مسح</string>
     <string name="vh_no_videos_found">لم يتم العثور على فيديوهات</string>
     <string name="vh_downloaded_hint">ستظهر الفيديوهات المنزلة هنا</string>

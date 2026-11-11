@@ -159,7 +159,7 @@ fun AppLockOverlay(
                     text = buildString {
                         append(stringResource(R.string.al_youve_had))
                         append(AppTimeLimit.formatBudget(budgetMinutes))
-                        append(" with Koda today. Come back tomorrow - ")
+                        append(" with Rondo today. Come back tomorrow - ")
                         append("the app unlocks in ")
                         append(formatCountdown(millisLeft))
                         append(".")

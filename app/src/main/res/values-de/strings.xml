@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Wird abgespielt</string>
     <string name="video_playback_channel_name">Videowiedergabe</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Die Video-Mediathek braucht Internet. Deaktiviere den Nur-lokal-Modus in den Einstellungen, um sie zu sehen.</string>
     <string name="local_only_update_subtitle">Die Update-Suche braucht Internet. Deaktiviere den Nur-lokal-Modus in den Einstellungen, um nach Updates zu suchen.</string>
 
-    <string name="crash_dialog_title">Koda ist beim letzten Mal abgestürzt</string>
+    <string name="crash_dialog_title">Rondo ist beim letzten Mal abgestürzt</string>
     <string name="crash_dialog_message">In deiner letzten Sitzung ist etwas schiefgelaufen. Du kannst einen Fehlerbericht mit Details senden - nichts verlässt dein Gerät, außer du entscheidest dich zu teilen.</string>
     <string name="crash_dialog_view_report">Ansehen &amp; melden</string>
     <string name="crash_dialog_not_now">Nicht jetzt</string>

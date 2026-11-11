@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">در حال پخش</string>
     <string name="video_playback_channel_name">پخش ویدیو</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">کتابخانه ویدیو به اینترنت نیاز دارد. برای دیدن آن، «فقط محلی» را در تنظیمات خاموش کنید.</string>
     <string name="local_only_update_subtitle">بررسی به‌روزرسانی به اینترنت نیاز دارد. برای بررسی، «فقط محلی» را در تنظیمات خاموش کنید.</string>
 
-    <string name="crash_dialog_title">Koda بار گذشته کرش کرد</string>
+    <string name="crash_dialog_title">Rondo بار گذشته کرش کرد</string>
     <string name="crash_dialog_message">در جلسه قبلی شما مشکلی پیش آمد. می‌توانید گزارش اشکال همراه با جزئیات بفرستید - مادامی که انتخاب به اشتراک‌گذاری نکنید، چیزی از دستگاه شما خارج نمی‌شود.</string>
     <string name="crash_dialog_view_report">مشاهده و گزارش</string>
     <string name="crash_dialog_not_now">فعلاً نه</string>
@@ -318,7 +318,7 @@
     <string name="vh_youre_offline">شما آفلاین هستید</string>
     <string name="vh_removed_from_history">از تاریخچه تماشا حذف شد</string>
     <string name="vh_clear_history">پاک کردن تاریخچه تماشا</string>
-    <string name="vh_clear_history_body">این کار تاریخچه تماشای Koda را در این دستگاه خالی می‌کند. چیزی از حساب YouTube شما حذف نمی‌شود.</string>
+    <string name="vh_clear_history_body">این کار تاریخچه تماشای Rondo را در این دستگاه خالی می‌کند. چیزی از حساب YouTube شما حذف نمی‌شود.</string>
     <string name="vh_clear_history_confirm">پاک کردن</string>
     <string name="vh_no_videos_found">ویدیویی پیدا نشد</string>
     <string name="vh_downloaded_hint">ویدیوهای دانلودشده اینجا ظاهر می‌شوند</string>

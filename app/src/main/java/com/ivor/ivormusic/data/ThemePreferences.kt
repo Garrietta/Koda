@@ -588,8 +588,8 @@ class ThemePreferences(context: Context) {
         const val KEY_APP_ICON = "app_icon"
         const val DEFAULT_APP_ICON = "default"
         private const val KEY_PALETTE_STYLE = "palette_style"
-        /** Default palette id: wallpaper-based dynamic color (Android 12+). */
-        const val DEFAULT_COLOR_PALETTE = "dynamic"
+        /** Default palette id: Rondo's own colors. Wallpaper color ("dynamic") is a choice. */
+        const val DEFAULT_COLOR_PALETTE = "rondo"
         private const val KEY_LOAD_LOCAL_SONGS = "load_local_songs"
         /** One-shot marker for [migrateLoadLocalSongsDefault]. */
         private const val KEY_LOAD_LOCAL_SONGS_DEFAULT_MIGRATED =
@@ -2113,7 +2113,9 @@ class ThemePreferences(context: Context) {
     }
 
     private fun getSpotlightHomePreference(): Boolean {
-        return prefs.getBoolean(KEY_SPOTLIGHT_HOME, false)
+        // On unless turned off: the shortcut grid and shelves are the Home
+        // Rondo opens on, and the classic Home is the alternative.
+        return prefs.getBoolean(KEY_SPOTLIGHT_HOME, true)
     }
 
     /**

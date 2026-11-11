@@ -3,97 +3,166 @@
 package com.ivor.ivormusic.ui.theme
 
 import androidx.compose.material3.Typography
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
-import androidx.compose.ui.text.googlefonts.R as GoogleFontsR
-import androidx.compose.ui.text.style.TextGeometricTransform
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.ivor.ivormusic.R
 
-// Material 3 Expressive Typography using Roboto Flex Variable Font
-// Using FontVariation.width() for wider/condensed text styles
+/*
+ * Rondo's type: one variable font, Google Sans Flex, bundled with the app
+ * so the first screen is set in it with or without Play Services and with
+ * or without a connection.
+ *
+ * Three cuts of the one file do all the work:
+ *
+ *   Text      width 100, square terminals   everything that is read
+ *   Headline  width 110, round terminals    section and page headings
+ *   Display   width 125, round terminals    the few very large lines
+ *
+ * The rounding is the name: a rondo comes round again, and the headings
+ * are the part of the page that returns on every screen. Body text stays
+ * square because round terminals cost legibility at 14sp.
+ */
 
-// Google Font Provider
-val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = GoogleFontsR.array.com_google_android_gms_fonts_certs
-)
+private const val SQUARE = 0f
+private const val ROUND = 100f
 
-val RobotoFlexFont = GoogleFont("Roboto Flex")
+/** Every weight the font has, so no call site is ever given a faked bold. */
+private val WEIGHTS = intArrayOf(300, 400, 500, 600, 700, 800, 900)
 
-// Standard width (100f) - for body text and regular content
-val RobotoFlex = FontFamily(
-    Font(
-        googleFont = RobotoFlexFont,
-        fontProvider = provider,
-        weight = FontWeight.Normal,
-        variationSettings = FontVariation.Settings(
-            FontVariation.width(100f),
-            FontVariation.weight(400)
+private fun flex(width: Float, round: Float): FontFamily = FontFamily(
+    WEIGHTS.map { weight ->
+        Font(
+            resId = R.font.google_sans_flex,
+            weight = FontWeight(weight),
+            variationSettings = FontVariation.Settings(
+                FontVariation.weight(weight),
+                FontVariation.width(width),
+                FontVariation.Setting("ROND", round),
+            ),
         )
-    )
+    }
 )
 
-val MontserratFont = GoogleFont("Montserrat")
+val RondoText: FontFamily = flex(width = 100f, round = SQUARE)
+val RondoHeadline: FontFamily = flex(width = 110f, round = ROUND)
+val RondoDisplay: FontFamily = flex(width = 125f, round = ROUND)
 
-val MontserratFamily = FontFamily(
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.Black),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.ExtraBold),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.Bold),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.SemiBold),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = MontserratFont, fontProvider = provider, weight = FontWeight.Light),
-)
+// The names the screens were written against. Each now points at the cut
+// that does the same job, so a screen that asks for one by name is set in
+// the same face as the rest of the app.
+val RobotoFlex: FontFamily = RondoText
+val RobotoFlexMediumWidth: FontFamily = RondoHeadline
+val MontserratFamily: FontFamily = RondoDisplay
 
-// Medium width (110f) - for section headers
-val RobotoFlexMediumWidth = FontFamily(
-    Font(
-        googleFont = RobotoFlexFont,
-        fontProvider = provider,
-        weight = FontWeight.SemiBold,
-        variationSettings = FontVariation.Settings(
-            FontVariation.width(110f),
-            FontVariation.weight(600)
-        )
-    )
-)
+private val Tight = PlatformTextStyle(includeFontPadding = false)
 
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = MontserratFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = RondoDisplay,
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 68.sp,
-        textGeometricTransform = TextGeometricTransform(scaleX = 1.5f), // Stretch horizontally
-        letterSpacing = (-0.05).em,
-        lineHeight = 0.8.em,
-        platformStyle = PlatformTextStyle(includeFontPadding = false)
+        lineHeight = 0.9.em,
+        letterSpacing = (-0.03).em,
+        platformStyle = Tight,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = RondoHeadline,
+        fontWeight = FontWeight.Bold,
+        fontSize = 45.sp,
+        lineHeight = 52.sp,
+        letterSpacing = (-0.02).em,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = RondoHeadline,
+        fontWeight = FontWeight.Bold,
+        fontSize = 36.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-0.01).em,
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = RondoHeadline,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        lineHeight = 40.sp,
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = RondoHeadline,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = RobotoFlexMediumWidth,
+        fontFamily = RondoHeadline,
         fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
-        lineHeight = 32.sp
+        lineHeight = 32.sp,
+    ),
+    titleLarge = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+    ),
+    titleMedium = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    titleSmall = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = RobotoFlex,
+        fontFamily = RondoText,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.2.sp,
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.2.sp,
+    ),
+    bodySmall = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.3.sp,
+    ),
+    labelLarge = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = RobotoFlex,
+        fontFamily = RondoText,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
+        letterSpacing = 0.4.sp,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = RondoText,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp,
+    ),
 )

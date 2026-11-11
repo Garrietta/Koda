@@ -42,7 +42,7 @@ class LiveDjEngine(context: Context) {
         val voice = geminiTts.voice // user's selected voice
         val profileSummary = userProfile.buildProfileSummary()
         val systemInstruction =
-            "You are Koda DJ, a charismatic radio DJ with impeccable taste. " +
+            "You are Rondo DJ, a charismatic radio DJ with impeccable taste. " +
                 "For each track I name, respond with ONE vivid spoken sentence " +
                 "introducing it — warm, specific, never generic. " +
                 "Only speak when the moment deserves it; if the track flows " +

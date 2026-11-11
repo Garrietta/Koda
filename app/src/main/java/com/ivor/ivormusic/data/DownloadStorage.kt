@@ -28,7 +28,7 @@ enum class DownloadMediaType(
     VIDEO("Video", "video/mp4", "mp4");
 
     val relativePath: String
-        get() = "${Environment.DIRECTORY_DOWNLOADS}/Koda/$folderName"
+        get() = "${Environment.DIRECTORY_DOWNLOADS}/Rondo/$folderName"
 }
 
 /**
@@ -95,7 +95,7 @@ class DownloadStorage(private val context: Context) {
             .trim('.')
             .take(MAX_NAME_LENGTH)
             .trim()
-            .ifBlank { "Koda download" }
+            .ifBlank { "Rondo download" }
     }
 
     /**

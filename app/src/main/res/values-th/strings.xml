@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">กำลังเล่น</string>
     <string name="video_playback_channel_name">การเล่นวิดีโอ</string>
 
@@ -313,7 +313,7 @@
     <string name="vh_youre_offline">คุณออฟไลน์อยู่</string>
     <string name="vh_removed_from_history">นำออกจากประวัติการดูแล้ว</string>
     <string name="vh_clear_history">ล้างประวัติการดู</string>
-    <string name="vh_clear_history_body">การนี้จะล้างประวัติการดูของ Koda ในเครื่องนี้ ไม่ลบอะไรจากบัญชี YouTube ของคุณ</string>
+    <string name="vh_clear_history_body">การนี้จะล้างประวัติการดูของ Rondo ในเครื่องนี้ ไม่ลบอะไรจากบัญชี YouTube ของคุณ</string>
     <string name="vh_clear_history_confirm">ล้าง</string>
     <string name="vh_no_videos_found">ไม่พบวิดีโอ</string>
     <string name="vh_downloaded_hint">วิดีโอที่ดาวน์โหลดจะแสดงที่นี่</string>

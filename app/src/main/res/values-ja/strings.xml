@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">再生中</string>
     <string name="video_playback_channel_name">動画の再生</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">動画ライブラリにはインターネットが必要です。設定でローカルのみモードをオフにしてください。</string>
     <string name="local_only_update_subtitle">アップデートの確認にはインターネットが必要です。設定でローカルのみモードをオフにしてください。</string>
 
-    <string name="crash_dialog_title">前回、Koda がクラッシュしました</string>
+    <string name="crash_dialog_title">前回、Rondo がクラッシュしました</string>
     <string name="crash_dialog_message">前回のセッションで問題が発生しました。詳細を含むバグレポートを送信できます - 共有を選ばない限り、端末の外には何も送られません。</string>
     <string name="crash_dialog_view_report">表示して報告</string>
     <string name="crash_dialog_not_now">後で</string>
@@ -312,7 +312,7 @@
     <string name="vh_youre_offline">オフラインです</string>
     <string name="vh_removed_from_history">再生履歴から削除しました</string>
     <string name="vh_clear_history">再生履歴を消去</string>
-    <string name="vh_clear_history_body">この端末の Koda の再生履歴を空にします。YouTube アカウントの内容は削除されません。</string>
+    <string name="vh_clear_history_body">この端末の Rondo の再生履歴を空にします。YouTube アカウントの内容は削除されません。</string>
     <string name="vh_clear_history_confirm">消去</string>
     <string name="vh_no_videos_found">動画が見つかりませんでした</string>
     <string name="vh_downloaded_hint">ダウンロードした動画はここに表示されます</string>

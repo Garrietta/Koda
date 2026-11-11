@@ -117,7 +117,7 @@ fun ReportBugScreen(onBack: () -> Unit) {
     }
 
     fun buildReport(): String = buildString {
-        appendLine("Koda bug report")
+        appendLine("Rondo bug report")
         appendLine()
         appendLine("What happened:")
         appendLine(description.ifBlank { "(not described)" })
@@ -139,7 +139,7 @@ fun ReportBugScreen(onBack: () -> Unit) {
     fun copyAnd(reportText: String, then: (() -> Unit)? = null) {
         val clipboard =
             context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Koda bug report", reportText))
+        clipboard.setPrimaryClip(ClipData.newPlainText("Rondo bug report", reportText))
         if (includeCrash && crashText != null && !crashConsumed) {
             CrashReporter.clearPendingCrash(context)
             crashConsumed = true

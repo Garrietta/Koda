@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Přehrává se</string>
     <string name="video_playback_channel_name">Přehrávání videa</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Video knihovna potřebuje internet. Vypněte režim Jen offline v nastavení, abyste ji viděli.</string>
     <string name="local_only_update_subtitle">Kontrola aktualizací potřebuje internet. Vypněte režim Jen offline v nastavení, abyste zkontrolovali aktualizace.</string>
 
-    <string name="crash_dialog_title">Koda se naposledy zhroutil</string>
+    <string name="crash_dialog_title">Rondo se naposledy zhroutil</string>
     <string name="crash_dialog_message">Ve vaší předchozí relaci se něco pokazilo. Můžete odeslat hlášení chyby s podrobnostmi - nic neopustí vaše zařízení, pokud se nerozhodnete ho sdílet.</string>
     <string name="crash_dialog_view_report">Zobrazit a nahlásit</string>
     <string name="crash_dialog_not_now">Teď ne</string>

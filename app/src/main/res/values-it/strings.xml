@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Riproduzione in corso</string>
     <string name="video_playback_channel_name">Riproduzione video</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">La videoteca richiede Internet. Disattiva la modalità Solo locale nelle Impostazioni per vederla.</string>
     <string name="local_only_update_subtitle">Il controllo degli aggiornamenti richiede Internet. Disattiva la modalità Solo locale nelle Impostazioni per verificare gli aggiornamenti.</string>
 
-    <string name="crash_dialog_title">Koda si è bloccato l\'ultima volta</string>
+    <string name="crash_dialog_title">Rondo si è bloccato l\'ultima volta</string>
     <string name="crash_dialog_message">Nella sessione precedente è andato qualcosa storto. Puoi inviare una segnalazione di bug con i dettagli: nulla lascia il tuo dispositivo a meno che tu scelga di condividerlo.</string>
     <string name="crash_dialog_view_report">Visualizza e segnala</string>
     <string name="crash_dialog_not_now">Non ora</string>
@@ -315,7 +315,7 @@
     <string name="vh_youre_offline">Sei offline</string>
     <string name="vh_removed_from_history">Rimosso dalla cronologia visualizzazioni</string>
     <string name="vh_clear_history">Cancella cronologia visualizzazioni</string>
-    <string name="vh_clear_history_body">Svuota la cronologia visualizzazioni di Koda su questo dispositivo. Non elimina nulla dal tuo account YouTube.</string>
+    <string name="vh_clear_history_body">Svuota la cronologia visualizzazioni di Rondo su questo dispositivo. Non elimina nulla dal tuo account YouTube.</string>
     <string name="vh_clear_history_confirm">Cancella</string>
     <string name="vh_no_videos_found">Nessun video trovato</string>
     <string name="vh_downloaded_hint">I video scaricati appariranno qui</string>

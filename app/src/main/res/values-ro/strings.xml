@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Redă acum</string>
     <string name="video_playback_channel_name">Redare video</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Videoteca are nevoie de internet. Dezactivează modul Doar local din Setări pentru a o vedea.</string>
     <string name="local_only_update_subtitle">Verificarea actualizărilor are nevoie de internet. Dezactivează modul Doar local din Setări pentru a verifica actualizările.</string>
 
-    <string name="crash_dialog_title">Koda s-a oprit neașteptat data trecută</string>
+    <string name="crash_dialog_title">Rondo s-a oprit neașteptat data trecută</string>
     <string name="crash_dialog_message">Ceva nu a mers în sesiunea anterioară. Poți trimite un raport de eroare cu detaliile - nimic nu părăsește dispozitivul tău dacă nu alegi să îl partajezi.</string>
     <string name="crash_dialog_view_report">Vezi și raportează</string>
     <string name="crash_dialog_not_now">Nu acum</string>
@@ -319,7 +319,7 @@
     <string name="vh_youre_offline">Ești offline</string>
     <string name="vh_removed_from_history">Eliminat din istoricul vizionărilor</string>
     <string name="vh_clear_history">Șterge istoricul vizionărilor</string>
-    <string name="vh_clear_history_body">Golește istoricul vizionărilor Koda de pe acest dispozitiv. Nu șterge nimic din contul tău YouTube.</string>
+    <string name="vh_clear_history_body">Golește istoricul vizionărilor Rondo de pe acest dispozitiv. Nu șterge nimic din contul tău YouTube.</string>
     <string name="vh_clear_history_confirm">Șterge</string>
     <string name="vh_no_videos_found">Niciun videoclip găsit</string>
     <string name="vh_downloaded_hint">Videoclipurile descărcate vor apărea aici</string>

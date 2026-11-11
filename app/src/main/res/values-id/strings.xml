@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Sedang diputar</string>
     <string name="video_playback_channel_name">Pemutaran video</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Koleksi video butuh internet. Matikan mode khusus lokal di Setelan untuk melihatnya.</string>
     <string name="local_only_update_subtitle">Pemeriksaan pembaruan butuh internet. Matikan mode khusus lokal di Setelan untuk memeriksa pembaruan.</string>
 
-    <string name="crash_dialog_title">Koda crash pada sesi sebelumnya</string>
+    <string name="crash_dialog_title">Rondo crash pada sesi sebelumnya</string>
     <string name="crash_dialog_message">Terjadi masalah pada sesi terakhir Anda. Anda bisa mengirim laporan bug dengan detailnya - tidak ada yang keluar dari perangkat Anda kecuali Anda memilih untuk membagikannya.</string>
     <string name="crash_dialog_view_report">Lihat &amp; laporkan</string>
     <string name="crash_dialog_not_now">Nanti saja</string>
@@ -312,7 +312,7 @@
     <string name="vh_youre_offline">Kamu offline</string>
     <string name="vh_removed_from_history">Dihapus dari riwayat tonton</string>
     <string name="vh_clear_history">Hapus riwayat tonton</string>
-    <string name="vh_clear_history_body">Ini mengosongkan riwayat tonton Koda di perangkat ini. Tidak menghapus apa pun dari akun YouTube-mu.</string>
+    <string name="vh_clear_history_body">Ini mengosongkan riwayat tonton Rondo di perangkat ini. Tidak menghapus apa pun dari akun YouTube-mu.</string>
     <string name="vh_clear_history_confirm">Hapus</string>
     <string name="vh_no_videos_found">Tidak ada video ditemukan</string>
     <string name="vh_downloaded_hint">Video yang didownload akan muncul di sini</string>

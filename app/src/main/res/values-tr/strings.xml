@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Şimdi çalıyor</string>
     <string name="video_playback_channel_name">Video oynatma</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Video kitaplığı internet gerektirir. Görmek için Ayarlar\'dan Yalnızca yerel modunu kapatın.</string>
     <string name="local_only_update_subtitle">Güncelleme kontrolü internet gerektirir. Kontrol etmek için Ayarlar\'dan Yalnızca yerel modunu kapatın.</string>
 
-    <string name="crash_dialog_title">Koda geçen sefer çöktü</string>
+    <string name="crash_dialog_title">Rondo geçen sefer çöktü</string>
     <string name="crash_dialog_message">Önceki oturumunuzda bir şeyler ters gitti. Ayrıntılarla bir hata raporu gönderebilirsiniz - paylaşmayı seçmediğiniz sürece hiçbir şey cihazınızdan ayrılmaz.</string>
     <string name="crash_dialog_view_report">Görüntüle ve bildir</string>
     <string name="crash_dialog_not_now">Şimdi değil</string>
@@ -316,7 +316,7 @@
     <string name="vh_youre_offline">Çevrimdışısın</string>
     <string name="vh_removed_from_history">İzleme geçmişinden kaldırıldı</string>
     <string name="vh_clear_history">İzleme geçmişini temizle</string>
-    <string name="vh_clear_history_body">Bu işlem, Koda\'nın bu cihazdaki izleme geçmişini temizler. YouTube hesabından hiçbir şey silinmez.</string>
+    <string name="vh_clear_history_body">Bu işlem, Rondo\'nın bu cihazdaki izleme geçmişini temizler. YouTube hesabından hiçbir şey silinmez.</string>
     <string name="vh_clear_history_confirm">Temizle</string>
     <string name="vh_no_videos_found">Video bulunamadı</string>
     <string name="vh_downloaded_hint">İndirilen videolar burada görünür</string>

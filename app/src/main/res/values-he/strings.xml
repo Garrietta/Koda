@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">מתנגן כעת</string>
     <string name="video_playback_channel_name">הפעלת וידאו</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">ספריית הווידאו דורשת אינטרנט. כבה מקומי בלבד בהגדרות כדי לראות אותה.</string>
     <string name="local_only_update_subtitle">בדיקת עדכונים דורשת אינטרנט. כבה מקומי בלבד בהגדרות כדי לבדוק עדכונים.</string>
 
-    <string name="crash_dialog_title">Koda קרס בפעם הקודמת</string>
+    <string name="crash_dialog_title">Rondo קרס בפעם הקודמת</string>
     <string name="crash_dialog_message">משהו השתבש בהפעלה הקודמת שלך. אפשר לשלוח דוח באג עם הפרטים - שום דבר לא יוצא מהמכשיר שלך אלא אם תבחר לשתף.</string>
     <string name="crash_dialog_view_report">הצג ודווח</string>
     <string name="crash_dialog_not_now">לא עכשיו</string>
@@ -321,7 +321,7 @@
     <string name="vh_youre_offline">אתה לא מחובר</string>
     <string name="vh_removed_from_history">הוסר מהיסטוריית הצפייה</string>
     <string name="vh_clear_history">נקה היסטוריית צפייה</string>
-    <string name="vh_clear_history_body">פעולה זו מרוקנת את היסטוריית הצפייה של Koda במכשיר הזה. היא לא מוחקת שום דבר מחשבון ה-YouTube שלך.</string>
+    <string name="vh_clear_history_body">פעולה זו מרוקנת את היסטוריית הצפייה של Rondo במכשיר הזה. היא לא מוחקת שום דבר מחשבון ה-YouTube שלך.</string>
     <string name="vh_clear_history_confirm">נקה</string>
     <string name="vh_no_videos_found">לא נמצאו סרטונים</string>
     <string name="vh_downloaded_hint">סרטונים שהורדת יופיעו כאן</string>

@@ -33,6 +33,9 @@ const val DYNAMIC_PALETTE_ID = "dynamic"
  * there is a genuinely distinct pick for every taste.
  */
 val APP_PALETTES: List<AppPalette> = listOf(
+    // Rondo's own colors, and the default: the iris of the icon, an orchid
+    // beside it and the orange of the play triangle. The id is stored.
+    AppPalette("rondo", "Rondo", "Signature", Color(0xFF5B4BFF), Color(0xFFB45CE6), Color(0xFFFF7A45)),
     // Vibrant
     AppPalette("electric", "Electric", "Vibrant", Color(0xFF2F6BFF), Color(0xFF00C2FF), Color(0xFF7A5CFF)),
     AppPalette("magenta", "Magenta Pop", "Vibrant", Color(0xFFFF2D95), Color(0xFFFF5CA8), Color(0xFFB14BFF)),

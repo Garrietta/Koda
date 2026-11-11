@@ -1203,7 +1203,7 @@ internal object VinylClassic {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !minimal) {
                 views.setContentDescription(R.id.vinyl_btn_play, "Play or pause")
                 views.setContentDescription(R.id.vinyl_btn_next, "Next track")
-                views.setContentDescription(R.id.vinyl_tap_sleeve, "Open Koda")
+                views.setContentDescription(R.id.vinyl_tap_sleeve, "Open Rondo")
             }
             return views
         }

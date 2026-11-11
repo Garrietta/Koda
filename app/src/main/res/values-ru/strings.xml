@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Сейчас играет</string>
     <string name="video_playback_channel_name">Воспроизведение видео</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Видеомедиатеке нужен интернет. Отключите режим «Только локально» в настройках, чтобы увидеть её.</string>
     <string name="local_only_update_subtitle">Проверке обновлений нужен интернет. Отключите режим «Только локально» в настройках, чтобы проверить обновления.</string>
 
-    <string name="crash_dialog_title">В прошлый раз Koda аварийно завершился</string>
+    <string name="crash_dialog_title">В прошлый раз Rondo аварийно завершился</string>
     <string name="crash_dialog_message">В прошлом сеансе что-то пошло не так. Вы можете отправить отчёт об ошибке с подробностями — ничего не покинет ваше устройство, если вы сами не решите поделиться.</string>
     <string name="crash_dialog_view_report">Посмотреть и отправить</string>
     <string name="crash_dialog_not_now">Не сейчас</string>
@@ -322,7 +322,7 @@
     <string name="vh_youre_offline">Вы офлайн</string>
     <string name="vh_removed_from_history">Удалено из истории просмотров</string>
     <string name="vh_clear_history">Очистить историю просмотров</string>
-    <string name="vh_clear_history_body">Это очистит историю просмотров Koda на этом устройстве. Из вашего аккаунта YouTube ничего не удалится.</string>
+    <string name="vh_clear_history_body">Это очистит историю просмотров Rondo на этом устройстве. Из вашего аккаунта YouTube ничего не удалится.</string>
     <string name="vh_clear_history_confirm">Очистить</string>
     <string name="vh_no_videos_found">Видео не найдены</string>
     <string name="vh_downloaded_hint">Скачанные видео появятся здесь</string>

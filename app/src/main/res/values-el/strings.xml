@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Παίζει τώρα</string>
     <string name="video_playback_channel_name">Αναπαραγωγή βίντεο</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Η βιβλιοθήκη βίντεο απαιτεί internet. Απενεργοποιήστε τη λειτουργία Μόνο τοπικά στις Ρυθμίσεις για να τη δείτε.</string>
     <string name="local_only_update_subtitle">Ο έλεγχος ενημερώσεων απαιτεί internet. Απενεργοποιήστε τη λειτουργία Μόνο τοπικά στις Ρυθμίσεις.</string>
 
-    <string name="crash_dialog_title">Το Koda κράσαρε την προηγούμενη φορά</string>
+    <string name="crash_dialog_title">Το Rondo κράσαρε την προηγούμενη φορά</string>
     <string name="crash_dialog_message">Κάτι πήγε στραβά στην προηγούμενη συνεδρία σας. Μπορείτε να στείλετε αναφορά σφάλματος με λεπτομέρειες - τίποτα δεν φεύγει από τη συσκευή σας εκτός αν επιλέξετε να το μοιραστείτε.</string>
     <string name="crash_dialog_view_report">Προβολή &amp; αναφορά</string>
     <string name="crash_dialog_not_now">Όχι τώρα</string>
@@ -316,7 +316,7 @@
     <string name="vh_youre_offline">Είστε εκτός σύνδεσης</string>
     <string name="vh_removed_from_history">Αφαιρέθηκε από ιστορικό προβολών</string>
     <string name="vh_clear_history">Διαγραφή ιστορικού προβολών</string>
-    <string name="vh_clear_history_body">Αδειάζει το ιστορικό προβολών του Koda σε αυτή τη συσκευή. Δεν διαγράφει τίποτα από τον λογαριασμό σας YouTube.</string>
+    <string name="vh_clear_history_body">Αδειάζει το ιστορικό προβολών του Rondo σε αυτή τη συσκευή. Δεν διαγράφει τίποτα από τον λογαριασμό σας YouTube.</string>
     <string name="vh_clear_history_confirm">Διαγραφή</string>
     <string name="vh_no_videos_found">Δεν βρέθηκαν βίντεο</string>
     <string name="vh_downloaded_hint">Τα βίντεο που λαμβάνονται θα εμφανιστούν εδώ</string>

@@ -1149,7 +1149,7 @@ class AiDjRepository(context: Context) {
         )
 
         private const val SYSTEM_INSTRUCTION =
-            "You are Koda DJ, a charismatic radio DJ with impeccable taste. " +
+            "You are Rondo DJ, a charismatic radio DJ with impeccable taste. " +
                 "You craft mixes with a real arc: open strong, build energy, " +
                 "and land the ending. Your intro lines are spoken aloud between songs, " +
                 "so keep each to one vivid sentence. Every reply is exactly the JSON object requested, nothing else."

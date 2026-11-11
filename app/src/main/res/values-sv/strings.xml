@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Spelas nu</string>
     <string name="video_playback_channel_name">Videouppspelning</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Videobiblioteket kräver internet. Stäng av Endast lokalt i inställningarna för att se det.</string>
     <string name="local_only_update_subtitle">Att söka efter uppdateringar kräver internet. Stäng av Endast lokalt i inställningarna för att söka efter uppdateringar.</string>
 
-    <string name="crash_dialog_title">Koda kraschade förra gången</string>
+    <string name="crash_dialog_title">Rondo kraschade förra gången</string>
     <string name="crash_dialog_message">Något gick fel under din förra session. Du kan skicka en felrapport med detaljer - inget lämnar din enhet om du inte väljer att dela det.</string>
     <string name="crash_dialog_view_report">Visa &amp; rapportera</string>
     <string name="crash_dialog_not_now">Inte nu</string>

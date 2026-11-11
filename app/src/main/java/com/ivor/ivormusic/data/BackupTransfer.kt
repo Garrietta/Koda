@@ -224,12 +224,12 @@ object BackupTransfer {
 
     private fun parseManifest(obj: JSONObject): BackupManifest {
         if (obj.optString("format") != FORMAT) {
-            throw UnsupportedBackupException("That file is not a Koda backup.")
+            throw UnsupportedBackupException("That file is not a Rondo backup.")
         }
         val version = obj.optInt("formatVersion", 0)
         if (version > FORMAT_VERSION) {
             throw UnsupportedBackupException(
-                "That backup was written by a newer version of Koda. Update the app and try again."
+                "That backup was written by a newer version of Rondo. Update the app and try again."
             )
         }
         return BackupManifest(

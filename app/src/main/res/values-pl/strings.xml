@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Teraz odtwarzane</string>
     <string name="video_playback_channel_name">Odtwarzanie wideo</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">Biblioteka wideo wymaga internetu. Wyłącz tryb „tylko lokalnie” w ustawieniach, aby ją zobaczyć.</string>
     <string name="local_only_update_subtitle">Sprawdzanie aktualizacji wymaga internetu. Wyłącz tryb „tylko lokalnie” w ustawieniach, aby sprawdzać aktualizacje.</string>
 
-    <string name="crash_dialog_title">Koda ostatnio się zawiesił</string>
+    <string name="crash_dialog_title">Rondo ostatnio się zawiesił</string>
     <string name="crash_dialog_message">Coś poszło nie tak podczas poprzedniej sesji. Możesz wysłać raport błędu ze szczegółami — nic nie opuszcza Twojego urządzenia, chyba że zdecydujesz się udostępnić.</string>
     <string name="crash_dialog_view_report">Zobacz i zgłoś</string>
     <string name="crash_dialog_not_now">Nie teraz</string>
@@ -322,7 +322,7 @@
     <string name="vh_youre_offline">Jesteś offline</string>
     <string name="vh_removed_from_history">Usunięto z historii oglądania</string>
     <string name="vh_clear_history">Wyczyść historię oglądania</string>
-    <string name="vh_clear_history_body">To wyczyści historię oglądania Koda na tym urządzeniu. Nic nie zostanie usunięte z Twojego konta YouTube.</string>
+    <string name="vh_clear_history_body">To wyczyści historię oglądania Rondo na tym urządzeniu. Nic nie zostanie usunięte z Twojego konta YouTube.</string>
     <string name="vh_clear_history_confirm">Wyczyść</string>
     <string name="vh_no_videos_found">Nie znaleziono filmów</string>
     <string name="vh_downloaded_hint">Pobrane filmy pojawią się tutaj</string>

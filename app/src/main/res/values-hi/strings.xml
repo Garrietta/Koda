@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">अब चल रहा है</string>
     <string name="video_playback_channel_name">वीडियो प्लेबैक</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">वीडियो लाइब्रेरी के लिए इंटरनेट चाहिए। उसे देखने के लिए सेटिंग्स में केवल लोकल मोड बंद करें।</string>
     <string name="local_only_update_subtitle">अपडेट जाँच के लिए इंटरनेट चाहिए। अपडेट देखने के लिए सेटिंग्स में केवल लोकल मोड बंद करें।</string>
 
-    <string name="crash_dialog_title">Koda पिछली बार क्रैश हो गया था</string>
+    <string name="crash_dialog_title">Rondo पिछली बार क्रैश हो गया था</string>
     <string name="crash_dialog_message">आपके पिछले सेशन में कुछ गड़बड़ हुई थी। आप विवरण के साथ बग रिपोर्ट भेज सकते हैं - आपकी सहमति के बिना आपके डिवाइस से कुछ भी नहीं जाता।</string>
     <string name="crash_dialog_view_report">देखें और रिपोर्ट करें</string>
     <string name="crash_dialog_not_now">अभी नहीं</string>
@@ -316,7 +316,7 @@
     <string name="vh_youre_offline">आप ऑफ़लाइन हैं</string>
     <string name="vh_removed_from_history">वॉच हिस्ट्री से हटाया गया</string>
     <string name="vh_clear_history">वॉच हिस्ट्री साफ़ करें</string>
-    <string name="vh_clear_history_body">इससे इस डिवाइस पर Koda की वॉच हिस्ट्री खाली हो जाती है। आपके YouTube खाते से कुछ नहीं मिटता।</string>
+    <string name="vh_clear_history_body">इससे इस डिवाइस पर Rondo की वॉच हिस्ट्री खाली हो जाती है। आपके YouTube खाते से कुछ नहीं मिटता।</string>
     <string name="vh_clear_history_confirm">साफ़ करें</string>
     <string name="vh_no_videos_found">कोई वीडियो नहीं मिला</string>
     <string name="vh_downloaded_hint">डाउनलोड किए वीडियो यहाँ दिखेंगे</string>

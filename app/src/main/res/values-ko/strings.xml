@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">재생 중</string>
     <string name="video_playback_channel_name">동영상 재생</string>
 
@@ -312,7 +312,7 @@
     <string name="vh_youre_offline">오프라인 상태예요</string>
     <string name="vh_removed_from_history">시청 기록에서 삭제했어요</string>
     <string name="vh_clear_history">시청 기록 지우기</string>
-    <string name="vh_clear_history_body">이 기기의 Koda 시청 기록을 비워요. YouTube 계정의 내용은 삭제되지 않아요.</string>
+    <string name="vh_clear_history_body">이 기기의 Rondo 시청 기록을 비워요. YouTube 계정의 내용은 삭제되지 않아요.</string>
     <string name="vh_clear_history_confirm">지우기</string>
     <string name="vh_no_videos_found">동영상을 찾지 못했어요</string>
     <string name="vh_downloaded_hint">다운로드한 동영상이 여기에 표시돼요</string>

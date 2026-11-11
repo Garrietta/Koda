@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Speelt nu</string>
     <string name="video_playback_channel_name">Videoweergave</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">De videobibliotheek heeft internet nodig. Zet Alleen lokaal uit in de instellingen om hem te zien.</string>
     <string name="local_only_update_subtitle">Controleren op updates heeft internet nodig. Zet Alleen lokaal uit in de instellingen om op updates te controleren.</string>
 
-    <string name="crash_dialog_title">Koda is de vorige keer gecrasht</string>
+    <string name="crash_dialog_title">Rondo is de vorige keer gecrasht</string>
     <string name="crash_dialog_message">Er ging iets mis in je vorige sessie. Je kunt een bugrapport met details sturen - er verlaat niets je apparaat tenzij je zelf kiest om het te delen.</string>
     <string name="crash_dialog_view_report">Bekijken &amp; melden</string>
     <string name="crash_dialog_not_now">Niet nu</string>
@@ -316,7 +316,7 @@
     <string name="vh_youre_offline">Je bent offline</string>
     <string name="vh_removed_from_history">Verwijderd uit kijkgeschiedenis</string>
     <string name="vh_clear_history">Kijkgeschiedenis wissen</string>
-    <string name="vh_clear_history_body">Dit wist Koda\'s kijkgeschiedenis op dit apparaat. Er wordt niets verwijderd van je YouTube-account.</string>
+    <string name="vh_clear_history_body">Dit wist Rondo\'s kijkgeschiedenis op dit apparaat. Er wordt niets verwijderd van je YouTube-account.</string>
     <string name="vh_clear_history_confirm">Wissen</string>
     <string name="vh_no_videos_found">Geen video\'s gevonden</string>
     <string name="vh_downloaded_hint">Gedownloade video\'s verschijnen hier</string>

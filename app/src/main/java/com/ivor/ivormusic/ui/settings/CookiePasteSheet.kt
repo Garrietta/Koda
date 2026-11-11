@@ -428,7 +428,7 @@ private fun SecurityNotice() {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "These cookies grant full access to your Google account and " +
-                        "bypass 2-step verification. Koda stores them encrypted on this " +
+                        "bypass 2-step verification. Rondo stores them encrypted on this " +
                         "device and only sends them to YouTube. Never share them.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer

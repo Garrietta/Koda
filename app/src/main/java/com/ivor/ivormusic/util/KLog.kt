@@ -136,7 +136,7 @@ object KLog {
         val dir = File(context.filesDir, "logs").apply { mkdirs() }
         val target = File(dir, "session_log.txt")
         val tmp = File(dir, "session_log.txt.tmp")
-        tmp.writeText(render(snapshot(), header = "Koda session log"))
+        tmp.writeText(render(snapshot(), header = "Rondo session log"))
         if (target.exists()) target.delete()
         tmp.renameTo(target)
         target

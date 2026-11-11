@@ -113,7 +113,7 @@ object CrashReporter {
                 .toString()
 
             val text = buildString {
-                appendLine("Koda crashed")
+                appendLine("Rondo crashed")
                 appendLine("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 appendLine("Build: ${if (BuildConfig.DEBUG) "debug" else "release"}")
                 appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")

@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.launch
@@ -680,6 +681,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _playCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     val playCounts: StateFlow<Map<String, Int>> = _playCounts.asStateFlow()
 
+    // The songs played again and again these four weeks, for Home's
+    // "On repeat" shelf. Read out of the same history as the recents.
+    private val _onRepeat = MutableStateFlow<List<Song>>(emptyList())
+    val onRepeat: StateFlow<List<Song>> = _onRepeat.asStateFlow()
+
+    /**
+     * The newest episodes of the followed shows, newest first and ready to
+     * play, for Home's "New episodes" shelf and its Podcasts filter. The
+     * shows are read off disk the first time anything collects this, so the
+     * shelf does not depend on the Library's Podcasts tab having been opened.
+     */
+    val newEpisodes: StateFlow<List<Song>> =
+        combine(podcastRepository.feeds, podcastRepository.episodesByFeed) { feeds, byFeed ->
+            com.ivor.ivormusic.data.newestEpisodes(byFeed).map { episode ->
+                podcastRepository.episodeToSong(episode, feeds.find { it.id == episode.feedId })
+            }
+        }
+            .onStart { podcastRepository.ensureLoaded() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     // Songs sitting in the stream cache in full, so they play with no network.
     // See ReadyOfflineRepository for why this is a state rather than a playlist.
     private val readyOfflineRepository =
@@ -843,6 +864,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (recents.size >= limit) break
             }
             _recentlyPlayed.value = recents
+            _onRepeat.value = com.ivor.ivormusic.data.onRepeat(history, System.currentTimeMillis())
+                .mapNotNull { it.toMusicSong(localSongs) }
+        }
+
+    /** A music history row as something playable; null when a device file has gone. */
+    private fun com.ivor.ivormusic.data.PlayHistoryEntry.toMusicSong(localSongs: List<Song>): Song? =
+        when (source) {
+            com.ivor.ivormusic.data.SongSource.LOCAL -> localSongs.find { it.id == songId }
+            com.ivor.ivormusic.data.SongSource.PODCAST -> null
+            else -> Song.fromYouTube(
+                videoId = songId,
+                title = title,
+                artist = artist,
+                album = album,
+                duration = duration,
+                thumbnailUrl = thumbnailUrl
+            )
         }
 
     /**

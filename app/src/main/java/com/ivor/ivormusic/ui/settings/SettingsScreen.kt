@@ -1599,7 +1599,7 @@ private fun SettingsHub(
     }
 
     val storageValue = buildString {
-        append(if (privateDownloadsEnabled) "Private downloads" else "Downloads/Koda")
+        append(if (privateDownloadsEnabled) "Private downloads" else "Downloads/Rondo")
         append(" · ")
         append(
             if (cacheEnabled) {
@@ -2238,7 +2238,7 @@ internal fun subscribeTargetLabel(value: String): String = when (value) {
 /** Longer picker-row description for a subscription source option. */
 private fun subscriptionSourceOptionLabel(value: String): Pair<String, String> = when (value) {
     ThemePreferences.SUBSCRIPTIONS_LOCAL ->
-        "On this device" to "Only channels you follow inside Koda"
+        "On this device" to "Only channels you follow inside Rondo"
     ThemePreferences.SUBSCRIPTIONS_YOUTUBE ->
         "YouTube account" to "Only channels your Google account is subscribed to"
     else ->

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Koda</string>
+    <string name="app_name">Rondo</string>
     <string name="now_playing_channel_name">Lecture en cours</string>
     <string name="video_playback_channel_name">Lecture vidéo</string>
 
@@ -38,7 +38,7 @@
     <string name="local_only_video_library_subtitle">La vidéothèque nécessite Internet. Désactivez le mode Local uniquement dans les paramètres pour la consulter.</string>
     <string name="local_only_update_subtitle">La vérification des mises à jour nécessite Internet. Désactivez le mode Local uniquement dans les paramètres pour chercher des mises à jour.</string>
 
-    <string name="crash_dialog_title">Koda a planté lors de la dernière session</string>
+    <string name="crash_dialog_title">Rondo a planté lors de la dernière session</string>
     <string name="crash_dialog_message">Un problème est survenu lors de votre session précédente. Vous pouvez envoyer un rapport de bug avec les détails - rien ne quitte votre appareil sauf si vous choisissez de le partager.</string>
     <string name="crash_dialog_view_report">Voir et signaler</string>
     <string name="crash_dialog_not_now">Pas maintenant</string>
@@ -317,7 +317,7 @@
     <string name="vh_youre_offline">Vous êtes hors connexion</string>
     <string name="vh_removed_from_history">Retirée de l\'historique de visionnage</string>
     <string name="vh_clear_history">Effacer l\'historique de visionnage</string>
-    <string name="vh_clear_history_body">Ceci vide l\'historique de visionnage de Koda sur cet appareil. Rien n\'est supprimé de votre compte YouTube.</string>
+    <string name="vh_clear_history_body">Ceci vide l\'historique de visionnage de Rondo sur cet appareil. Rien n\'est supprimé de votre compte YouTube.</string>
     <string name="vh_clear_history_confirm">Effacer</string>
     <string name="vh_no_videos_found">Aucune vidéo trouvée</string>
     <string name="vh_downloaded_hint">Les vidéos téléchargées apparaîtront ici</string>

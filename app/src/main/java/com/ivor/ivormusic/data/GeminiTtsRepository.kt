@@ -161,7 +161,7 @@ class GeminiTtsRepository(
         val body = JSONObject()
             .put("contents", JSONArray().put(
                 JSONObject().put("parts", JSONArray().put(
-                    JSONObject().put("text", "This is a voice test for the Koda AI DJ.")
+                    JSONObject().put("text", "This is a voice test for the Rondo AI DJ.")
                 ))
             ))
             .put("generationConfig", JSONObject()
