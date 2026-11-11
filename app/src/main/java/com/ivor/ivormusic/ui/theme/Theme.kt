@@ -24,6 +24,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SideEffect
@@ -219,6 +220,13 @@ fun IvorMusicTheme(
     // stack change recomposes the theme (the read below), so the single
     // writer re-runs with the live top value, on every change.
     val statusBarTop = statusBarStack?.current ?: colorScheme.background
+    // Read so a reassert() recomposes the theme and the effect below runs again.
+    @Suppress("UNUSED_VARIABLE")
+    val barsGeneration = statusBarStack?.generation
+    // Likewise when the window gets its focus back: another window may
+    // have left its own bar icons behind.
+    @Suppress("UNUSED_VARIABLE")
+    val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
     val statusBarLightIcons = statusBarTop.luminance() > 0.5f
 
     val view = LocalView.current
@@ -303,6 +311,20 @@ val LocalAlbumTheming = staticCompositionLocalOf { AlbumTheming(false, PaletteSt
  */
 class StatusBarBackgroundStack {
     private val stack = mutableStateListOf<Color>()
+
+    /**
+     * Bumped to make the theme write the status bar flags again when
+     * something outside Compose has overwritten them. The splash screen
+     * does: removing it re-applies the activity theme's own bar
+     * appearance after the first frame, which left white icons on a
+     * light Home until the next recomposition.
+     */
+    var generation by mutableIntStateOf(0)
+        private set
+
+    fun reassert() {
+        generation++
+    }
     val current: Color? get() = stack.lastOrNull()
     fun push(background: Color) {
         stack.add(background)

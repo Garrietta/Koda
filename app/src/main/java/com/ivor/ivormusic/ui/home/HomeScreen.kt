@@ -1290,6 +1290,12 @@ fun HomeScreen(
                                         if (spotlightHome) {
                                             val spotlightPlaylists by viewModel.userPlaylists.collectAsState()
                                             val spotlightLiked by viewModel.likedSongs.collectAsState()
+                                            // The DJ opens from its tile as a page over Home,
+                                            // in the tile's color, rather than as a change of tab.
+                                            var djOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                                            var djOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+                                            val djPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+                                            Box(Modifier.fillMaxSize()) {
                                             SpotlightHomeContent(
                                                 songs = songs,
                                                 recentlyPlayed = recentlyPlayed,
@@ -1330,7 +1336,10 @@ fun HomeScreen(
                                                     selectedTab = TAB_LIBRARY
                                                 },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
-                                                onOpenDj = { selectedTab = TAB_AIDJ },
+                                                onOpenDj = { bounds ->
+                                                    djOrigin = bounds
+                                                    djOpen = true
+                                                },
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
@@ -1351,6 +1360,39 @@ fun HomeScreen(
                                                 filter = spotlightFilter,
                                                 onFilterChange = { spotlightFilter = it }
                                             )
+                                            BlockReveal(
+                                                open = djOpen,
+                                                origin = djOrigin,
+                                                container = MaterialTheme.colorScheme.primaryContainer,
+                                                content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                onDismiss = { djOpen = false },
+                                            ) {
+                                                com.ivor.ivormusic.ui.library.AiDjScreen(
+                                                    viewModel = viewModel,
+                                                    onBack = { djOpen = false },
+                                                    onPlayQueue = { queue, start ->
+                                                        playerViewModel.playQueue(queue, start)
+                                                        showPlayerSheet = true
+                                                    },
+                                                    onPlayDjMix = { songs ->
+                                                        playerViewModel.playDjMix(songs)
+                                                        showPlayerSheet = true
+                                                    },
+                                                    onDjSessionStarted = { title, seed, recent, liked, voice ->
+                                                        playerViewModel.startDjInfiniteSession(
+                                                            title, seed, recent, liked, voice
+                                                        )
+                                                    },
+                                                    onShuffleQueue = { songs ->
+                                                        playerViewModel.playQueueShuffled(songs)
+                                                        showPlayerSheet = true
+                                                    },
+                                                    onOpenSettings = onNavigateToAiDjSettings,
+                                                    contentPadding = listContentPadding,
+                                                    listState = djPageScroll,
+                                                )
+                                            }
+                                            }
                                         } else {
                                             // Music Mode: Show original content. The first load
                                             // renders the real screen with placeholders in the

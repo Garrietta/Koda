@@ -104,6 +104,12 @@ private val MUSIC_PILL_RESERVE = 88.dp
 
 class MainActivity : ComponentActivity() {
 
+    // One stack for the status bar, owned by the activity so it survives
+    // tab switches and can be told when the splash screen has gone:
+    // screens push their top background while up, and the theme's single
+    // SideEffect applies whichever is on top.
+    private val statusBarStack = com.ivor.ivormusic.ui.theme.StatusBarBackgroundStack()
+
     // A YouTube link shared or opened into Koda, picked up by SharedLinkHandler
     // inside the composition. Snapshot state so a link arriving while the app is
     // already running reaches the UI without restarting anything.
@@ -162,7 +168,12 @@ class MainActivity : ComponentActivity() {
         Thread { com.ivor.ivormusic.util.ModeShortcuts.publish(applicationContext) }.start()
 
         // Remove splash instantly when ready — the AVD entrance animation is the show
-        splashScreen.setOnExitAnimationListener { it.remove() }
+        splashScreen.setOnExitAnimationListener {
+            it.remove()
+            // Removing the splash re-applies the activity theme's bar icons
+            // over the ones the app theme chose, so have them written again.
+            window.decorView.post { statusBarStack.reassert() }
+        }
 
         // Large screens follow the device; phones stay portrait unless
         // Settings, Appearance, "Rotate with device" is on (AppOrientation).
@@ -298,12 +309,6 @@ class MainActivity : ComponentActivity() {
                 albumArtUri = themeSong?.let { it.albumArtUri?.toString() ?: it.thumbnailUrl }
             )
 
-            // One stack for the status bar, owned here so it survives tab
-            // switches: screens push their top background while up, the
-            // theme's single SideEffect applies whichever is on top.
-            val statusBarStack = androidx.compose.runtime.remember {
-                com.ivor.ivormusic.ui.theme.StatusBarBackgroundStack()
-            }
             IvorMusicTheme(
                 darkTheme = isDarkTheme,
                 colorPalette = colorPalette,
