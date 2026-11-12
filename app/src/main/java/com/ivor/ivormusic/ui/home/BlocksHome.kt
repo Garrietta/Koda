@@ -96,8 +96,14 @@ internal fun BlocksHome(
     modifier: Modifier = Modifier,
     /** Where each block is on the screen, in root pixels, as it is laid out. */
     onBounds: (BlockKind, Rect) -> Unit = { _, _ -> },
+    /** The DJ's colors, from its current mix. Null keeps the scheme's own. */
+    djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
+    /** The current mix's name, shown on the DJ tile. Null shows what the DJ does. */
+    djTitle: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val djFill = djColors?.container ?: scheme.primaryContainer
+    val djInk = djColors?.onContainer ?: scheme.onPrimaryContainer
     fun Modifier.block(kind: BlockKind, shape: Shape, color: Color): Modifier = this
         .onGloballyPositioned { onBounds(kind, it.boundsInRoot()) }
         .clip(shape)
@@ -116,13 +122,13 @@ internal fun BlocksHome(
                 .block(
                     BlockKind.Dj,
                     RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tile, bottomStart = Tight),
-                    scheme.primaryContainer,
+                    djFill,
                 ),
         ) {
             Text(
                 stringResource(R.string.blocks_dj),
                 style = MaterialTheme.typography.displayLarge.copy(fontSize = 84.sp),
-                color = scheme.onPrimaryContainer,
+                color = djInk,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 12.dp),
             )
             Box(
@@ -142,9 +148,11 @@ internal fun BlocksHome(
                 )
             }
             Text(
-                stringResource(R.string.blocks_dj_caption),
+                djTitle ?: stringResource(R.string.blocks_dj_caption),
                 style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onPrimaryContainer,
+                color = djInk,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 18.dp).width(180.dp),
             )
             Row(
@@ -153,7 +161,7 @@ internal fun BlocksHome(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 for (bar in METER) {
-                    Box(Modifier.width(7.dp).height(bar.dp).clip(CircleShape).background(scheme.onPrimaryContainer))
+                    Box(Modifier.width(7.dp).height(bar.dp).clip(CircleShape).background(djInk))
                 }
             }
         }

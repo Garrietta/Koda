@@ -131,6 +131,9 @@ fun SpotlightHomeContent(
      * grow out of it. Required: a tile left unwired is a dead tile.
      */
     onOpenDj: (androidx.compose.ui.geometry.Rect?) -> Unit,
+    /** The DJ tile's colors and the name of the mix it would play. */
+    djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
+    djTitle: String? = null,
     onShowAllInLibrary: () -> Unit = {},
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
@@ -560,6 +563,8 @@ fun SpotlightHomeContent(
                         onRecent = onRecentClick,
                         modifier = Modifier.padding(top = 4.dp),
                         onBounds = { kind, bounds -> blockBounds[kind] = bounds },
+                        djColors = djColors,
+                        djTitle = djTitle,
                     )
                 }
 

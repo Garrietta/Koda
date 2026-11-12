@@ -204,6 +204,15 @@ class AiDjRepository(context: Context) {
     val cachedMix: StateFlow<AiDjMix?> = _cachedMix.asStateFlow()
 
     /** Persist [mix] as the cached DJ playlist. */
+    /**
+     * Reads the saved mix again. Another instance (the DJ page has its
+     * own) may have saved a newer one since this one was built.
+     */
+    fun reloadCachedMix(): AiDjMix? {
+        _cachedMix.value = loadCachedMix()
+        return _cachedMix.value
+    }
+
     fun cacheMix(mix: AiDjMix) {
         // Sanitize on the way in so persisted titles/lines never carry a
         // session number, even if a caller hands us an unsanitized mix.

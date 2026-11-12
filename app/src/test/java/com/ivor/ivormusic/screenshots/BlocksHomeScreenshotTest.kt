@@ -53,7 +53,7 @@ class BlocksHomeScreenshotTest {
     private fun song(index: Int) =
         Song.fromYouTube("song$index", "Song $index", "Artist $index", "Album", 200_000L, null)
 
-    private fun shoot(name: String, dark: Boolean, page: BlockKind? = null, recent: Int = 4) {
+    private fun shoot(name: String, dark: Boolean, page: BlockKind? = null, recent: Int = 4, djTitle: String? = null) {
         // Something is always animating in the theme, so the clock is driven by hand.
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -66,6 +66,8 @@ class BlocksHomeScreenshotTest {
                         onOpen = {},
                         onRecent = {},
                         modifier = Modifier.padding(top = 24.dp),
+                        djColors = com.ivor.ivormusic.data.djMoodHue(djTitle)?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
+                        djTitle = djTitle,
                     )
                     // A block's page, open: the block's color as the ground and
                     // everything on it drawn in the scheme made from that color.
@@ -144,10 +146,10 @@ class BlocksHomeScreenshotTest {
     }
 
     @Test
-    fun blocks_dark() = shoot("blocks_dark", dark = true)
+    fun blocks_dark() = shoot("blocks_dark", dark = true, djTitle = "A Sunny Day with Kendrick Lamar")
 
     @Test
-    fun blocks_light() = shoot("blocks_light", dark = false, recent = 2)
+    fun blocks_light() = shoot("blocks_light", dark = false, recent = 2, djTitle = "Midnight Rain")
 
     @Test
     fun block_page_dark() = shoot("block_page_dark", dark = true, page = BlockKind.ForYou)

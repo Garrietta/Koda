@@ -1295,6 +1295,30 @@ fun HomeScreen(
                                             var djOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
                                             var djOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
                                             val djPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+                                            // The DJ's colors come from its current mix: the first
+                                            // mood word in the title, else the first song's cover,
+                                            // else the scheme's own. The mix is read again whenever
+                                            // the DJ page closes, since the page saves new ones.
+                                            val djRepository = remember { com.ivor.ivormusic.data.AiDjRepository(context) }
+                                            var djMix by remember { mutableStateOf(djRepository.cachedMix.value) }
+                                            val djCoverSeed = com.ivor.ivormusic.ui.player.rememberArtworkSeed(
+                                                enabled = djMix != null && com.ivor.ivormusic.data.djMoodHue(djMix?.title) == null,
+                                                albumArtUri = djMix?.tracks?.firstOrNull()?.song?.let { it.albumArtUri?.toString() ?: it.thumbnailUrl },
+                                            )
+                                            val djBlock = remember(djMix?.title, djCoverSeed) {
+                                                com.ivor.ivormusic.data.djMoodHue(djMix?.title)?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) }
+                                                    ?: djCoverSeed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
+                                            }
+                                            val djFill by androidx.compose.animation.animateColorAsState(
+                                                djBlock?.container ?: MaterialTheme.colorScheme.primaryContainer,
+                                                androidx.compose.animation.core.tween(600),
+                                                label = "dj fill",
+                                            )
+                                            val djInk by androidx.compose.animation.animateColorAsState(
+                                                djBlock?.onContainer ?: MaterialTheme.colorScheme.onPrimaryContainer,
+                                                androidx.compose.animation.core.tween(600),
+                                                label = "dj ink",
+                                            )
                                             Box(Modifier.fillMaxSize()) {
                                             SpotlightHomeContent(
                                                 songs = songs,
@@ -1345,6 +1369,8 @@ fun HomeScreen(
                                                     djOrigin = bounds
                                                     djOpen = true
                                                 },
+                                                djColors = com.ivor.ivormusic.ui.theme.VividBlock(djFill, djInk),
+                                                djTitle = djMix?.title,
                                                 onSpinClick = { source ->
                                                     spinSource = source
                                                     spinOpen = true
@@ -1368,9 +1394,10 @@ fun HomeScreen(
                                             BlockReveal(
                                                 open = djOpen,
                                                 origin = djOrigin,
-                                                container = MaterialTheme.colorScheme.primaryContainer,
-                                                content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                container = djFill,
+                                                content = djInk,
                                                 onDismiss = { djOpen = false },
+                                                onClosed = { djMix = djRepository.reloadCachedMix() },
                                             ) {
                                                 com.ivor.ivormusic.ui.library.AiDjScreen(
                                                     viewModel = viewModel,
