@@ -1,5 +1,8 @@
 package com.ivor.ivormusic.ui.home
 
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +89,26 @@ private val Tight = 14.dp
 /** Heights of the bars in the DJ tile's level meter, left to right. */
 private val METER = listOf(18, 40, 28, 52, 34, 22, 44)
 
+/**
+ * Each tile's face, as it was last drawn, kept in a layer the tile itself
+ * records into, so a page opening from the tile can draw the tile over
+ * itself while it grows out from under it. Also where each tile is.
+ */
+@androidx.compose.runtime.Stable
+class BlockFaces internal constructor(private val layers: Map<BlockKind, androidx.compose.ui.graphics.layer.GraphicsLayer>) {
+    internal val bounds = mutableMapOf<BlockKind, Rect>()
+    internal fun layer(kind: BlockKind) = layers[kind]
+
+    /** The face of the tile at [rect], the tile a page opened from. */
+    internal fun faceAt(rect: Rect?) = rect?.let { r -> bounds.entries.firstOrNull { it.value == r }?.key?.let(layers::get) }
+}
+
+@Composable
+fun rememberBlockFaces(): BlockFaces {
+    val layers = BlockKind.entries.associateWith { androidx.compose.ui.graphics.rememberGraphicsLayer() }
+    return remember { BlockFaces(layers) }
+}
+
 @Composable
 internal fun BlocksHome(
     likedCount: Int,
@@ -100,12 +123,25 @@ internal fun BlocksHome(
     djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
     /** The current mix's name, shown on the DJ tile. Null shows what the DJ does. */
     djTitle: String? = null,
+    /** Where the tiles record their faces for the pages that open from them; null records none. */
+    faces: BlockFaces? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val djFill = djColors?.container ?: scheme.primaryContainer
     val djInk = djColors?.onContainer ?: scheme.onPrimaryContainer
     fun Modifier.block(kind: BlockKind, shape: Shape, color: Color): Modifier = this
-        .onGloballyPositioned { onBounds(kind, it.boundsInRoot()) }
+        .onGloballyPositioned {
+            onBounds(kind, it.boundsInRoot())
+            faces?.bounds?.set(kind, it.boundsInRoot())
+        }
+        .then(
+            faces?.layer(kind)?.let { layer ->
+                Modifier.drawWithContent {
+                    layer.record { this@drawWithContent.drawContent() }
+                    drawLayer(layer)
+                }
+            } ?: Modifier,
+        )
         .clip(shape)
         .background(color)
         .clickable(role = Role.Button) { onOpen(kind) }

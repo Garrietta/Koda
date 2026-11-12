@@ -1309,6 +1309,7 @@ fun HomeScreen(
                                             // in the tile's color, rather than as a change of tab.
                                             var djOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
                                             var djOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+                                            val blockFaces = rememberBlockFaces()
                                             val djPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
                                             // Liked, the Library and any playlist opened from a page
                                             // open over Home too, in the Liked and Library tiles' color,
@@ -1392,6 +1393,7 @@ fun HomeScreen(
                                                 },
                                                 onShowAllInLibrary = { openLibrary(null) },
                                                 onLibraryOrigin = { libraryOrigin = it },
+                                                blockFaces = blockFaces,
                                                 onOpenExplore = { selectedTab = TAB_EXPLORE },
                                                 onShuffleSongs = { queue ->
                                                     playerViewModel.playQueueShuffled(queue)
@@ -1426,6 +1428,7 @@ fun HomeScreen(
                                             BlockReveal(
                                                 open = djOpen,
                                                 origin = djOrigin,
+                                                face = blockFaces.layer(BlockKind.Dj),
                                                 container = djFill,
                                                 content = djInk,
                                                 onDismiss = { djOpen = false },
@@ -1459,6 +1462,7 @@ fun HomeScreen(
                                             BlockReveal(
                                                 open = libraryOpen,
                                                 origin = libraryOrigin,
+                                                face = blockFaces.faceAt(libraryOrigin),
                                                 container = MaterialTheme.colorScheme.inverseSurface,
                                                 content = MaterialTheme.colorScheme.inverseOnSurface,
                                                 onDismiss = { libraryOpen = false },

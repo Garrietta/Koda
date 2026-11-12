@@ -51,4 +51,11 @@ class BlockRevealTest {
         assertEquals(covers.distinct(), covers)
         assertEquals(2, heroCoversFromShelves(shelves, 2).size)
     }
+
+    @Test
+    fun theTilesFaceFadesAsThePageGrowsFromUnderIt() {
+        assertEquals(1f, faceAlpha(0f), 0.001f)
+        assertTrue(faceAlpha(0.2f) in 0.5f..0.7f)
+        assertEquals(0f, faceAlpha(0.8f), 0.001f)
+    }
 }

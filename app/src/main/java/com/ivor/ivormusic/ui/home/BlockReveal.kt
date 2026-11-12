@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -89,7 +90,7 @@ import com.ivor.ivormusic.R
 private val TILE_CORNER = 40.dp
 
 /** The page's content stays hidden until the window is this far open, then fades in. */
-private const val CONTENT_FROM = 0.3f
+private const val CONTENT_FROM = 0.35f
 private const val CONTENT_BY = 0.8f
 
 /**
@@ -98,6 +99,24 @@ private const val CONTENT_BY = 0.8f
  * a flat patch of its color sitting over them for a frame.
  */
 private const val WINDOW_FADE_UNTIL = 0.18f
+
+/**
+ * The tile's own face (its name, icon and color, as last drawn) sits over
+ * the page as it starts to grow and fades by this far open, so the page
+ * seems to come out from under the tile rather than replace it.
+ */
+private const val FACE_GONE_BY = 0.55f
+
+/**
+ * The page's growth, both ways. Softer than the player's container spring:
+ * a page covers the whole screen from a tile a fifth its size, and at the
+ * player's stiffness it was half open in a tenth of a second, which read as
+ * a jump. Still damped enough not to bounce against the screen's edges.
+ */
+private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.92f, stiffness = 200f)
+
+/** How much of the tile's face shows at window progress [p]. */
+internal fun faceAlpha(p: Float): Float = (1f - p / FACE_GONE_BY).coerceIn(0f, 1f)
 
 /** A pull down this far, as a share of the page's height, closes the page on release. */
 private const val PULL_TO_CLOSE = 0.22f
@@ -185,6 +204,8 @@ internal fun BlockReveal(
      * app's background as the page fades in.
      */
     appColors: Boolean = false,
+    /** The tile's face, recorded by the tile itself (see [BlockFaces]); null draws none. */
+    face: androidx.compose.ui.graphics.layer.GraphicsLayer? = null,
     page: @Composable () -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -194,13 +215,15 @@ internal fun BlockReveal(
     var from by remember { mutableStateOf<Rect?>(null) }
     var ground by remember { mutableStateOf(container) }
     var ink by remember { mutableStateOf(content) }
-    val openSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    val closeSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    var heldFace by remember { mutableStateOf(face) }
+    val openSpec = BLOCK_PAGE_SPRING
+    val closeSpec = BLOCK_PAGE_SPRING
     LaunchedEffect(open) {
         if (open) {
             from = origin
             ground = container
             ink = content
+            heldFace = face
             shown = true
             progress.animateTo(1f, openSpec)
         } else if (shown) {
@@ -300,6 +323,26 @@ internal fun BlockReveal(
                 // Text that names no color takes the ink too, not the app's own text color.
                 CompositionLocalProvider(LocalContentColor provides pageInk, content = page)
             }
+        }
+        // The tile's face, where the tile is, over the page as it grows out from under it.
+        val tileFace = heldFace
+        val tileAt = from
+        if (tileFace != null && tileAt != null) {
+            Box(
+                Modifier.fillMaxSize().drawBehind {
+                    val a = faceAlpha(progress.value.coerceIn(0f, 1f))
+                    if (a <= 0f) return@drawBehind
+                    val at = tileAt.translate(-hostInRoot.x, -hostInRoot.y)
+                    drawContext.canvas.saveLayer(
+                        androidx.compose.ui.geometry.Rect(at.topLeft, at.size),
+                        androidx.compose.ui.graphics.Paint().apply { alpha = a },
+                    )
+                    drawContext.canvas.translate(at.left, at.top)
+                    drawLayer(tileFace)
+                    drawContext.canvas.translate(-at.left, -at.top)
+                    drawContext.canvas.restore()
+                },
+            )
         }
     }
 }

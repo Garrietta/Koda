@@ -145,6 +145,45 @@ class BlocksHomeScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/player_colors.png")
     }
 
+    /**
+     * A page early in its opening: the For you tile's own face still drawn
+     * where the tile is, over the page growing out from under it.
+     */
+    @Test
+    fun block_page_opening() {
+        compose.mainClock.autoAdvance = false
+        val openState = androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                val faces = com.ivor.ivormusic.ui.home.rememberBlockFaces()
+                val bounds = androidx.compose.runtime.remember { mutableMapOf<BlockKind, androidx.compose.ui.geometry.Rect>() }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    BlocksHome(
+                        likedCount = 482, newEpisodes = List(3, ::song), recent = List(4, ::song),
+                        onOpen = {}, onRecent = {}, modifier = Modifier.padding(top = 24.dp),
+                        onBounds = { kind, rect -> bounds[kind] = rect }, faces = faces,
+                    )
+                    val (ground, ink) = BlockKind.ForYou.colors(MaterialTheme.colorScheme)
+                    BlockReveal(
+                        open = openState.value, origin = bounds[BlockKind.ForYou], container = ground, content = ink,
+                        onDismiss = {}, face = faces.layer(BlockKind.ForYou),
+                    ) {
+                        Column(Modifier.fillMaxSize()) {
+                            BlockPageHero(title = "For you", covers = emptyList(), topInset = 24.dp, onBack = {}, onPlay = {}, onShuffle = {})
+                        }
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        openState.value = true
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(48)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_opening.png")
+        compose.mainClock.advanceTimeBy(64)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_opening_2.png")
+    }
+
     /** A page with many records: every shape of the hero filled, the small ones in the gaps. */
     @Test
     fun block_page_dense_hero() {

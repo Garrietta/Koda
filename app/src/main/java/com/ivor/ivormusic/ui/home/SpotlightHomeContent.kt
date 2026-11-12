@@ -142,6 +142,8 @@ fun SpotlightHomeContent(
      * out of the tile.
      */
     onLibraryOrigin: (androidx.compose.ui.geometry.Rect?) -> Unit = {},
+    /** The tiles' recorded faces, for the pages that grow out from under them. */
+    blockFaces: BlockFaces? = null,
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
     onProfileClick: () -> Unit,
@@ -620,6 +622,7 @@ fun SpotlightHomeContent(
                         onBounds = { kind, bounds -> blockBounds[kind] = bounds },
                         djColors = djColors,
                         djTitle = djTitle,
+                        faces = blockFaces,
                     )
                 }
 
@@ -631,6 +634,7 @@ fun SpotlightHomeContent(
         BlockReveal(
             open = openBlock != null,
             origin = blockBounds[pageBlock],
+            face = blockFaces?.layer(pageBlock),
             container = blockColor,
             content = onBlockColor,
             onDismiss = { openBlock = null },
