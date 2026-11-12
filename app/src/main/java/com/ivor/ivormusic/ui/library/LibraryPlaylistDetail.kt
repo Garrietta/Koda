@@ -1692,6 +1692,56 @@ fun PlaylistDetailScreen(
             // app's palettes.
             if (showHeader) item {
                 Column(modifier = Modifier.fillMaxWidth()) {
+                    // A playlist with no cover of its own (Your Likes, a new
+                    // playlist) opens like the Home pages do: its songs' covers
+                    // set in expressive shapes, its name, and Play all with
+                    // Shuffle beside it, instead of an empty banner with the
+                    // controls pushed down below it.
+                    val collageHeader = showTracks && heroArt == null && songs.isNotEmpty()
+                    val factsLine = run {
+                        val totalDurationLabel = formatTotalDuration(songs.sumOf { it.duration })
+                        val releaseType = songs.firstOrNull()?.releaseType ?: resolvedPlaylist.releaseType
+                        val releaseYear = songs.firstOrNull()?.releaseYear ?: resolvedPlaylist.releaseYear
+                        val kindLabel = stringResource(releaseType?.labelRes ?: R.string.label_album)
+                        listOfNotNull(
+                            if (isAlbum) kindLabel else stringResource(R.string.label_playlist),
+                            resolvedPlaylist.uploaderName.takeIf { isAlbum && it.isNotBlank() },
+                            releaseYear?.toString()?.takeIf { isAlbum },
+                            if (songs.size == 1) "1 track" else "${songs.size} tracks",
+                            totalDurationLabel
+                        ).joinToString("  ·  ")
+                    }
+                    if (collageHeader) {
+                        val collage = remember(songs) {
+                            songs.distinctBy { it.albumArtUri ?: it.thumbnailUrl }
+                                .take(com.ivor.ivormusic.ui.home.HERO_COVER_COUNT)
+                                .map {
+                                    com.ivor.ivormusic.ui.home.HeroCover(
+                                        it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                        it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                    )
+                                }
+                        }
+                        com.ivor.ivormusic.ui.home.BlockPageHero(
+                            title = resolvedPlaylist.name,
+                            covers = collage,
+                            // The top bar keeps the back arrow; the shapes start under it.
+                            topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                            onBack = null,
+                            onPlay = if (!isReorderMode && !isSearchActive) {
+                                { onPlayQueue(songs, songs.first()) }
+                            } else null,
+                            onShuffle = if (!isReorderMode && !isSearchActive && songs.size > 1) {
+                                { onShuffleQueue(songs) }
+                            } else null,
+                        )
+                        Text(
+                            factsLine,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = playlistOnGround().copy(alpha = 0.8f),
+                            modifier = Modifier.padding(horizontal = PLAYLIST_GUTTER).padding(top = 10.dp),
+                        )
+                    } else {
                     // Beside the tracks the cover is an object in a column,
                     // not a banner across the page: square, rounded, inset.
                     if (!showTracks) PlaylistSideCover(
@@ -1782,22 +1832,7 @@ fun PlaylistDetailScreen(
                         }
                     }
 
-                    PlaylistPageTitle(
-                        title = resolvedPlaylist.name,
-                        facts = run {
-                            val totalDurationLabel = formatTotalDuration(songs.sumOf { it.duration })
-                            val releaseType = songs.firstOrNull()?.releaseType ?: resolvedPlaylist.releaseType
-                            val releaseYear = songs.firstOrNull()?.releaseYear ?: resolvedPlaylist.releaseYear
-                            val kindLabel = stringResource(releaseType?.labelRes ?: R.string.label_album)
-                            listOfNotNull(
-                                if (isAlbum) kindLabel else stringResource(R.string.label_playlist),
-                                resolvedPlaylist.uploaderName.takeIf { isAlbum && it.isNotBlank() },
-                                releaseYear?.toString()?.takeIf { isAlbum },
-                                if (songs.size == 1) "1 track" else "${songs.size} tracks",
-                                totalDurationLabel
-                            ).joinToString("  ·  ")
-                        }
-                    )
+                    PlaylistPageTitle(title = resolvedPlaylist.name, facts = factsLine)
 
                     // Playback is the page's one primary action, directly
                     // under the facts it acts on. Everything else is a
@@ -1810,6 +1845,7 @@ fun PlaylistDetailScreen(
                                 .padding(horizontal = PLAYLIST_GUTTER)
                                 .padding(top = 18.dp),
                         )
+                    }
                     }
 
                     androidx.compose.foundation.layout.FlowRow(

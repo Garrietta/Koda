@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ivor.ivormusic.R
 
 /*
@@ -368,7 +369,8 @@ internal fun BlockPageHero(
     title: String,
     covers: List<HeroCover>,
     topInset: Dp,
-    onBack: () -> Unit,
+    /** Null on a page whose own top bar already has the back arrow: the row is kept, empty. */
+    onBack: (() -> Unit)?,
     onPlay: (() -> Unit)?,
     onShuffle: (() -> Unit)?,
 ) {
@@ -392,12 +394,16 @@ internal fun BlockPageHero(
                 .background(scheme.surfaceContainer),
         )
         Column(Modifier.fillMaxWidth().padding(top = topInset)) {
-            IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp)) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = stringResource(R.string.cd_back),
-                    tint = scheme.onBackground,
-                )
+            if (onBack != null) {
+                IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = stringResource(R.string.cd_back),
+                        tint = scheme.onBackground,
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(48.dp))
             }
             Box(Modifier.fillMaxWidth().height(176.dp)) {
                 // The first four shapes are always there, as tints until
@@ -415,12 +421,18 @@ internal fun BlockPageHero(
                     )
                 }
             }
+            // Large for "For you", smaller rather than cut for a DJ mix's long name.
             Text(
                 title,
                 style = MaterialTheme.typography.displayMedium,
                 color = scheme.onBackground,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                    minFontSize = 26.sp,
+                    maxFontSize = MaterialTheme.typography.displayMedium.fontSize,
+                    stepSize = 2.sp,
+                ),
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
             )
             if (onPlay != null || onShuffle != null) {

@@ -463,27 +463,39 @@ fun AiDjScreen(
                         bottom = contentPadding.calculateBottomPadding() + 24.dp,
                     ),
                 ) {
-                    // Header: the playlist page's hero, with the DJ's abstract
-                    // art as the cover — same banner, same parallax, same
-                    // dissolve into the same ground — and the title below it
-                    // on the page's rail, never centered on the art.
+                    // Header: the same as every Home page's (For you, Recent,
+                    // Podcasts): the mix's own covers set in expressive shapes,
+                    // its name, and Play all with Shuffle beside it. The top
+                    // bar above keeps the back arrow, the menu and settings.
                     item(key = "dj_header") {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            PlaylistHeroBanner(
-                                headerCollapse = headerCollapse,
-                                // The hero's own drawn wash ends at this
-                                // ground (its bottom stop), so the foot
-                                // fade follows the art's last row down
-                                // into the exact ground the list stands
-                                // on — one consistent downward motion.
-                                handoffGround = ground,
-                            ) {
-                                AiDjHeroArtwork(modifier = Modifier.fillMaxSize())
+                            val heroCovers = remember(currentMix) {
+                                currentMix?.tracks.orEmpty()
+                                    .map { it.song }
+                                    .distinctBy { it.albumArtUri ?: it.thumbnailUrl }
+                                    .take(com.ivor.ivormusic.ui.home.HERO_COVER_COUNT)
+                                    .map {
+                                        com.ivor.ivormusic.ui.home.HeroCover(
+                                            it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                            it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                        )
+                                    }
                             }
-                            PlaylistPageTitle(
+                            com.ivor.ivormusic.ui.home.BlockPageHero(
                                 title = currentMix?.title ?: stringResource(R.string.aidj_title),
-                                facts = stringResource(R.string.aidj_pool_size, trackCount),
-                                ink = aiDjOnGround(),
+                                covers = heroCovers,
+                                topInset = (padding.calculateTopPadding() - 48.dp).coerceAtLeast(0.dp),
+                                onBack = null,
+                                onPlay = currentMix?.let { m -> { playMix(m) } },
+                                // Shuffle plays the mix's tracks as a plain shuffled
+                                // queue; the DJ mix itself (Play all) stays in order.
+                                onShuffle = currentMix?.let { m -> { onShuffleQueue(m.tracks.map { it.song }) } },
+                            )
+                            Text(
+                                stringResource(R.string.aidj_pool_size, trackCount),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = aiDjOnGround().copy(alpha = 0.8f),
+                                modifier = Modifier.padding(horizontal = PLAYLIST_GUTTER).padding(top = 10.dp),
                             )
                             // DJ extras, kept in their places: the voice
                             // toggle above the playback rows, New mix under
@@ -514,21 +526,6 @@ fun AiDjScreen(
                                     Switch(
                                         checked = djVoiceEnabled,
                                         onCheckedChange = { repository.setDjVoiceEnabled(it) },
-                                    )
-                                }
-                                // Playlist page layout: Row 1 is Play all /
-                                // Shuffle, Row 2 is the new-mix button under Play
-                                // all and Download under Shuffle.
-                                if (currentMix != null) {
-                                    CollectionPlaybackActions(
-                                        onPlay = { playMix(currentMix) },
-                                        // Shuffle plays the mix's tracks as a plain
-                                        // shuffled queue; the DJ mix itself (Play
-                                        // all) always stays strictly ordered.
-                                        onShuffle = {
-                                            onShuffleQueue(currentMix.tracks.map { it.song })
-                                        },
-                                        modifier = Modifier.padding(top = 14.dp),
                                     )
                                 }
                                 Row(
@@ -638,69 +635,6 @@ fun AiDjScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * Abstract code-drawn header artwork for the AI DJ page: the page's own
- * cover, in the playlist page's primary family, dissolving into the AI DJ
- * page's own tertiary ground (not the shared playlist ground) so the art
- * hands off seamlessly to the background the list stands on. Soft circles,
- * ring arcs and sparkle motifs, in the spirit of the playlist headers.
- * Drawn in code so it follows the theme; no bundled bitmaps. Positions are
- * fixed fractions, never random per recomposition.
- */
-@Composable
-private fun AiDjHeroArtwork(modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val ground = aiDjPageGround()
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        // Base wash, primary deep at the top-left dissolving to the page's
-        // ground at the bottom, so the art hands off seamlessly.
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = listOf(scheme.primary, ground),
-                start = Offset(0f, 0f),
-                end = Offset(w * 0.35f, h),
-            )
-        )
-        // Soft circles.
-        drawCircle(
-            color = scheme.onPrimaryContainer.copy(alpha = 0.16f),
-            radius = w * 0.44f,
-            center = Offset(w * 0.85f, h * 0.12f),
-        )
-        drawCircle(
-            color = scheme.primary.copy(alpha = 0.35f),
-            radius = w * 0.30f,
-            center = Offset(w * 0.10f, h * 0.82f),
-        )
-        drawCircle(
-            color = scheme.onPrimaryContainer.copy(alpha = 0.10f),
-            radius = w * 0.17f,
-            center = Offset(w * 0.55f, h * 0.66f),
-        )
-        drawCircle(
-            color = scheme.onPrimaryContainer.copy(alpha = 0.12f),
-            radius = w * 0.09f,
-            center = Offset(w * 0.30f, h * 0.30f),
-        )
-        // A ring arc for motion.
-        drawArc(
-            color = scheme.onPrimaryContainer.copy(alpha = 0.20f),
-            startAngle = 200f,
-            sweepAngle = 140f,
-            useCenter = false,
-            topLeft = Offset(w * 0.52f, -h * 0.22f),
-            size = androidx.compose.ui.geometry.Size(w * 0.72f, w * 0.72f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.035f),
-        )
-        // Sparkles: 4-point stars.
-        drawPath(sparklePath(w * 0.22f, h * 0.22f, w * 0.055f), scheme.onPrimaryContainer.copy(alpha = 0.50f))
-        drawPath(sparklePath(w * 0.70f, h * 0.44f, w * 0.038f), scheme.onPrimaryContainer.copy(alpha = 0.35f))
-        drawPath(sparklePath(w * 0.42f, h * 0.80f, w * 0.046f), scheme.onPrimaryContainer.copy(alpha = 0.40f))
     }
 }
 

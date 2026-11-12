@@ -184,6 +184,31 @@ class BlocksHomeScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_opening_2.png")
     }
 
+    /** The DJ page's header: its top bar keeps the back arrow, and a long mix name shrinks onto two lines. */
+    @Test
+    fun dj_page_header() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                val (ground, ink) = BlockKind.Dj.colors(MaterialTheme.colorScheme)
+                BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
+                    Column(Modifier.fillMaxSize()) {
+                        BlockPageHero(
+                            title = "Midnight Drift: Smoke & Timberline",
+                            covers = List(6) { com.ivor.ivormusic.ui.home.HeroCover("https://example.invalid/$it.jpg") },
+                            topInset = 24.dp,
+                            onBack = null,
+                            onPlay = {},
+                            onShuffle = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/dj_page_header.png")
+    }
+
     /** A page with many records: every shape of the hero filled, the small ones in the gaps. */
     @Test
     fun block_page_dense_hero() {
