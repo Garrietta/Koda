@@ -609,6 +609,7 @@ class ThemePreferences(context: Context) {
         private const val KEY_START_MODE = "start_mode"
         private const val KEY_NAV_TAB_LABELS = "nav_tab_labels"
         private const val KEY_NAV_BAR_HIDES_ON_SCROLL = "nav_bar_hides_on_scroll"
+        private const val KEY_NAV_BAR_SHOWN = "nav_bar_shown"
         private const val KEY_VIDEO_HOLD_SPEED_RATE = "video_gesture_hold_speed_rate"
         private const val KEY_VIDEO_CONTROLS_HIDE_SECONDS = "video_controls_hide_seconds"
         private const val KEY_VIDEO_FEED_POSTS = "video_feed_posts"
@@ -1557,6 +1558,7 @@ class ThemePreferences(context: Context) {
         barHidesOnScroll = prefs.getBoolean(KEY_NAV_BAR_HIDES_ON_SCROLL, true),
         showGreeting = prefs.getBoolean(KEY_HOME_GREETING, true),
         alwaysShowDownloads = prefs.getBoolean(KEY_HOME_ALWAYS_DOWNLOADS, false),
+        showBar = prefs.getBoolean(KEY_NAV_BAR_SHOWN, true),
     )
 
     fun setHomeNavigation(customization: HomeNavigationCustomization) {
@@ -1567,6 +1569,7 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_NAV_BAR_HIDES_ON_SCROLL, customization.barHidesOnScroll)
             .putBoolean(KEY_HOME_GREETING, customization.showGreeting)
             .putBoolean(KEY_HOME_ALWAYS_DOWNLOADS, customization.alwaysShowDownloads)
+            .putBoolean(KEY_NAV_BAR_SHOWN, customization.showBar)
             .apply()
         _homeNavigation.value = customization
     }

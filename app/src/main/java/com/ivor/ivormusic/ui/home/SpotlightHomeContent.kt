@@ -116,6 +116,11 @@ fun SpotlightHomeContent(
     onSongClick: (Song) -> Unit,
     onSongLongPress: ((Song) -> Unit)? = null,
     onPlaySongs: (List<Song>, Song?) -> Unit,
+    /**
+     * Opens Explore, where search lives. Required: with the navigation bar
+     * turned off, the Explore tile is the only way there.
+     */
+    onOpenExplore: () -> Unit,
     /** Plays these with shuffle on. Required: a button left unwired is a dead button. */
     onShuffleSongs: (List<Song>) -> Unit,
     onRecentClick: (Song) -> Unit,
@@ -174,6 +179,7 @@ fun SpotlightHomeContent(
             BlockKind.Dj -> onOpenDj(blockBounds[kind])
             BlockKind.Liked -> onOpenLiked()
             BlockKind.Library -> onShowAllInLibrary()
+            BlockKind.Explore -> onOpenExplore()
             else -> {
                 onFilterChange(kind.filter())
                 pageBlock = kind

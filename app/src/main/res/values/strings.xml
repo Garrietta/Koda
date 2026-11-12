@@ -598,6 +598,8 @@
     <string name="cz_tab_labels_always">Always</string>
     <string name="cz_tab_labels_selected">Open tab</string>
     <string name="cz_tab_labels_never">Never</string>
+    <string name="cz_bar_shown">Show the navigation bar</string>
+    <string name="cz_bar_shown_sub">Off: in music, Home's tiles are the way around and Back returns to Home. Videos keep the bar.</string>
     <string name="cz_bar_hides">Hide while scrolling</string>
     <string name="cz_bar_hides_sub">The floating bar slides away as you scroll down and returns as you scroll up</string>
     <string name="cz_bar_hides_unavailable">Only the floating bar hides; the standard bar always stays</string>

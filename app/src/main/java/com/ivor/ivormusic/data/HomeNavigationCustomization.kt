@@ -57,4 +57,11 @@ data class HomeNavigationCustomization(
      * while something is downloading.
      */
     val alwaysShowDownloads: Boolean = false,
+    /**
+     * Whether music mode shows the navigation bar. Off, Home's tiles are
+     * the way around and Back returns to Home. Only honoured on the
+     * tiled Home in music mode: videos, and the classic Home, have no
+     * tiles to stand in for the bar.
+     */
+    val showBar: Boolean = true,
 )

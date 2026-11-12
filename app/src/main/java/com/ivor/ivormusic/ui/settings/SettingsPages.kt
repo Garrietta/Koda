@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.VerticalAlignBottom
+import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -364,6 +365,15 @@ internal fun HomeNavigationSettingsPage(
                         onSelect = {
                             navPrefs.setHomeNavigation(navigation.copy(tabLabels = labelChoices[it]))
                         }
+                    )
+                    // Off, music mode is the tiled Home alone: every
+                    // place the bar led to has a tile, and Back returns Home.
+                    SettingsToggleRow(
+                        icon = Icons.Rounded.Dock,
+                        title = stringResource(R.string.cz_bar_shown),
+                        subtitle = stringResource(R.string.cz_bar_shown_sub),
+                        enabled = navigation.showBar,
+                        onToggle = { navPrefs.setHomeNavigation(navigation.copy(showBar = it)) },
                     )
                     // Only the floating bar hides; the standard one is
                     // pinned, so the switch has nothing to do there.

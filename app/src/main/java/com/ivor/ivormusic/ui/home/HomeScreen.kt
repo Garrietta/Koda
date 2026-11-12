@@ -1336,6 +1336,7 @@ fun HomeScreen(
                                                     selectedTab = TAB_LIBRARY
                                                 },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
+                                                onOpenExplore = { selectedTab = TAB_EXPLORE },
                                                 onShuffleSongs = { queue ->
                                                     playerViewModel.playQueueShuffled(queue)
                                                     showPlayerSheet = true
@@ -1979,7 +1980,12 @@ fun HomeScreen(
             }
         )
 
-        if (useRail) {
+        // The bar can be turned off for music on the tiled Home, where a
+        // tile leads everywhere the bar did and Back returns Home.
+        val barShown = homeNavigation.showBar || videoMode || !spotlightHome
+        if (!barShown) {
+            // Nothing to draw: Home is the navigation.
+        } else if (useRail) {
             val railTabs = navTabs.map { (index, label, icons) ->
                 HomeNavTab(index, label, icons.first, icons.second)
             }
