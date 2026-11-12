@@ -692,6 +692,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * shows are read off disk the first time anything collects this, so the
      * shelf does not depend on the Library's Podcasts tab having been opened.
      */
+    /** The shows the Library follows, for the Podcasts page's shelf of shows. */
+    val podcastFeeds: StateFlow<List<com.ivor.ivormusic.data.PodcastFeed>> get() = podcastRepository.feeds
+
     val newEpisodes: StateFlow<List<Song>> =
         combine(podcastRepository.feeds, podcastRepository.episodesByFeed) { feeds, byFeed ->
             com.ivor.ivormusic.data.newestEpisodes(byFeed).map { episode ->

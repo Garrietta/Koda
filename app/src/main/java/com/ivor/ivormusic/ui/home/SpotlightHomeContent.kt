@@ -4,6 +4,7 @@ import com.ivor.ivormusic.R
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -173,6 +174,9 @@ fun SpotlightHomeContent(
     val musicBrowse by viewModel.musicBrowse.collectAsState()
     val onRepeat by viewModel.onRepeat.collectAsState()
     val newEpisodes by viewModel.newEpisodes.collectAsState()
+    val podcastFeeds by viewModel.podcastFeeds.collectAsState()
+    // The show opened from the Podcasts page, over the page itself.
+    var openShow by remember { mutableStateOf<com.ivor.ivormusic.data.PodcastFeed?>(null) }
 
     // Home is the blocks. A tile opens a page of its own, which grows out
     // of the tile in the tile's color (BlockReveal). What a page lists is
@@ -279,7 +283,46 @@ fun SpotlightHomeContent(
             }
         }
 
-        if (quickPicks.isNotEmpty()) {
+        // The Podcasts page is a library of shows: the newest episodes as a
+        // carousel to pick from, then every show as its artwork, which opens
+        // that show's whole run of episodes.
+        if (filter == SpotlightFilter.Podcasts) {
+            if (newEpisodes.isNotEmpty()) {
+                item(key = "podcast-new-header") {
+                    SpotlightSectionHeader(
+                        title = stringResource(R.string.home_section_new_episodes),
+                        subtitle = stringResource(R.string.spotlight_caption_podcasts),
+                    )
+                }
+                item(key = "podcast-new") {
+                    SpotlightShelf(
+                        items = newEpisodes.take(PODCAST_CAROUSEL_EPISODES).map {
+                            ShelfItem(
+                                it.id,
+                                it.title,
+                                it.artist,
+                                it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                            )
+                        },
+                        onClick = { id -> newEpisodes.find { it.id == id }?.let { onPlaySongs(newEpisodes, it) } },
+                    )
+                }
+            }
+            if (podcastFeeds.isNotEmpty()) {
+                item(key = "podcast-shows-header") {
+                    SpotlightSectionHeader(
+                        title = stringResource(R.string.spotlight_your_shows),
+                        subtitle = stringResource(R.string.spotlight_your_shows_sub),
+                    )
+                }
+                item(key = "podcast-shows") {
+                    PodcastShowGrid(podcastFeeds.sortedBy { it.title.lowercase() }, onOpen = { openShow = it })
+                }
+            }
+        }
+
+        if (quickPicks.isNotEmpty() && filter != SpotlightFilter.Podcasts) {
             item(key = "quick-header") {
                 SpotlightSectionHeader(
                     title = if (filter == SpotlightFilter.Recommended) {
@@ -591,8 +634,12 @@ fun SpotlightHomeContent(
             container = blockColor,
             content = onBlockColor,
             onDismiss = { openBlock = null },
-            onClosed = { onFilterChange(SpotlightFilter.All) },
+            onClosed = {
+                openShow = null
+                onFilterChange(SpotlightFilter.All)
+            },
         ) {
+          Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = pageListState,
                 modifier = Modifier.fillMaxSize(),
@@ -603,16 +650,18 @@ fun SpotlightHomeContent(
                     // The covers the hero is made of: the page's songs, or a
                     // playlist page's playlists. A page of shelves has none
                     // and gets the shapes alone.
-                    val heroCovers = remember(quickPicks, ownPlaylists, filter) {
+                    val browseShelves = filter.browseKey()?.let { musicBrowse[it]?.shelves }.orEmpty()
+                    val heroCovers = remember(quickPicks, ownPlaylists, filter, browseShelves) {
                         when {
-                            quickPicks.isNotEmpty() -> quickPicks.take(4).map {
+                            quickPicks.isNotEmpty() -> quickPicks.distinctBy { it.albumArtUri ?: it.thumbnailUrl }.take(HERO_COVER_COUNT).map {
                                 HeroCover(
                                     it.albumArtUri?.toString() ?: it.thumbnailUrl,
                                     it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
                                 )
                             }
-                            filter == SpotlightFilter.Playlists -> ownPlaylists.take(4).map { HeroCover(it.thumbnailUrl) }
-                            else -> emptyList()
+                            filter == SpotlightFilter.Playlists -> ownPlaylists.take(HERO_COVER_COUNT).map { HeroCover(it.thumbnailUrl) }
+                            // A page of shelves (New, Charts, Explore) is made of its own records.
+                            else -> heroCoversFromShelves(browseShelves, HERO_COVER_COUNT)
                         }
                     }
                     BlockPageHero(
@@ -624,12 +673,13 @@ fun SpotlightHomeContent(
                         covers = heroCovers,
                         topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
                         onBack = { openBlock = null },
-                        onPlay = if (quickPicks.isNotEmpty()) {
+                        // Podcasts are a library of shows, not a queue to start from the top.
+                        onPlay = if (quickPicks.isNotEmpty() && filter != SpotlightFilter.Podcasts) {
                             { onPlaySongs(quickPicks, quickPicks.firstOrNull()) }
                         } else {
                             null
                         },
-                        onShuffle = if (quickPicks.size > 1) {
+                        onShuffle = if (quickPicks.size > 1 && filter != SpotlightFilter.Podcasts) {
                             { onShuffleSongs(quickPicks) }
                         } else {
                             null
@@ -639,9 +689,75 @@ fun SpotlightHomeContent(
                 pageSections()
                 item(key = "tail") { Spacer(Modifier.height(24.dp)) }
             }
+            // A show opened from the page slides in over it, in the page's
+            // colors; Back or its own back arrow returns to the page.
+            var shownShow by remember { mutableStateOf<com.ivor.ivormusic.data.PodcastFeed?>(null) }
+            if (openShow != null) shownShow = openShow
+            androidx.activity.compose.BackHandler(enabled = openShow != null) { openShow = null }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = openShow != null,
+                enter = androidx.compose.animation.slideInHorizontally(MaterialTheme.motionScheme.defaultSpatialSpec()) { it } +
+                    androidx.compose.animation.fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
+                exit = androidx.compose.animation.slideOutHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()) { it } +
+                    androidx.compose.animation.fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
+            ) {
+                shownShow?.let { feed ->
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        com.ivor.ivormusic.ui.podcast.PodcastDetailScreen(
+                            feed = feed,
+                            onBack = { openShow = null },
+                            onPlayQueue = onPlaySongs,
+                            onShuffleQueue = onShuffleSongs,
+                            contentPadding = PaddingValues(
+                                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+                                bottom = contentPadding.calculateBottomPadding(),
+                            ),
+                        )
+                    }
+                }
+            }
+          }
         }
     }
 }
+
+/** The followed shows as a grid of their artwork, three to a row, each opening the show. */
+@Composable
+private fun PodcastShowGrid(feeds: List<com.ivor.ivormusic.data.PodcastFeed>, onOpen: (com.ivor.ivormusic.data.PodcastFeed) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        for (row in feeds.chunked(3)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (feed in row) {
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).clickable { onOpen(feed) },
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().aspectRatio(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ShortcutImage(feed.artworkUrl, feed.artworkUrl)
+                        }
+                        Text(
+                            feed.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 4.dp, top = 6.dp, end = 4.dp, bottom = 4.dp),
+                        )
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/** How many of the newest episodes the Podcasts page's carousel holds. */
+private const val PODCAST_CAROUSEL_EPISODES = 20
 
 /**
  * YouTube Music's own auto-generated mixes, by name.
@@ -659,6 +775,24 @@ private val AUTO_MIX_PATTERNS = listOf(
     Regex("""^(discover|new\s+release|replay)\s+mix$""", RegexOption.IGNORE_CASE),
     Regex("""\bradio$""", RegexOption.IGNORE_CASE),
 )
+
+/**
+ * The covers a page of shelves is made of: albums and singles first, as
+ * the records the page is about, then tracks and playlists, each once.
+ */
+internal fun heroCoversFromShelves(shelves: List<com.ivor.ivormusic.data.MusicShelf>, count: Int): List<HeroCover> {
+    val items = shelves.flatMap { it.items }
+    val albums = items.filterIsInstance<com.ivor.ivormusic.data.MusicShelfItem.Collection>().filter { it.isAlbum }
+        .mapNotNull { it.playlist.thumbnailUrl }
+    val rest = items.mapNotNull { item ->
+        when (item) {
+            is com.ivor.ivormusic.data.MusicShelfItem.Collection -> if (item.isAlbum) null else item.playlist.thumbnailUrl
+            is com.ivor.ivormusic.data.MusicShelfItem.Track -> item.song.highResThumbnailUrl ?: item.song.thumbnailUrl
+            else -> null
+        }
+    }
+    return (albums + rest).filter { it.isNotBlank() }.distinct().take(count).map { HeroCover(it) }
+}
 
 internal fun isAutoMix(name: String): Boolean {
     val trimmed = name.trim()

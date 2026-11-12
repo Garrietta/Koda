@@ -242,7 +242,10 @@ fun LibraryContent(
     resetSignal: Int = 0,
 ) {
     // Navigation State
-    var currentRoute by rememberSaveable { mutableStateOf(LibraryRoute.Main) }
+    // Opened on a playlist, the Library starts on it: starting on the
+    // landing page and moving on a frame later showed the landing for that
+    // frame, a flash of the wrong page every time Liked was opened.
+    var currentRoute by rememberSaveable { mutableStateOf(if (initialPlaylist != null) LibraryRoute.Playlist else LibraryRoute.Main) }
 
     // Re-tapping the Library tab pops back to the landing page and scrolls
     // to the top.
@@ -263,7 +266,7 @@ fun LibraryContent(
     }
 
     // Arguments for routes
-    var selectedPlaylist by remember { mutableStateOf<PlaylistDisplayItem?>(null) }
+    var selectedPlaylist by remember { mutableStateOf(initialPlaylist) }
     var selectedPodcastFeed by remember { mutableStateOf<com.ivor.ivormusic.data.PodcastFeed?>(null) }
     var selectedArtistName by remember { mutableStateOf<String?>(null) }
     // The UC id behind the artist route when one resolved it (similar-artist
@@ -273,7 +276,7 @@ fun LibraryContent(
     // back from it, or from anything opened inside it, ends the excursion on
     // that tab rather than on the Library root. Set with the hand-off that
     // opened it, cleared when back leaves.
-    var returnsToCaller by remember { mutableStateOf(false) }
+    var returnsToCaller by remember { mutableStateOf(initialPlaylist != null && initialReturnToCaller) }
     var selectedAlbumName by remember { mutableStateOf<String?>(null) }
     var selectedAlbumSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     // What the Library already holds of a YouTube album opened as a release

@@ -189,6 +189,13 @@ private val VIDEO_SHELL_TOP_BAR_HEIGHT = 76.dp
 /** Gap the mini player keeps above the system navigation bar once the floating toolbar is gone. */
 private val MINI_PLAYER_RESTING_GAP = 16.dp
 
+/**
+ * Where the pill rests with the bar turned off: the floating bar sits 20dp
+ * above the system inset and is 64dp tall, so its middle is 52dp up; the
+ * 68dp pill centred there starts 18dp up.
+ */
+private val MINI_PLAYER_NO_BAR_SPACING = 18.dp
+
 /** The bubble's width plus its margin and a gap: what a bar beside it leaves free. */
 private val MINI_BUBBLE_END_RESERVE = 92.dp
 
@@ -872,8 +879,14 @@ fun HomeScreen(
         nonExpressiveNavigationBar -> 84.dp
         else -> 88.dp
     }
+    // The bar can be turned off for music on the tiled Home, where a
+    // tile leads everywhere the bar did and Back returns Home.
+    val barShown = homeNavigation.showBar || videoMode || !spotlightHome
     val miniPlayerCollapsedSpacing = when {
         useRail -> 12.dp
+        // No bar: the pill takes the bar's place, its middle on the line
+        // the bar's middle was on, rather than floating above a gap.
+        !barShown -> MINI_PLAYER_NO_BAR_SPACING
         nonExpressiveNavigationBar -> 96.dp
         else -> 100.dp
     }
@@ -881,7 +894,7 @@ fun HomeScreen(
     // stays pinned, so there is nothing for the pill to follow there, and a
     // rail never hides.
     val miniPlayerFollowDistancePx = with(androidx.compose.ui.platform.LocalDensity.current) {
-        if (nonExpressiveNavigationBar || useRail) 0f
+        if (nonExpressiveNavigationBar || useRail || !barShown) 0f
         else (miniPlayerCollapsedSpacing - MINI_PLAYER_RESTING_GAP).toPx()
     }
     val miniPlayerFollowOffsetPx: () -> Float = {
@@ -1447,6 +1460,11 @@ fun HomeScreen(
                                                 container = MaterialTheme.colorScheme.inverseSurface,
                                                 content = MaterialTheme.colorScheme.inverseOnSurface,
                                                 onDismiss = { libraryOpen = false },
+                                                // The Library and its playlists are whole screens of
+                                                // the app, made for its own colors; in a scheme made
+                                                // from the tile, their top bars and the status bar
+                                                // came out nearly invisible.
+                                                appColors = true,
                                             ) {
                                                 androidx.compose.runtime.key(librarySession) {
                                                     LibraryContent(
@@ -2076,9 +2094,6 @@ fun HomeScreen(
             }
         )
 
-        // The bar can be turned off for music on the tiled Home, where a
-        // tile leads everywhere the bar did and Back returns Home.
-        val barShown = homeNavigation.showBar || videoMode || !spotlightHome
         if (!barShown) {
             // Nothing to draw: Home is the navigation.
         } else if (useRail) {

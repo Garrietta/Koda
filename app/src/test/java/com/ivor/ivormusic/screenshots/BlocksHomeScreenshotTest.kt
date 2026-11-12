@@ -145,6 +145,31 @@ class BlocksHomeScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/player_colors.png")
     }
 
+    /** A page with many records: every shape of the hero filled, the small ones in the gaps. */
+    @Test
+    fun block_page_dense_hero() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                val (ground, ink) = BlockKind.NewReleases.colors(MaterialTheme.colorScheme)
+                BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
+                    Column(Modifier.fillMaxSize()) {
+                        BlockPageHero(
+                            title = "New",
+                            covers = List(10) { com.ivor.ivormusic.ui.home.HeroCover("https://example.invalid/$it.jpg") },
+                            topInset = 24.dp,
+                            onBack = {},
+                            onPlay = null,
+                            onShuffle = null,
+                        )
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_dense_hero.png")
+    }
+
     @Test
     fun blocks_dark() = shoot("blocks_dark", dark = true, djTitle = "A Sunny Day with Kendrick Lamar")
 

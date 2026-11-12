@@ -36,6 +36,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -82,6 +91,27 @@ private val TILE_CORNER = 40.dp
 /** The page's content stays hidden until the window is this far open, then fades in. */
 private const val CONTENT_FROM = 0.3f
 private const val CONTENT_BY = 0.8f
+
+/**
+ * Over the last stretch before it lands on the tile, the window fades,
+ * so the tile's own name and icon show through as it arrives rather than
+ * a flat patch of its color sitting over them for a frame.
+ */
+private const val WINDOW_FADE_UNTIL = 0.18f
+
+/** A pull down this far, as a share of the page's height, closes the page on release. */
+private const val PULL_TO_CLOSE = 0.22f
+
+/** How much of the page's height a pull covers to bring the window all the way back. */
+private const val PULL_RANGE = 1.1f
+
+/** The window as a page is pulled down by [pulledPx] of [heightPx]: 1 is fully open, 0 the tile. */
+internal fun pulledProgress(pulledPx: Float, heightPx: Float): Float =
+    if (heightPx <= 0f) 1f else (1f - pulledPx / (heightPx * PULL_RANGE)).coerceIn(0f, 1f)
+
+/** Whether a pull of [pulledPx] released at [velocityY] closes the page. */
+internal fun pullCloses(pulledPx: Float, heightPx: Float, velocityY: Float): Boolean =
+    pulledPx > heightPx * PULL_TO_CLOSE || (pulledPx > 0f && velocityY > 1800f)
 
 private class RevealWindow(private val window: Rect, private val corner: Float) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
@@ -147,6 +177,14 @@ internal fun BlockReveal(
     content: Color,
     onDismiss: () -> Unit,
     onClosed: () -> Unit = {},
+    /**
+     * Draw the page in the app's own colors rather than a scheme made from
+     * the tile's: for a page that is a whole screen of the app (the
+     * Library, a playlist) and was designed for the app's roles. It still
+     * grows out of the tile in the tile's color, which gives way to the
+     * app's background as the page fades in.
+     */
+    appColors: Boolean = false,
     page: @Composable () -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -173,39 +211,94 @@ internal fun BlockReveal(
     }
     if (!shown) return
 
+    // Pulling down from the top of the page closes it, the way the player
+    // collapses: once the page's list is at its top, a further pull is the
+    // window shrinking back towards the tile under the finger. Let go past
+    // a fifth of the screen (or with a flick) and it closes; short of that
+    // it springs open again.
+    val scope = rememberCoroutineScope()
+    var pagePx by remember { mutableFloatStateOf(0f) }
+    var pulled by remember { mutableFloatStateOf(0f) }
+    val latestDismiss by rememberUpdatedState(onDismiss)
+    val pullToClose = remember(progress) {
+        object : NestedScrollConnection {
+            private fun follow() {
+                scope.launch { progress.snapTo(pulledProgress(pulled, pagePx)) }
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Pushing back up while pulled undoes the pull before the list scrolls.
+                if (available.y < 0f && pulled > 0f && source == NestedScrollSource.UserInput) {
+                    val used = maxOf(available.y, -pulled)
+                    pulled += used
+                    follow()
+                    return Offset(0f, used)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0f && source == NestedScrollSource.UserInput) {
+                    pulled += available.y
+                    follow()
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pulled <= 0f) return Velocity.Zero
+                val close = pullCloses(pulled, pagePx, available.y)
+                pulled = 0f
+                if (close) latestDismiss() else progress.animateTo(1f, openSpec)
+                return available
+            }
+        }
+    }
+
     // The page's color is what sits behind the status bar while it is up,
     // so it decides whether the icons are dark or light: white icons on
     // the cream Library page would be unreadable.
-    com.ivor.ivormusic.ui.theme.StatusBarAppearance(ground)
+    val scheme = MaterialTheme.colorScheme
+    val pageGround = if (appColors) scheme.background else ground
+    val pageInk = if (appColors) scheme.onBackground else ink
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(pageGround)
     BackHandler(enabled = open, onBack = onDismiss)
     var hostInRoot by remember { mutableStateOf(Offset.Zero) }
-    val scheme = MaterialTheme.colorScheme
-    val pageScheme = remember(scheme, ground, ink) { scheme.onBlock(ground, ink) }
+    val pageScheme = remember(scheme, ground, ink, appColors) { if (appColors) scheme else scheme.onBlock(ground, ink) }
+    val contentShown = { ((progress.value - CONTENT_FROM) / (CONTENT_BY - CONTENT_FROM)).coerceIn(0f, 1f) }
     Box(
         Modifier
             .fillMaxSize()
-            .onGloballyPositioned { hostInRoot = it.positionInRoot() }
+            .onGloballyPositioned {
+                hostInRoot = it.positionInRoot()
+                pagePx = it.size.height.toFloat()
+            }
+            .nestedScroll(pullToClose)
             .graphicsLayer {
                 // A spring may pass its target; the window may not.
                 val p = progress.value.coerceIn(0f, 1f)
+                alpha = (p / WINDOW_FADE_UNTIL).coerceIn(0f, 1f)
                 val whole = Rect(0f, 0f, size.width, size.height)
                 val start = from?.translate(-hostInRoot.x, -hostInRoot.y)
                     ?: Rect(center = whole.center, radius = TILE_CORNER.toPx())
                 shape = RevealWindow(lerp(start, whole, p), TILE_CORNER.toPx() * (1f - p))
                 clip = true
             }
-            .background(ground)
+            .drawBehind {
+                // The tile's color, giving way to the page's own ground as
+                // the page appears (the same color when the page is in the tile's).
+                drawRect(if (appColors) lerp(ground, pageGround, contentShown()) else ground)
+            }
             // The Home underneath is not pressed through the page.
             .pointerInput(Unit) { detectTapGestures { } },
     ) {
         Box(
-            Modifier.fillMaxSize().graphicsLayer {
-                alpha = ((progress.value - CONTENT_FROM) / (CONTENT_BY - CONTENT_FROM)).coerceIn(0f, 1f)
-            },
+            Modifier.fillMaxSize().graphicsLayer { alpha = contentShown() },
         ) {
             MaterialTheme(colorScheme = pageScheme) {
                 // Text that names no color takes the ink too, not the app's own text color.
-                CompositionLocalProvider(LocalContentColor provides ink, content = page)
+                CompositionLocalProvider(LocalContentColor provides pageInk, content = page)
             }
         }
     }
@@ -264,22 +357,20 @@ internal fun BlockPageHero(
                 )
             }
             Box(Modifier.fillMaxWidth().height(176.dp)) {
-                HeroShape(
-                    covers.getOrNull(2), MaterialShapes.Clover4Leaf.toShape(), scheme.surfaceContainerHighest,
-                    Modifier.align(Alignment.TopEnd).offset(x = (-44).dp, y = 0.dp).size(124.dp),
-                )
-                HeroShape(
-                    covers.getOrNull(0), MaterialShapes.Cookie9Sided.toShape(), scheme.surfaceContainerHighest,
-                    Modifier.align(Alignment.TopStart).offset(x = 16.dp, y = 12.dp).size(140.dp).rotate(-8f),
-                )
-                HeroShape(
-                    covers.getOrNull(1), MaterialShapes.Sunny.toShape(), scheme.surfaceContainerHigh,
-                    Modifier.align(Alignment.TopCenter).offset(x = (-8).dp, y = 60.dp).size(108.dp).rotate(10f),
-                )
-                HeroShape(
-                    covers.getOrNull(3), MaterialShapes.Pill.toShape(), scheme.surfaceContainerHigh,
-                    Modifier.align(Alignment.BottomEnd).offset(x = (-14).dp, y = 0.dp).size(78.dp).rotate(18f),
-                )
+                // The first four shapes are always there, as tints until
+                // their covers arrive; the smaller ones in the gaps join only
+                // when there are covers for them, so a page with many new
+                // records is crowded with them and a quiet one is not.
+                HERO_SLOTS.forEachIndexed { index, slot ->
+                    val cover = covers.getOrNull(index)
+                    if (index >= ALWAYS_SHOWN_SLOTS && cover == null) return@forEachIndexed
+                    HeroShape(
+                        cover,
+                        slot.shape.toShape(),
+                        if (slot.deep) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
+                        Modifier.align(slot.align).offset(x = slot.x, y = slot.y).size(slot.size).rotate(slot.turn),
+                    )
+                }
             }
             Text(
                 title,
@@ -313,6 +404,38 @@ internal fun BlockPageHero(
         }
     }
 }
+
+/** Where one cover sits in the hero: its shape, size, place and turn. */
+private class HeroSlot(
+    val shape: androidx.graphics.shapes.RoundedPolygon,
+    val size: Dp,
+    val align: Alignment,
+    val x: Dp,
+    val y: Dp,
+    val turn: Float,
+    val deep: Boolean,
+)
+
+/** The four shapes every hero has; the rest appear only with a cover. */
+private const val ALWAYS_SHOWN_SLOTS = 4
+
+/** The most covers a hero shows. */
+internal const val HERO_COVER_COUNT = 10
+
+/** The hero's shapes, largest first, set so the small ones fill the gaps the large ones leave. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private val HERO_SLOTS: List<HeroSlot> = listOf(
+    HeroSlot(MaterialShapes.Cookie9Sided, 140.dp, Alignment.TopStart, 16.dp, 12.dp, -8f, deep = true),
+    HeroSlot(MaterialShapes.Sunny, 108.dp, Alignment.TopCenter, (-8).dp, 60.dp, 10f, deep = false),
+    HeroSlot(MaterialShapes.Clover4Leaf, 124.dp, Alignment.TopEnd, (-44).dp, 0.dp, 0f, deep = true),
+    HeroSlot(MaterialShapes.Pill, 78.dp, Alignment.BottomEnd, (-14).dp, 0.dp, 18f, deep = false),
+    HeroSlot(MaterialShapes.Flower, 64.dp, Alignment.TopCenter, 44.dp, 0.dp, -12f, deep = false),
+    HeroSlot(MaterialShapes.Gem, 56.dp, Alignment.BottomStart, 132.dp, 0.dp, 8f, deep = true),
+    HeroSlot(MaterialShapes.Cookie6Sided, 52.dp, Alignment.TopEnd, (-4).dp, 108.dp, 20f, deep = true),
+    HeroSlot(MaterialShapes.Puffy, 48.dp, Alignment.BottomStart, 8.dp, 4.dp, -6f, deep = false),
+    HeroSlot(MaterialShapes.Arch, 50.dp, Alignment.BottomEnd, (-104).dp, 2.dp, 0f, deep = false),
+    HeroSlot(MaterialShapes.SoftBurst, 44.dp, Alignment.TopEnd, (-2).dp, 4.dp, 14f, deep = false),
+)
 
 /** One shape of the hero: a cover clipped to it, or the tint alone when there is no cover for it. */
 @Composable

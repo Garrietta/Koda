@@ -184,6 +184,8 @@
     <string name="spotlight_caption_liked">From songs you liked</string>
     <string name="spotlight_caption_recent">From what you played lately</string>
     <string name="spotlight_caption_podcasts">Newest from the shows you follow</string>
+    <string name="spotlight_your_shows">Your shows</string>
+    <string name="spotlight_your_shows_sub">Tap a show for every episode</string>
     <string name="shortcut_liked_songs">Liked songs</string>
     <string name="filter_all">All</string>
     <string name="filter_recommended">For you</string>
