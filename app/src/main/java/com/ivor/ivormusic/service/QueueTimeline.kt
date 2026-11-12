@@ -37,6 +37,9 @@ internal fun Player.arrangeAs(target: List<String>) {
     val ordered = target.filter { it in rowsByKey }.toMutableList()
     val named = ordered.toHashSet()
     keys.filterTo(ordered) { it !in named }
+    // Already in that order, which is how a replaced queue looks to an order
+    // worked out for the one before it: four calls would only churn it.
+    if (ordered == keys) return
 
     val playing = keys[current]
     val at = ordered.indexOf(playing)

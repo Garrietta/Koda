@@ -1080,10 +1080,10 @@ class MusicService : MediaLibraryService() {
             engine.setShuffleMode(shuffleModeEnabled)
             val keys = player.occurrenceKeys()
             when {
-                shuffleModeEnabled && !queueShuffle.isOn -> arrangeQueue(
+                shuffleModeEnabled && !queueShuffle.isOn -> arrangeQueueSoon(
                     queueShuffle.turnOn(keys, player.currentMediaItemIndex, isRecent(keys), java.util.Random())
                 )
-                !shuffleModeEnabled && queueShuffle.isOn -> arrangeQueue(queueShuffle.turnOff(keys))
+                !shuffleModeEnabled && queueShuffle.isOn -> arrangeQueueSoon(queueShuffle.turnOff(keys))
             }
             sessionCheckpoints.schedule()
         }
@@ -1966,7 +1966,7 @@ class MusicService : MediaLibraryService() {
             return
         }
         if (queueShuffle.follow(keys) && player.shuffleModeEnabled) {
-            arrangeQueue(
+            arrangeQueueSoon(
                 queueShuffle.reshuffle(keys, player.currentMediaItemIndex, isRecent(keys), java.util.Random())
             )
         }
@@ -1974,11 +1974,33 @@ class MusicService : MediaLibraryService() {
 
     /**
      * Lay the timeline out as [order] (see [arrangeAs]). The steps on the way
-     * are not queue edits. ExoPlayer delivers their events once this returns,
-     * and [followQueueEdit] reads the live timeline rather than the event's,
-     * so those see the finished order; [arranging] covers any delivered while
-     * it is still being built.
+     * are not queue edits, and [arranging] keeps [followQueueEdit] from
+     * treating them as such. Call it through [arrangeQueueSoon] from a player
+     * callback, never directly: see there for the crash that caused.
      */
+    /**
+     * [arrangeQueue], on the next turn of the main loop rather than now.
+     *
+     * Both callers are player callbacks, which ExoPlayer makes while it is
+     * still delivering a batch of events. Events raised inside one are held
+     * back until the batch is done, so the four timelines [arrangeAs] makes
+     * would all arrive after the last of them, and the media session reads
+     * each against the player's position at the time it arrives, not the
+     * position that went with it. Restoring the order when shuffle goes off
+     * moves the playing song from the top back to wherever it was: the
+     * session saw the second step's one-row timeline against a playing index
+     * of 27, failed its consistency check, and the app crashed (seen
+     * November 2026 when starting the DJ, which turns shuffle off). Run on
+     * its own, each step's timeline is delivered at once, with its position.
+     *
+     * The shuffle state has already changed by the time this runs; only the
+     * timeline waits. If the queue was replaced meanwhile, [order] names none
+     * of its rows and [arrangeAs] leaves it as it is.
+     */
+    private fun arrangeQueueSoon(order: List<String>) {
+        serviceScope.launch { arrangeQueue(order) }
+    }
+
     private fun arrangeQueue(order: List<String>) {
         engine.cancelTransition()
         arranging = true

@@ -45,6 +45,14 @@
 # identifier and its desktop-only artwork helpers are never used on Android.
 -keep class org.jaudiotagger.tag.id3.framebody.** { *; }
 -keep class org.jaudiotagger.tag.datatype.** { *; }
+# Two of its classes name their logger after their own package
+# (Logger.getLogger(WavTag.class.getPackage().getName())). R8 moves
+# obfuscated classes into the unnamed package, where getPackage() is
+# null, so the static initializer throws and every WAV or WMA tag read
+# fails: in release builds that made embedded lyrics unreadable. Keep
+# their names, and so their packages; they can still be shrunk.
+-keep,allowshrinking,allowoptimization class org.jaudiotagger.tag.wav.WavTag
+-keep,allowshrinking,allowoptimization class org.jaudiotagger.audio.asf.data.FileHeader
 -dontwarn java.awt.**
 -dontwarn javax.imageio.**
 -dontwarn javax.swing.**
