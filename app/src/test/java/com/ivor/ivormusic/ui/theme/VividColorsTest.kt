@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.theme
 
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals
@@ -89,5 +90,40 @@ class VividColorsTest {
         // A second color too close to the first is ignored.
         val withBlue = base.withVividRoles(blue, Color(0xFF1976D2), dark = true)
         assertTrue(withBlue.tertiaryContainer != vividBlockOf(Color(0xFF1976D2))!!.container)
+    }
+
+    @Test
+    fun aMutedCoverWithSomeSkyGivesTheSkyNotTheTan() {
+        // Mostly tan field and grey barn, with a band of blue sky and a little green grass.
+        val cover = listOf(
+            CoverColor(androidx.compose.ui.graphics.Color(0xFFB8A27A), 5200), // tan, the dominant
+            CoverColor(androidx.compose.ui.graphics.Color(0xFF8C8C86), 2400), // grey barn
+            CoverColor(androidx.compose.ui.graphics.Color(0xFF6E9CD8), 1500), // sky
+            CoverColor(androidx.compose.ui.graphics.Color(0xFF5E8F3A), 900), // grass
+        )
+        val (first, second) = pickVividSeeds(cover)!!
+        assertEquals(0xFF6E9CD8.toInt(), first.toArgb())
+        assertEquals(0xFF5E8F3A.toInt(), second!!.toArgb())
+    }
+
+    @Test
+    fun aSpeckOfColorDoesNotOutvoteTheCover() {
+        val cover = listOf(
+            CoverColor(androidx.compose.ui.graphics.Color(0xFFE53935), 20), // a red speck
+            CoverColor(androidx.compose.ui.graphics.Color(0xFF3949AB), 6000), // the indigo cover
+        )
+        assertEquals(0xFF3949AB.toInt(), pickVividSeeds(cover)!!.first.toArgb())
+    }
+
+    @Test
+    fun aGreyCoverHasNoSeeds() {
+        assertEquals(null, pickVividSeeds(listOf(CoverColor(androidx.compose.ui.graphics.Color(0xFF777777), 9000))))
+    }
+
+    @Test
+    fun theStyleSpreadsTheBlocks() {
+        assertEquals(vividOffsets(PaletteStyle.TONAL_SPOT), vividOffsets(PaletteStyle.VIBRANT))
+        assertEquals(0.0 to 0.0, vividOffsets(PaletteStyle.MONOCHROME))
+        assertTrue(vividOffsets(PaletteStyle.FRUIT_SALAD).first < 0)
     }
 }

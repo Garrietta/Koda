@@ -72,7 +72,7 @@ fun rememberArtworkColorScheme(
             com.ivor.ivormusic.ui.theme.buildSeedColorScheme(current.primary, isDark, theming.style)
                 .let { scheme ->
                     if (vivid) {
-                        with(com.ivor.ivormusic.ui.theme.VividRoles) { scheme.vivid(current.primary, current.secondary, isDark) }
+                        with(com.ivor.ivormusic.ui.theme.VividRoles) { scheme.vivid(current.primary, current.secondary, isDark, theming.style) }
                     } else {
                         scheme
                     }
@@ -87,7 +87,7 @@ fun rememberArtworkColorScheme(
                     }
                 }
         } else if (vivid) {
-            with(com.ivor.ivormusic.ui.theme.VividRoles) { base.vivid(current.primary, current.secondary, isDark) }
+            with(com.ivor.ivormusic.ui.theme.VividRoles) { base.vivid(current.primary, current.secondary, isDark, theming.style) }
         } else {
             base.withArtworkAccents(current.primary, current.secondary, isDark)
         }
@@ -191,19 +191,20 @@ private suspend fun extractArtworkSeeds(
         val result = loader.execute(request)
         val bitmap = (result as? SuccessResult)?.let { (it.drawable as? BitmapDrawable)?.bitmap }
             ?: return@withContext null
-        val palette = Palette.from(bitmap).generate()
+        val palette = Palette.from(bitmap).maximumColorCount(24).generate()
 
-        val primary = palette.vibrantSwatch
-            ?: palette.lightVibrantSwatch
-            ?: palette.darkVibrantSwatch
-            ?: palette.dominantSwatch
-            ?: return@withContext null
-        val secondary = palette.mutedSwatch
-            ?: palette.lightMutedSwatch
-            ?: palette.darkMutedSwatch
-            ?: primary
-
-        ArtworkSeeds(Color(primary.rgb), Color(secondary.rgb))
+        // Every color the cover has, weighed by how colorful it is and how
+        // much of the cover it fills (pickVividSeeds), rather than Palette's
+        // own "vibrant" pick, which on a muted cover is often an olive or tan.
+        val picked = com.ivor.ivormusic.ui.theme.pickVividSeeds(
+            palette.swatches.map { com.ivor.ivormusic.ui.theme.CoverColor(Color(it.rgb), it.population) },
+        )
+        if (picked != null) {
+            ArtworkSeeds(picked.first, picked.second ?: picked.first)
+        } else {
+            val fallback = palette.dominantSwatch ?: return@withContext null
+            ArtworkSeeds(Color(fallback.rgb), Color(fallback.rgb))
+        }
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (e: Exception) {

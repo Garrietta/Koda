@@ -99,15 +99,26 @@ fun vividBlockOf(seed: Color): VividBlock? = hct(seed).takeIf { it.chroma >= GRE
  * Returns the scheme unchanged when [primarySeed] is grey: a black and
  * white cover has no color to give, so the app keeps its own.
  */
-fun ColorScheme.withVividRoles(primarySeed: Color, secondarySeed: Color?, dark: Boolean): ColorScheme {
+fun ColorScheme.withVividRoles(
+    primarySeed: Color,
+    secondarySeed: Color?,
+    dark: Boolean,
+    /**
+     * The palette style chosen in Customization, applied to how the three
+     * blocks' hues spread: close neighbours by default, wider apart for
+     * Expressive, a turn the other way for Fruit Salad, one hue for Monochrome.
+     */
+    style: PaletteStyle = PaletteStyle.TONAL_SPOT,
+): ColorScheme {
     val first = hct(primarySeed)
     if (first.chroma < GREY_CHROMA) return this
     val hue1 = first.hue
-    val hue2 = wrap(hue1 + SECOND_OFFSET)
-    val hue3 = secondarySeed?.let(::hct)
+    val (secondOffset, thirdOffset) = vividOffsets(style)
+    val hue2 = wrap(hue1 + secondOffset)
+    val hue3 = if (style == PaletteStyle.MONOCHROME) hue1 else secondarySeed?.let(::hct)
         ?.takeIf { it.chroma >= DISTINCT_CHROMA && hueDistance(it.hue, hue1) >= DISTINCT_HUE }
         ?.hue
-        ?: wrap(hue1 + THIRD_OFFSET)
+        ?: wrap(hue1 + thirdOffset)
     val one = vividBlock(hue1)
     val two = vividBlock(hue2)
     val three = vividBlock(hue3)
@@ -131,8 +142,52 @@ fun ColorScheme.withVividRoles(primarySeed: Color, secondarySeed: Color?, dark: 
     )
 }
 
+/** How far the second and third blocks' hues sit from the first, for each palette style. */
+internal fun vividOffsets(style: PaletteStyle): Pair<Double, Double> = when (style) {
+    PaletteStyle.TONAL_SPOT, PaletteStyle.VIBRANT -> SECOND_OFFSET to THIRD_OFFSET
+    PaletteStyle.EXPRESSIVE -> 60.0 to 180.0
+    PaletteStyle.FRUIT_SALAD -> -50.0 to 140.0
+    PaletteStyle.MONOCHROME -> 0.0 to 0.0
+}
+
 /** [withVividRoles] for callers outside this package, the way [TintedPages] is reached. */
 object VividRoles {
-    fun ColorScheme.vivid(primarySeed: Color, secondarySeed: Color?, dark: Boolean): ColorScheme =
-        withVividRoles(primarySeed, secondarySeed, dark)
+    fun ColorScheme.vivid(
+        primarySeed: Color,
+        secondarySeed: Color?,
+        dark: Boolean,
+        style: PaletteStyle = PaletteStyle.TONAL_SPOT,
+    ): ColorScheme = withVividRoles(primarySeed, secondarySeed, dark, style)
 }
+
+/** One color found in a cover, and how many of its pixels are that color. */
+data class CoverColor(val color: Color, val population: Int)
+
+/**
+ * The colors a cover's player is built from: first the most colorful one
+ * that also covers a real share of the art, then the most colorful one of
+ * a clearly different hue. A speck of red does not outvote a sky, and a
+ * sky outvotes a field of tan: muddy yellows and browns (wood, hay, skin,
+ * old paper) count for half, so a muted cover with some blue in it gives
+ * a blue player rather than a beige one. Null when the cover is grey.
+ */
+fun pickVividSeeds(colors: List<CoverColor>): Pair<Color, Color?>? {
+    val total = colors.sumOf { it.population }.coerceAtLeast(1).toDouble()
+    val scored = colors.mapNotNull { c ->
+        val h = hct(c.color)
+        if (h.chroma < GREY_CHROMA || c.population <= 0) return@mapNotNull null
+        var score = h.chroma * Math.pow(c.population / total, 0.35)
+        if (h.hue in MUDDY_HUES && h.chroma < MUDDY_CHROMA) score *= 0.5
+        Triple(c.color, h.hue, score)
+    }.sortedByDescending { it.third }
+    val first = scored.firstOrNull() ?: return null
+    val second = scored.drop(1).firstOrNull { hueDistance(it.second, first.second) >= SEED_HUE_APART }
+    return first.first to second?.first
+}
+
+/** Yellow-brown hues that read as mud rather than color unless strongly saturated. */
+private val MUDDY_HUES = 45.0..110.0
+private const val MUDDY_CHROMA = 40.0
+
+/** How far apart the two seeds' hues must be to count as a second color. */
+private const val SEED_HUE_APART = 40.0
