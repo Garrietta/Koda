@@ -135,6 +135,12 @@ fun SpotlightHomeContent(
     djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
     djTitle: String? = null,
     onShowAllInLibrary: () -> Unit = {},
+    /**
+     * Called with a tile's place on the screen just before that tile opens
+     * the Library over Home (the Liked and Library tiles), so it can grow
+     * out of the tile.
+     */
+    onLibraryOrigin: (androidx.compose.ui.geometry.Rect?) -> Unit = {},
     /** Opens Spin on the pool the quick picks are showing. */
     onSpinClick: (SpinSource) -> Unit,
     onProfileClick: () -> Unit,
@@ -180,8 +186,14 @@ fun SpotlightHomeContent(
     val openBlockPage: (BlockKind) -> Unit = { kind ->
         when (kind) {
             BlockKind.Dj -> onOpenDj(blockBounds[kind])
-            BlockKind.Liked -> onOpenLiked()
-            BlockKind.Library -> onShowAllInLibrary()
+            BlockKind.Liked -> {
+                onLibraryOrigin(blockBounds[kind])
+                onOpenLiked()
+            }
+            BlockKind.Library -> {
+                onLibraryOrigin(blockBounds[kind])
+                onShowAllInLibrary()
+            }
             BlockKind.Explore -> onOpenExplore()
             else -> {
                 onFilterChange(kind.filter())

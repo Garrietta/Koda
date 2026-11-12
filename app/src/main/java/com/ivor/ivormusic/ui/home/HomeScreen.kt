@@ -1295,6 +1295,23 @@ fun HomeScreen(
                                             var djOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
                                             var djOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
                                             val djPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+                                            // Liked, the Library and any playlist opened from a page
+                                            // open over Home too, in the Liked and Library tiles' color,
+                                            // instead of switching to the Library tab. A playlist opened
+                                            // from a page opens on top of that page, and Back from it
+                                            // returns there. Each opening starts the Library afresh.
+                                            var libraryOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                                            var libraryOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+                                            var libraryHandOff by remember { mutableStateOf<com.ivor.ivormusic.data.PlaylistDisplayItem?>(null) }
+                                            var libraryReturns by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                                            var librarySession by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+                                            val libraryPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+                                            val openLibrary: (com.ivor.ivormusic.data.PlaylistDisplayItem?) -> Unit = { playlist ->
+                                                libraryHandOff = playlist
+                                                libraryReturns = playlist != null
+                                                librarySession++
+                                                libraryOpen = true
+                                            }
                                             // The DJ's colors come from its current mix: the first
                                             // mood word in the title, else the first song's cover,
                                             // else the scheme's own. The mix is read again whenever
@@ -1345,21 +1362,21 @@ fun HomeScreen(
                                                 // onto it, the same deep-link shape the
                                                 // player already uses for artists.
                                                 onPlaylistClick = { playlist ->
-                                                    noteLibraryReturn()
-                                                    viewedPlaylistFromHome = playlist
-                                                    selectedTab = TAB_LIBRARY
+                                                    libraryOrigin = null
+                                                    openLibrary(playlist)
                                                 },
                                                 onOpenLiked = {
                                                     // Liked songs opens straight onto the likes
                                                     // page, the way the Library's own Liked row
                                                     // does - never the Library root.
-                                                    noteLibraryReturn()
-                                                    viewedPlaylistFromHome = com.ivor.ivormusic.data.PlaylistDisplayItem(
-                                                        context.getString(R.string.liked_songs), "LM", "You", spotlightLiked.size, null
+                                                    openLibrary(
+                                                        com.ivor.ivormusic.data.PlaylistDisplayItem(
+                                                            context.getString(R.string.liked_songs), "LM", "You", spotlightLiked.size, null
+                                                        )
                                                     )
-                                                    selectedTab = TAB_LIBRARY
                                                 },
-                                                onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
+                                                onShowAllInLibrary = { openLibrary(null) },
+                                                onLibraryOrigin = { libraryOrigin = it },
                                                 onOpenExplore = { selectedTab = TAB_EXPLORE },
                                                 onShuffleSongs = { queue ->
                                                     playerViewModel.playQueueShuffled(queue)
@@ -1423,6 +1440,58 @@ fun HomeScreen(
                                                     contentPadding = listContentPadding,
                                                     listState = djPageScroll,
                                                 )
+                                            }
+                                            BlockReveal(
+                                                open = libraryOpen,
+                                                origin = libraryOrigin,
+                                                container = MaterialTheme.colorScheme.inverseSurface,
+                                                content = MaterialTheme.colorScheme.inverseOnSurface,
+                                                onDismiss = { libraryOpen = false },
+                                            ) {
+                                                androidx.compose.runtime.key(librarySession) {
+                                                    LibraryContent(
+                                                        songs = songs,
+                                                        isLocalLibrary = loadLocalSongs,
+                                                        onDownloadsClick = onNavigateToDownloads,
+                                                        onSongClick = { song: Song ->
+                                                            playerViewModel.playQueue(songs, song)
+                                                            showPlayerSheet = true
+                                                        },
+                                                        onPlayQueue = { queue: List<Song>, start: Song? ->
+                                                            playerViewModel.playQueue(queue, start)
+                                                            showPlayerSheet = true
+                                                        },
+                                                        onPlayDjMix = { mix: List<Song> ->
+                                                            playerViewModel.playDjMix(mix)
+                                                            showPlayerSheet = true
+                                                        },
+                                                        onDjSessionStarted = { title, seed, recent, liked, voice ->
+                                                            playerViewModel.startDjInfiniteSession(title, seed, recent, liked, voice)
+                                                        },
+                                                        onShuffleQueue = { queue: List<Song> ->
+                                                            playerViewModel.playQueueShuffled(queue)
+                                                            showPlayerSheet = true
+                                                        },
+                                                        contentPadding = listContentPadding,
+                                                        viewModel = viewModel,
+                                                        isDarkMode = isDarkMode,
+                                                        // Opened on a playlist, Back from it closes the
+                                                        // Library rather than walking to its landing page.
+                                                        initialReturnToCaller = libraryReturns,
+                                                        onReturnToCaller = { libraryOpen = false },
+                                                        initialPlaylist = libraryHandOff,
+                                                        onInitialPlaylistConsumed = { libraryHandOff = null },
+                                                        onStatsClick = onNavigateToStats,
+                                                        onOpenAiDjSettings = onNavigateToAiDjSettings,
+                                                        onOpenChannel = onOpenChannel,
+                                                        onSongLongPress = { song -> songOptionsTarget = song },
+                                                        onEnqueueSong = { song, playNext ->
+                                                            if (playNext) playerViewModel.playNext(song)
+                                                            else playerViewModel.addToQueue(song)
+                                                        },
+                                                        allSongsListState = libraryPageScroll,
+                                                    )
+                                                }
                                             }
                                             }
                                         } else {

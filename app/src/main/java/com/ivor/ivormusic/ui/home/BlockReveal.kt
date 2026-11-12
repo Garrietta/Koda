@@ -173,6 +173,10 @@ internal fun BlockReveal(
     }
     if (!shown) return
 
+    // The page's color is what sits behind the status bar while it is up,
+    // so it decides whether the icons are dark or light: white icons on
+    // the cream Library page would be unreadable.
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(ground)
     BackHandler(enabled = open, onBack = onDismiss)
     var hostInRoot by remember { mutableStateOf(Offset.Zero) }
     val scheme = MaterialTheme.colorScheme
