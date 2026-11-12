@@ -368,6 +368,44 @@ internal fun BlockReveal(
     }
 }
 
+/**
+ * A page's row of filled pills: Play all, Shuffle in the tonal color,
+ * then [extras] in the same tonal pills, wrapping when they do not fit.
+ * Every page that starts music has this one row under its name, whether
+ * its top is a hero of shapes or its own cover.
+ */
+@Composable
+internal fun PagePills(
+    onPlay: (() -> Unit)?,
+    onShuffle: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    pillsPerRow: Int = Int.MAX_VALUE,
+    extras: @Composable () -> Unit = {},
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = pillsPerRow,
+    ) {
+        if (onPlay != null) {
+            Button(onClick = onPlay, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
+                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
+                Spacer(Modifier.width(HERO_ICON_GAP))
+                Text(stringResource(R.string.action_play_all))
+            }
+        }
+        if (onShuffle != null) {
+            FilledTonalButton(onClick = onShuffle, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
+                Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
+                Spacer(Modifier.width(HERO_ICON_GAP))
+                Text(stringResource(R.string.cd_shuffle))
+            }
+        }
+        extras()
+    }
+}
+
 /** The height of every pill in a page's header row. */
 internal val HERO_BUTTON_HEIGHT = 52.dp
 
@@ -468,28 +506,13 @@ internal fun BlockPageHero(
                 ),
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
             )
-            androidx.compose.foundation.layout.FlowRow(
-                Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                maxItemsInEachRow = pillsPerRow,
-            ) {
-                if (onPlay != null) {
-                    Button(onClick = onPlay, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
-                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
-                        Spacer(Modifier.width(HERO_ICON_GAP))
-                        Text(stringResource(R.string.action_play_all))
-                    }
-                }
-                if (onShuffle != null) {
-                    FilledTonalButton(onClick = onShuffle, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
-                        Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
-                        Spacer(Modifier.width(HERO_ICON_GAP))
-                        Text(stringResource(R.string.cd_shuffle))
-                    }
-                }
-                extras()
-            }
+            PagePills(
+                onPlay = onPlay,
+                onShuffle = onShuffle,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+                pillsPerRow = pillsPerRow,
+                extras = extras,
+            )
         }
     }
 }

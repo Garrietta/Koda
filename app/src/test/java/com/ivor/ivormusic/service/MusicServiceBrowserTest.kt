@@ -29,6 +29,12 @@ class MusicServiceBrowserTest {
         val callback: MediaLibrarySession.Callback
         init {
             set("serviceScope", ownedScope)
+            // A single tapped song is first looked for in the likes (to queue
+            // the rest of them after it); the service has no context to open
+            // the real store with, so it gets an empty one.
+            val likes = mock(com.ivor.ivormusic.data.LikedSongsRepository::class.java)
+            `when`(likes.likedSongs).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(emptyList()))
+            set("likedSongsRepository\$delegate", lazyOf(likes))
             // Nothing these tests reach loads from a repository: every answer is in the caches.
             val unused: () -> Nothing = { error("not reached in these tests") }
             set("browseTree", MusicBrowseTree(

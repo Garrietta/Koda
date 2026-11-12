@@ -1729,10 +1729,11 @@ fun PlaylistDetailScreen(
                             totalDurationLabel
                         ).joinToString("  ·  ")
                     }
-                    // Save and Download: pills in the hero's row on a page with
-                    // a collage header, a centred row of their own under the
-                    // playback controls on a page with a cover.
-                    val headerPills: @Composable (Modifier, PaddingValues) -> Unit = { pillModifier, pillPadding ->
+                    // Save and Download, after Play all and Shuffle in the page's
+                    // one row of pills, whichever kind of top the page has.
+                    val pillModifier = Modifier.height(com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT)
+                    val pillPadding = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING
+                    val headerPills: @Composable () -> Unit = {
                         // Keeping a playlist is the whole point of arriving
                         // here from search, so it sits in the header rather
                         // than behind the overflow. Play is still the one
@@ -1788,7 +1789,7 @@ fun PlaylistDetailScreen(
                                 songs = songs,
                                 modifier = pillModifier,
                                 contentPadding = pillPadding,
-                                compact = collageHeader,
+                                compact = true,
                             )
                         }
                     }
@@ -1816,12 +1817,7 @@ fun PlaylistDetailScreen(
                             onShuffle = if (!isReorderMode && !isSearchActive && songs.size > 1) {
                                 { onShuffleQueue(songs) }
                             } else null,
-                            extras = {
-                                headerPills(
-                                    Modifier.height(com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT),
-                                    com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING,
-                                )
-                            },
+                            extras = headerPills,
                         )
                     } else {
                     // Beside the tracks the cover is an object in a column,
@@ -1916,39 +1912,22 @@ fun PlaylistDetailScreen(
 
                     PlaylistPageTitle(title = resolvedPlaylist.name, facts = factsLine)
 
-                    // Playback is the page's one primary action, directly
-                    // under the facts it acts on. Everything else is a
-                    // quieter row beneath it.
-                    if (songs.isNotEmpty() && !isReorderMode && !isSearchActive) {
-                        CollectionPlaybackActions(
-                            onPlay = { onPlayQueue(songs, songs.first()) },
-                            onShuffle = { onShuffleQueue(songs) },
-                            modifier = Modifier
-                                .padding(horizontal = PLAYLIST_GUTTER)
-                                .padding(top = 18.dp),
-                        )
-                    }
+                    // The same row of pills as every Home page, directly
+                    // under the facts it acts on.
+                    com.ivor.ivormusic.ui.home.PagePills(
+                        onPlay = if (songs.isNotEmpty() && !isReorderMode && !isSearchActive) {
+                            { onPlayQueue(songs, songs.first()) }
+                        } else null,
+                        onShuffle = if (songs.size > 1 && !isReorderMode && !isSearchActive) {
+                            { onShuffleQueue(songs) }
+                        } else null,
+                        modifier = Modifier
+                            .padding(horizontal = PLAYLIST_GUTTER)
+                            .padding(top = 18.dp),
+                        extras = headerPills,
+                    )
                     }
 
-                    if (!collageHeader) androidx.compose.foundation.layout.FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = PLAYLIST_GUTTER)
-                            .padding(top = 10.dp),
-                        // Centred rather than on the title's rail: these wrap
-                        // to their own line under two full-width controls, and
-                        // a lone pill hanging off the left edge under them
-                        // reads as a stray rather than as the row's second
-                        // rank. Centring also keeps it looking deliberate
-                        // whether there are one, two or three of them.
-                        horizontalArrangement = Arrangement.spacedBy(
-                            8.dp,
-                            Alignment.CenterHorizontally
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        headerPills(Modifier.heightIn(min = 48.dp), ButtonDefaults.ContentPadding)
-                    }
 
                     // Tap to expand: a published playlist's description can
                     // run to paragraphs, and two lines is all the page owes
