@@ -4,20 +4,34 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material3.Button
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +41,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -39,11 +56,13 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.ivor.ivormusic.R
@@ -188,26 +207,124 @@ internal fun BlockReveal(
     }
 }
 
-/** The top of a block's page: the way back, and the block's name at the size it had on the tile. */
+/** One cover in a page's hero: the picture, and a sharper copy to draw over it. */
+internal data class HeroCover(val art: String?, val sharp: String? = null)
+
+/**
+ * The top of a block's page. The ground is the block's color, but not
+ * flat: a large scalloped record sits behind everything, and the first
+ * few covers from the page are set on it in four of Material's
+ * expressive shapes, each a different size and turned a little. With
+ * fewer covers than shapes the rest are drawn as plain tints, so the
+ * page has the same composition before anything has loaded.
+ *
+ * Under them, the block's name at display size, and the two ways to
+ * start it side by side: Play all and Shuffle. Either is left out when
+ * the page has nothing to play.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun BlockPageHeader(title: String, onBack: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = stringResource(R.string.cd_back),
-                tint = MaterialTheme.colorScheme.onBackground,
+internal fun BlockPageHero(
+    title: String,
+    covers: List<HeroCover>,
+    topInset: Dp,
+    onBack: () -> Unit,
+    onPlay: (() -> Unit)?,
+    onShuffle: (() -> Unit)?,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(Modifier.fillMaxWidth().clipToBounds()) {
+        // The record: the app's own mark, large and half off the page.
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 96.dp, y = (-120).dp)
+                .size(340.dp)
+                .clip(MaterialShapes.Cookie12Sided.toShape())
+                .background(scheme.surfaceContainerLow),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 16.dp, y = (-40).dp)
+                .size(180.dp)
+                .clip(CircleShape)
+                .background(scheme.surfaceContainer),
+        )
+        Column(Modifier.fillMaxWidth().padding(top = topInset)) {
+            IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = stringResource(R.string.cd_back),
+                    tint = scheme.onBackground,
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(176.dp)) {
+                HeroShape(
+                    covers.getOrNull(2), MaterialShapes.Clover4Leaf.toShape(), scheme.surfaceContainerHighest,
+                    Modifier.align(Alignment.TopEnd).offset(x = (-44).dp, y = 0.dp).size(124.dp),
+                )
+                HeroShape(
+                    covers.getOrNull(0), MaterialShapes.Cookie9Sided.toShape(), scheme.surfaceContainerHighest,
+                    Modifier.align(Alignment.TopStart).offset(x = 16.dp, y = 12.dp).size(140.dp).rotate(-8f),
+                )
+                HeroShape(
+                    covers.getOrNull(1), MaterialShapes.Sunny.toShape(), scheme.surfaceContainerHigh,
+                    Modifier.align(Alignment.TopCenter).offset(x = (-8).dp, y = 60.dp).size(108.dp).rotate(10f),
+                )
+                HeroShape(
+                    covers.getOrNull(3), MaterialShapes.Pill.toShape(), scheme.surfaceContainerHigh,
+                    Modifier.align(Alignment.BottomEnd).offset(x = (-14).dp, y = 0.dp).size(78.dp).rotate(18f),
+                )
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.displayMedium,
+                color = scheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
+            )
+            if (onPlay != null || onShuffle != null) {
+                Row(
+                    Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (onPlay != null) {
+                        Button(onClick = onPlay, modifier = Modifier.height(52.dp)) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.action_play_all))
+                        }
+                    }
+                    if (onShuffle != null) {
+                        FilledTonalButton(onClick = onShuffle, modifier = Modifier.height(52.dp)) {
+                            Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.cd_shuffle))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One shape of the hero: a cover clipped to it, or the tint alone when there is no cover for it. */
+@Composable
+private fun HeroShape(cover: HeroCover?, shape: Shape, tint: Color, modifier: Modifier) {
+    Box(modifier.clip(shape).background(tint)) {
+        if (cover?.art != null) {
+            com.ivor.ivormusic.ui.components.VideoThumbnail(
+                thumbnailUrl = cover.art,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                highResThumbnailUrl = cover.sharp ?: cover.art,
+                contentScale = ContentScale.Crop,
+                indicatorSize = 0.dp,
+                emptyIcon = Icons.Rounded.PlayArrow,
+                placeholderColor = tint,
             )
         }
-        Text(
-            title,
-            style = MaterialTheme.typography.displaySmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }

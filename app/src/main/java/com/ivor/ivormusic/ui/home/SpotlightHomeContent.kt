@@ -116,6 +116,8 @@ fun SpotlightHomeContent(
     onSongClick: (Song) -> Unit,
     onSongLongPress: ((Song) -> Unit)? = null,
     onPlaySongs: (List<Song>, Song?) -> Unit,
+    /** Plays these with shuffle on. Required: a button left unwired is a dead button. */
+    onShuffleSongs: (List<Song>) -> Unit,
     onRecentClick: (Song) -> Unit,
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
     onOpenLiked: () -> Unit = {},
@@ -267,8 +269,6 @@ fun SpotlightHomeContent(
                         stringResource(R.string.spotlight_quick_picks)
                     },
                     subtitle = spotlightQuickPickCaption(filter),
-                    actionLabel = stringResource(R.string.action_play_all),
-                    onAction = { onPlaySongs(quickPicks, quickPicks.firstOrNull()) },
                     // Spin these: the wheel opens on the pool this header
                     // is showing, beside the other way to start it.
                     onSpin = if (filter == SpotlightFilter.Podcasts) {
@@ -573,19 +573,44 @@ fun SpotlightHomeContent(
             LazyColumn(
                 state = pageListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                    bottom = contentPadding.calculateBottomPadding(),
-                ),
+                // No top padding: the hero draws up under the status bar itself.
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
-                item(key = "block-title") {
-                    BlockPageHeader(
+                item(key = "block-hero") {
+                    // The covers the hero is made of: the page's songs, or a
+                    // playlist page's playlists. A page of shelves has none
+                    // and gets the shapes alone.
+                    val heroCovers = remember(quickPicks, ownPlaylists, filter) {
+                        when {
+                            quickPicks.isNotEmpty() -> quickPicks.take(4).map {
+                                HeroCover(
+                                    it.albumArtUri?.toString() ?: it.thumbnailUrl,
+                                    it.albumArtUri?.toString() ?: it.highResThumbnailUrl,
+                                )
+                            }
+                            filter == SpotlightFilter.Playlists -> ownPlaylists.take(4).map { HeroCover(it.thumbnailUrl) }
+                            else -> emptyList()
+                        }
+                    }
+                    BlockPageHero(
                         title = if (pageBlock == BlockKind.QuickPicks) {
                             stringResource(R.string.spotlight_quick_picks)
                         } else {
                             spotlightFilterLabel(pageBlock.filter())
                         },
+                        covers = heroCovers,
+                        topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
                         onBack = { openBlock = null },
+                        onPlay = if (quickPicks.isNotEmpty()) {
+                            { onPlaySongs(quickPicks, quickPicks.firstOrNull()) }
+                        } else {
+                            null
+                        },
+                        onShuffle = if (quickPicks.size > 1) {
+                            { onShuffleSongs(quickPicks) }
+                        } else {
+                            null
+                        },
                     )
                 }
                 pageSections()

@@ -1336,6 +1336,10 @@ fun HomeScreen(
                                                     selectedTab = TAB_LIBRARY
                                                 },
                                                 onShowAllInLibrary = { selectedTab = TAB_LIBRARY },
+                                                onShuffleSongs = { queue ->
+                                                    playerViewModel.playQueueShuffled(queue)
+                                                    showPlayerSheet = true
+                                                },
                                                 onOpenDj = { bounds ->
                                                     djOrigin = bounds
                                                     djOpen = true

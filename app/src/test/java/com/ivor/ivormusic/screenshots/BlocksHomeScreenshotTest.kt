@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -16,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.ui.home.BlockKind
-import com.ivor.ivormusic.ui.home.BlockPageHeader
+import com.ivor.ivormusic.ui.home.BlockPageHero
 import com.ivor.ivormusic.ui.home.BlockReveal
 import com.ivor.ivormusic.ui.home.BlocksHome
 import com.ivor.ivormusic.ui.home.SpotlightSectionHeader
@@ -70,14 +69,16 @@ class BlocksHomeScreenshotTest {
                     // everything on it drawn in the scheme made from that color.
                     val (ground, ink) = (page ?: BlockKind.ForYou).colors(MaterialTheme.colorScheme)
                     BlockReveal(open = page != null, origin = null, container = ground, content = ink, onDismiss = {}) {
-                        Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
-                            BlockPageHeader("For you", onBack = {})
-                            SpotlightSectionHeader(
-                                title = "New for you",
-                                subtitle = "Songs you have not played",
-                                actionLabel = "Play all",
-                                onAction = {},
+                        Column(Modifier.fillMaxSize()) {
+                            BlockPageHero(
+                                title = "For you",
+                                covers = emptyList(),
+                                topInset = 24.dp,
+                                onBack = {},
+                                onPlay = {},
+                                onShuffle = {},
                             )
+                            SpotlightSectionHeader(title = "New for you", subtitle = "Songs you have not played")
                             for (index in 1..4) {
                                 Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                                     Text("Song $index", style = MaterialTheme.typography.titleMedium)
@@ -88,7 +89,6 @@ class BlocksHomeScreenshotTest {
                                     )
                                 }
                             }
-                            Button(onClick = {}, modifier = Modifier.padding(20.dp)) { Text("Shuffle") }
                         }
                     }
                 }
