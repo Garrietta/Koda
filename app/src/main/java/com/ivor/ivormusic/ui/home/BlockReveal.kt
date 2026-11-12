@@ -110,15 +110,15 @@ private const val WINDOW_FADE_UNTIL = 0.18f
 private const val FACE_GONE_BY = 0.55f
 
 /**
- * The page's growth on opening. Softer than the player's container spring:
- * a page covers the whole screen from a tile a fifth its size, and at the
- * player's stiffness it was half open in a tenth of a second, which read as
- * a jump. Still damped enough not to bounce against the screen's edges.
- * Closing is the player's own collapse ([PLAYER_CONTAINER_SPRING]), so a
- * page shrinks into its tile as quickly as the player shrinks into the
- * mini player.
+ * The page's growth on opening, from every tile and every tap. Damped
+ * enough not to bounce against the screen's edges. A spring of the same
+ * damping settles in a time that goes as one over the square root of its
+ * stiffness, so this is four times the 200 it was tried at on the phone,
+ * and opens in half the time: that one read as slow. Closing is the
+ * player's own collapse ([PLAYER_CONTAINER_SPRING]), so a page shrinks
+ * into its tile as quickly as the player shrinks into the mini player.
  */
-private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.92f, stiffness = 200f)
+private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.92f, stiffness = 800f)
 
 /**
  * The tile a page grew out of: its color and the ink on it. A page that
