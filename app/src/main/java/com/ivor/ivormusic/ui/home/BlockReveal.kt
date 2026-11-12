@@ -43,6 +43,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
+import com.ivor.ivormusic.ui.components.PLAYER_CONTAINER_SPRING
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,10 +110,13 @@ private const val WINDOW_FADE_UNTIL = 0.18f
 private const val FACE_GONE_BY = 0.55f
 
 /**
- * The page's growth, both ways. Softer than the player's container spring:
+ * The page's growth on opening. Softer than the player's container spring:
  * a page covers the whole screen from a tile a fifth its size, and at the
  * player's stiffness it was half open in a tenth of a second, which read as
  * a jump. Still damped enough not to bounce against the screen's edges.
+ * Closing is the player's own collapse ([PLAYER_CONTAINER_SPRING]), so a
+ * page shrinks into its tile as quickly as the player shrinks into the
+ * mini player.
  */
 private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.92f, stiffness = 200f)
 
@@ -218,7 +222,7 @@ internal fun BlockReveal(
     var ink by remember { mutableStateOf(content) }
     var heldFace by remember { mutableStateOf(face) }
     val openSpec = BLOCK_PAGE_SPRING
-    val closeSpec = BLOCK_PAGE_SPRING
+    val closeSpec = PLAYER_CONTAINER_SPRING
     LaunchedEffect(open) {
         if (open) {
             from = origin
