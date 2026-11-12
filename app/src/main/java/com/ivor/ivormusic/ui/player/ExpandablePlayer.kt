@@ -337,11 +337,21 @@ fun ExpandablePlayer(
     // the page tone it floats over. A neutral pill is the user's choice. It
     // hands over to the player's own surface over the first part of the
     // expansion.
+    // The player's colors, from the cover when album colours are on: vivid
+    // blocks, as strong as Home's tiles. Worked out here rather than inside
+    // the expanded layout so the collapsed pill wears the same block and
+    // grows into a player of the same color.
+    val playerColorScheme = rememberArtworkColorScheme(
+        enabled = artworkColors,
+        albumArtUri = currentSong.albumArtUri?.toString() ?: currentSong.thumbnailUrl,
+        base = MaterialTheme.colorScheme,
+        vivid = true,
+    )
     val containerColor = androidx.compose.ui.graphics.lerp(
         if (miniCustomization.color == com.ivor.ivormusic.data.MiniPlayerColor.NEUTRAL) {
             MaterialTheme.colorScheme.surfaceContainerHighest
         } else {
-            MaterialTheme.colorScheme.primaryContainer
+            playerColorScheme.primaryContainer
         },
         MaterialTheme.colorScheme.surfaceContainerHigh,
         (expandProgress / 0.3f).coerceIn(0f, 1f)
@@ -629,6 +639,7 @@ fun ExpandablePlayer(
                             }
                             .graphicsLayer { alpha = miniAlpha }
                     ) {
+                        MaterialTheme(colorScheme = playerColorScheme) {
                         MiniPlayerContent(
                             currentSong = currentSong,
                             isPlaying = isPlaying,
@@ -680,6 +691,7 @@ fun ExpandablePlayer(
                             shuffleOn = miniShuffleOn,
                             repeatMode = miniRepeatMode
                         )
+                        }
                     }
                 }
 
@@ -696,12 +708,6 @@ fun ExpandablePlayer(
                     // Local songs carry albumArtUri, YouTube songs only a
                     // thumbnailUrl (Palette samples at 128px, so the normal
                     // -res thumbnail is plenty and never 404s like maxres)
-                    val playerColorScheme = rememberArtworkColorScheme(
-                        enabled = artworkColors,
-                        albumArtUri = currentSong.albumArtUri?.toString()
-                            ?: currentSong.thumbnailUrl,
-                        base = MaterialTheme.colorScheme
-                    )
                     MaterialTheme(colorScheme = playerColorScheme) {
                     Box(
                         modifier = Modifier

@@ -202,6 +202,8 @@ fun IvorMusicTheme(
             paletteScheme
         } else {
             buildSeedColorScheme(artworkSeed, darkTheme, paletteStyle)
+                // Blocks as strong as Rondo's own, in the cover's colors.
+                .withVividRoles(artworkSeed, null, darkTheme)
                 .let { if (darkTheme && amoledDark) it.toAmoled() else it }
         }
         // AMOLED keeps its true black page: that is the whole point of it.

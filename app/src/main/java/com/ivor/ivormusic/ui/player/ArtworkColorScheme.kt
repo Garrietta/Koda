@@ -35,7 +35,15 @@ private data class ArtworkSeeds(val primary: Color, val secondary: Color)
 fun rememberArtworkColorScheme(
     enabled: Boolean,
     albumArtUri: String?,
-    base: ColorScheme
+    base: ColorScheme,
+    /**
+     * Rondo's way: the cover's colors as vivid blocks in the accent
+     * roles, the strength Home's tiles have, rather than the pastel
+     * tones a seeded Material scheme gives them. The player asks for
+     * this; playlist pages keep the gentler mapping their grounds were
+     * tuned for.
+     */
+    vivid: Boolean = false,
 ): ColorScheme {
     val context = LocalContext.current
     var seeds by remember { mutableStateOf<ArtworkSeeds?>(null) }
@@ -59,9 +67,16 @@ fun rememberArtworkColorScheme(
     // accents over [base] would now be one album's buttons on another's
     // surfaces. For the player that is the same scheme the app is wearing.
     val theming = com.ivor.ivormusic.ui.theme.LocalAlbumTheming.current
-    return remember(base, current, isDark, theming) {
+    return remember(base, current, isDark, theming, vivid) {
         if (theming.wholeApp) {
             com.ivor.ivormusic.ui.theme.buildSeedColorScheme(current.primary, isDark, theming.style)
+                .let { scheme ->
+                    if (vivid) {
+                        with(com.ivor.ivormusic.ui.theme.VividRoles) { scheme.vivid(current.primary, current.secondary, isDark) }
+                    } else {
+                        scheme
+                    }
+                }
                 .let { scheme ->
                     if (isDark && theming.amoled) {
                         with(com.ivor.ivormusic.ui.theme.AmoledScheme) { scheme.amoled() }
@@ -71,6 +86,8 @@ fun rememberArtworkColorScheme(
                         with(com.ivor.ivormusic.ui.theme.TintedPages) { scheme.tinted(isDark) }
                     }
                 }
+        } else if (vivid) {
+            with(com.ivor.ivormusic.ui.theme.VividRoles) { base.vivid(current.primary, current.secondary, isDark) }
         } else {
             base.withArtworkAccents(current.primary, current.secondary, isDark)
         }
