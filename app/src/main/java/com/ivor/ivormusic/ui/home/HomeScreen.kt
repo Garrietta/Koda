@@ -794,7 +794,9 @@ fun HomeScreen(
             lastCheckAtMs = now
             val result = updateRepository.checkForUpdate(
                 repoPath = BuildConfig.GITHUB_REPO,
-                currentVersion = BuildConfig.VERSION_NAME
+                currentVersion = BuildConfig.VERSION_NAME,
+                testBuilds = com.ivor.ivormusic.data.UpdateChannel.testBuilds(context),
+                buildNumber = BuildConfig.BUILD_NUMBER,
             )
             updateResult = result
             if (result is UpdateResult.UpdateAvailable) {

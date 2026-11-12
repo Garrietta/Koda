@@ -835,7 +835,7 @@ internal fun buildSettingsSearchIndex(
     // About
     entry(
         "about", stringResource(R.string.settings_section_about), stringResource(R.string.settings_section_about), Icons.Rounded.Info,
-        listOf("version", "update", "changelog", "github", "licence", "build")
+        listOf("version", "update", "changelog", "github", "licence", "build", "test build", "install update", "download update")
     ) { onShowAbout() }
 }
 

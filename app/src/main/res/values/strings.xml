@@ -185,6 +185,13 @@
     <string name="spotlight_caption_recent">From what you played lately</string>
     <string name="spotlight_caption_podcasts">Newest from the shows you follow</string>
     <string name="spotlight_your_shows">Your shows</string>
+    <string name="us_install_update">Download and install</string>
+    <string name="us_downloading_percent">Downloading %1$d%%</string>
+    <string name="us_downloading">Downloading…</string>
+    <string name="us_installing">Waiting for Android to install it…</string>
+    <string name="us_allow_installs">Let Rondo install updates on the page that just opened, then tap Download and install again.</string>
+    <string name="us_test_builds">Test builds</string>
+    <string name="us_test_builds_sub">Every new build as soon as it is made. Off follows releases only.</string>
     <string name="spotlight_your_shows_sub">Tap a show for every episode</string>
     <string name="shortcut_liked_songs">Liked songs</string>
     <string name="filter_all">All</string>

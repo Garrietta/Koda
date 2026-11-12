@@ -1,5 +1,7 @@
 package com.ivor.ivormusic.ui.settings
 
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.collectAsState
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -101,6 +103,8 @@ fun UpdateScreen(
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     val repository = remember { UpdateRepository() }
+    val channelContext = LocalContext.current
+    var testBuilds by remember { mutableStateOf(com.ivor.ivormusic.data.UpdateChannel.testBuilds(channelContext)) }
     var result by remember { mutableStateOf<UpdateResult>(UpdateResult.Checking) }
     var checkRequest by remember { mutableIntStateOf(0) }
 
@@ -147,7 +151,7 @@ fun UpdateScreen(
     // Local Only is a key rather than an early return: turning it off in
     // another window has to start the check that was refused, and turning it
     // on has to stop showing a release the user can no longer download.
-    LaunchedEffect(checkRequest, localOnlyMode) {
+    LaunchedEffect(checkRequest, localOnlyMode, testBuilds) {
         if (localOnlyMode) {
             result = UpdateResult.LocalOnly
             return@LaunchedEffect
@@ -157,6 +161,8 @@ fun UpdateScreen(
             repoPath = BuildConfig.GITHUB_REPO,
             currentVersion = BuildConfig.VERSION_NAME,
             forceRefresh = checkRequest > 0,
+            testBuilds = testBuilds,
+            buildNumber = BuildConfig.BUILD_NUMBER,
         )
     }
 
@@ -216,6 +222,12 @@ fun UpdateScreen(
         ) {
             item { UpdateStatusHero(result) }
             item { InstalledBuildCard() }
+            item {
+                TestBuildsRow(testBuilds) { on ->
+                    com.ivor.ivormusic.data.UpdateChannel.setTestBuilds(channelContext, on)
+                    testBuilds = on
+                }
+            }
             if (bundledHighlights != null) {
                 item {
                     OutlinedButton(
@@ -427,10 +439,48 @@ private fun CheckingCard() {
     }
 }
 
+/** Which updates to follow: every test build, or releases only. */
+@Composable
+private fun TestBuildsRow(on: Boolean, onChange: (Boolean) -> Unit) {
+    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.us_test_builds), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.us_test_builds_sub),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(checked = on, onCheckedChange = onChange)
+        }
+    }
+}
+
 @Composable
 private fun AvailableUpdateContent(result: UpdateResult.UpdateAvailable) {
     val context = LocalContext.current
     val bestApk = remember(result.apkAssets) { UpdateRepository.findBestApk(result.apkAssets) }
+    val install by com.ivor.ivormusic.util.ApkInstaller.state.collectAsState()
+    var askedForPermission by remember { mutableStateOf(false) }
+    // Rondo downloads the APK itself and hands it to Android's installer,
+    // which asks for confirmation. Installing needs the person's leave
+    // (Install unknown apps); without it the tap opens that page instead.
+    fun install(url: String) {
+        if (!com.ivor.ivormusic.util.ApkInstaller.canInstall(context)) {
+            askedForPermission = true
+            com.ivor.ivormusic.util.ApkInstaller.openInstallPermission(context)
+        } else {
+            askedForPermission = false
+            com.ivor.ivormusic.util.ApkInstaller.start(context, url)
+        }
+    }
+    val busy = install is com.ivor.ivormusic.util.ApkInstaller.State.Downloading ||
+        install is com.ivor.ivormusic.util.ApkInstaller.State.Installing
 
     // Koda hands the asset URL to the system browser and always has: it holds
     // no REQUEST_INSTALL_PACKAGES permission and never writes an APK itself, so
@@ -466,11 +516,12 @@ private fun AvailableUpdateContent(result: UpdateResult.UpdateAvailable) {
             Button(
                 onClick = {
                     if (bestApk != null) {
-                        handOff(bestApk.downloadUrl, bestApk.name)
+                        install(bestApk.downloadUrl)
                     } else {
                         handOff(result.htmlUrl, result.latestVersion)
                     }
                 },
+                enabled = !busy,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 shape = RoundedCornerShape(20.dp),
             ) {
@@ -480,13 +531,38 @@ private fun AvailableUpdateContent(result: UpdateResult.UpdateAvailable) {
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = if (bestApk != null) {
-                        stringResource(R.string.us_download_for, UpdateRepository.getDeviceAbi())
-                    } else {
-                        stringResource(R.string.us_view_release_short)
+                    text = when {
+                        bestApk == null -> stringResource(R.string.us_view_release_short)
+                        install is com.ivor.ivormusic.util.ApkInstaller.State.Downloading ->
+                            (install as com.ivor.ivormusic.util.ApkInstaller.State.Downloading).fraction
+                                ?.let { stringResource(R.string.us_downloading_percent, (it * 100).toInt()) }
+                                ?: stringResource(R.string.us_downloading)
+                        install is com.ivor.ivormusic.util.ApkInstaller.State.Installing -> stringResource(R.string.us_installing)
+                        else -> stringResource(R.string.us_install_update)
                     },
                     fontWeight = FontWeight.Bold,
                 )
+            }
+            (install as? com.ivor.ivormusic.util.ApkInstaller.State.Downloading)?.let { downloading ->
+                Spacer(modifier = Modifier.height(10.dp))
+                val fraction = downloading.fraction
+                if (fraction != null) {
+                    androidx.compose.material3.LinearWavyProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                } else {
+                    androidx.compose.material3.LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+            if (askedForPermission && !busy) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    stringResource(R.string.us_allow_installs),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            (install as? com.ivor.ivormusic.util.ApkInstaller.State.Failed)?.let { failed ->
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(failed.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(
@@ -505,7 +581,7 @@ private fun AvailableUpdateContent(result: UpdateResult.UpdateAvailable) {
         }
         ReleaseNotesCard(result.releaseNotes)
         if (result.apkAssets.size > 1) {
-            ApkVariantsCard(result.apkAssets, bestApk) { asset -> handOff(asset.downloadUrl, asset.name) }
+            ApkVariantsCard(result.apkAssets, bestApk) { asset -> install(asset.downloadUrl) }
         }
     }
 }

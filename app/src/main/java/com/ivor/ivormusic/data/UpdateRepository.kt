@@ -31,8 +31,15 @@ class UpdateRepository {
         repoPath: String,
         currentVersion: String,
         forceRefresh: Boolean = false,
+        /**
+         * Follow the test-build channel instead of releases: the newest
+         * signed CI build, newer than this one when its build number is
+         * higher than [buildNumber].
+         */
+        testBuilds: Boolean = false,
+        buildNumber: Int = 0,
     ): UpdateResult = withContext(Dispatchers.IO) {
-        val cacheKey = "$repoPath|$currentVersion"
+        val cacheKey = "$repoPath|$currentVersion|$testBuilds|$buildNumber"
         if (!forceRefresh) {
             cachedCheck?.takeIf {
                 it.key == cacheKey && System.currentTimeMillis() - it.checkedAtMs < CHECK_TTL_MS
@@ -46,7 +53,7 @@ class UpdateRepository {
                 }?.let { return@withLock it.result }
             }
 
-            val result = fetchLatestRelease(repoPath, currentVersion)
+            val result = fetchLatestRelease(repoPath, currentVersion, if (testBuilds) buildNumber else null)
             if (result !is UpdateResult.Error) {
                 cachedCheck = CachedCheck(cacheKey, result, System.currentTimeMillis())
             }
@@ -54,9 +61,13 @@ class UpdateRepository {
         }
     }
 
-    private fun fetchLatestRelease(repoPath: String, currentVersion: String): UpdateResult {
+    private fun fetchLatestRelease(repoPath: String, currentVersion: String, testBuildNumber: Int?): UpdateResult {
         try {
-            val url = "$GITHUB_API_BASE/$repoPath/releases/latest"
+            val url = if (testBuildNumber != null) {
+                "$GITHUB_API_BASE/$repoPath/releases/tags/$TEST_BUILD_TAG"
+            } else {
+                "$GITHUB_API_BASE/$repoPath/releases/latest"
+            }
 
             KLog.d(tag, "Checking for updates at: $url")
 
@@ -96,12 +107,24 @@ class UpdateRepository {
                                 }
                             }
                         }
-                        val latestVersion = tagName.removePrefix("v").removePrefix("V")
-                        val cleanCurrentVersion = currentVersion.removePrefix("v").removePrefix("V")
+                        val testBuild = testBuildNumber?.let { testBuildNumberIn(releaseNotes, releaseName) }
+                        if (testBuildNumber != null && testBuild == null) {
+                            return@use UpdateResult.Error("The test build does not say which build it is")
+                        }
+                        val latestVersion = if (testBuild != null) "Test build $testBuild" else tagName.removePrefix("v").removePrefix("V")
+                        val cleanCurrentVersion = if (testBuildNumber != null) {
+                            "Test build $testBuildNumber"
+                        } else {
+                            currentVersion.removePrefix("v").removePrefix("V")
+                        }
 
                         KLog.d(tag, "Latest version: $latestVersion, Current: $cleanCurrentVersion")
 
-                        val isUpdateAvailable = isNewerVersion(latestVersion, cleanCurrentVersion)
+                        val isUpdateAvailable = if (testBuild != null) {
+                            testBuild > (testBuildNumber ?: 0)
+                        } else {
+                            isNewerVersion(latestVersion, cleanCurrentVersion)
+                        }
 
                         if (isUpdateAvailable) {
                             UpdateResult.UpdateAvailable(
@@ -161,6 +184,17 @@ class UpdateRepository {
 
     companion object DeviceInfo {
         private const val GITHUB_API_BASE = "https://api.github.com/repos"
+
+        /** The rolling pre-release CI replaces with every signed build. */
+        const val TEST_BUILD_TAG = "test-build"
+
+        /**
+         * The build number a test-build release carries: a "Build: 175"
+         * line in its notes, or "Test build 175" as its name.
+         */
+        fun testBuildNumberIn(notes: String, name: String): Int? =
+            Regex("""(?im)^\s*Build:\s*(\d+)\s*$""").find(notes)?.groupValues?.get(1)?.toIntOrNull()
+                ?: Regex("""(?i)test build\s+(\d+)""").find(name)?.groupValues?.get(1)?.toIntOrNull()
         private const val CHECK_TTL_MS = 10 * 60 * 1000L
         private val checkMutex = Mutex()
         private data class CachedCheck(

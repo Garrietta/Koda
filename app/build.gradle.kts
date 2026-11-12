@@ -177,6 +177,9 @@ kotlin {
 // Build info available via BuildConfig
 android.defaultConfig.apply {
     buildConfigField("String", "GITHUB_REPO", "\"Garrietta/Koda\"")
+    // The CI run that built this APK (0 for a local build): a test build is
+    // newer than this one when its number is higher.
+    buildConfigField("int", "BUILD_NUMBER", (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0).toString())
     buildConfigField("String", "GITHUB_USERNAME", "\"Garrietta\"")
 }
 

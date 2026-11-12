@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Installs an update downloaded from Settings, Software Update. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Metered-network detection for the per-network stream quality settings -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -199,6 +201,11 @@
             android:launchMode="singleInstance" />
 
         <!-- Background receiver for widget button presses (no UI, no flash). -->
+        <!-- Hears back from the package installer during an in-app update. -->
+        <receiver
+            android:name=".util.UpdateInstallReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".widget.WidgetButtonReceiver"
             android:exported="false" />
