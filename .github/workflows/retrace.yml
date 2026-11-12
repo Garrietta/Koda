@@ -1,0 +1,44 @@
+name: Retrace a crash
+
+# Turns an obfuscated stack trace from the in-app bug reporter back into
+# real class, method and line names, using the mapping a Build APKs run
+# saved for the APK that crashed. A release crash cannot be read without
+# it, and the mapping is only kept as an artifact of that run.
+#
+# To use it: put the Build APKs run's id in .github/retrace/run-id and
+# the stack trace in .github/retrace/stack.txt, and push. The retraced
+# trace is printed in this job's log.
+
+on:
+  push:
+    paths:
+      - '.github/retrace/**'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  retrace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read the run id
+        id: run
+        run: echo "id=$(tr -dc '0-9' < .github/retrace/run-id)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch that run's mapping
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-mapping
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+          path: mapping
+
+      - name: Retrace
+        # The R8 that AGP 9.3.1 ships, so the mapping format matches.
+        run: |
+          curl -sSfL -o r8.jar https://dl.google.com/android/maven2/com/android/tools/r8/9.3.16/r8-9.3.16.jar
+          java -cp r8.jar com.android.tools.r8.retrace.Retrace --verbose mapping/mapping.txt .github/retrace/stack.txt
