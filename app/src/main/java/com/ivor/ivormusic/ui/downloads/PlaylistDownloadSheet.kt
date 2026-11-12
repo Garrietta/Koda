@@ -141,7 +141,14 @@ fun MusicPlaylistDownloadAction(
     playlistTitle: String,
     artworkUrl: String? = null,
     songs: List<Song>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = ButtonDefaults.ContentPadding,
+    /**
+     * A pill in a page's header row: "Download" without the count (the
+     * list below carries it) and a smaller icon, so it fits beside Play
+     * all and Shuffle.
+     */
+    compact: Boolean = false,
 ) {
     val context = LocalContext.current
     val repository = remember(context) { DownloadRepository.getInstance(context) }
@@ -182,6 +189,8 @@ fun MusicPlaylistDownloadAction(
 
     PlaylistDownloadButton(
         kind = PlaylistDownloadKind.MUSIC,
+        contentPadding = contentPadding,
+        compact = compact,
         snapshot = snapshot,
         totalItemCount = songs.size,
         enabled = songs.isNotEmpty(),
@@ -299,6 +308,8 @@ fun VideoPlaylistDownloadAction(
 @Composable
 private fun PlaylistDownloadButton(
     kind: PlaylistDownloadKind,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = ButtonDefaults.ContentPadding,
+    compact: Boolean = false,
     snapshot: PlaylistDownloadSnapshot,
     totalItemCount: Int,
     enabled: Boolean,
@@ -315,7 +326,7 @@ private fun PlaylistDownloadButton(
         snapshot.remainingCount > 0 && snapshot.remainingIds.all { it in snapshot.failedIds } ->
             "Retry ${snapshot.remainingCount}"
         snapshot.remainingCount > 0 && kind == PlaylistDownloadKind.VIDEO -> stringResource(R.string.pd_download_playlist)
-        snapshot.remainingCount > 0 -> "Download $totalItemCount"
+        snapshot.remainingCount > 0 -> if (compact) "Download" else "Download $totalItemCount"
         snapshot.skippedCount > 0 -> stringResource(R.string.pd_unavailable_offline)
         else -> "Download ${kind.itemNamePlural}"
     }
@@ -324,7 +335,8 @@ private fun PlaylistDownloadButton(
         onClick = onClick,
         enabled = canOpen,
         modifier = modifier,
-        shapes = ButtonDefaults.shapes()
+        shapes = ButtonDefaults.shapes(),
+        contentPadding = contentPadding,
     ) {
         val downloadingCd = stringResource(R.string.pd_downloading_playlist)
         AnimatedContent(
@@ -353,9 +365,13 @@ private fun PlaylistDownloadButton(
                             }
                     )
                     "unavailable" -> Icon(Icons.Rounded.ErrorOutline, contentDescription = null)
-                    else -> Icon(Icons.Rounded.Download, contentDescription = null)
+                    else -> Icon(
+                        Icons.Rounded.Download,
+                        contentDescription = null,
+                        modifier = if (compact) Modifier.size(20.dp) else Modifier,
+                    )
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(if (compact) 6.dp else 8.dp))
                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }

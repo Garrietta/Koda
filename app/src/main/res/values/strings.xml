@@ -1813,6 +1813,7 @@
     <string name="cd_listening_stats">Listening stats</string>
     <string name="recently_played">Recently played</string>
     <string name="liked_songs">Liked Songs</string>
+    <string name="your_likes">Your Likes</string>
     <string name="no_artists_yet">No artists yet</string>
     <string name="no_artists_yet_subtitle">Artists from your songs will show up here</string>
     <string name="no_albums_yet">No albums yet</string>

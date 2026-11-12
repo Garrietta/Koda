@@ -2,15 +2,29 @@ package com.ivor.ivormusic.ui.library
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import com.ivor.ivormusic.ui.home.BlockTile
 
 // The playlist page's shared look: the cover-coloured ground, the ink and
 // raised surfaces that stand on it, and the rail everything is set on. Shared
 // by the music PlaylistDetailScreen and the video VideoPlaylistDetail so the
 // two pages resolve their colours the same way by construction.
+
+/**
+ * A ground the page wears in place of the one it would make from its
+ * scheme: the tile it grew out of on Home (see `BlockTile`). Set by the
+ * page itself, only where it means to look like the tile (the DJ, a
+ * playlist with no cover of its own); every function below reads it
+ * first, so the bar, the page and the rows agree with it by construction.
+ */
+internal val LocalPageGround = compositionLocalOf<BlockTile?> { null }
+
+/** How far a row on a tile's ground is lifted toward the ink: the tile scheme's `surfaceContainer`. */
+private const val TILE_RAISE = 0.09f
 
 /** The playlist page's text rail: title, facts, controls and description share it. */
 internal val PLAYLIST_GUTTER = 24.dp
@@ -70,6 +84,7 @@ internal const val PLAYLIST_GROUND_DEPTH = 0.3f
  */
 @Composable
 internal fun playlistPageGround(): Color {
+    LocalPageGround.current?.let { return it.ground }
     val scheme = MaterialTheme.colorScheme
     // A dark scheme's container is already a strong color against a near-black
     // page and is left exactly as it is; only the light scheme's pastel needs
@@ -94,7 +109,8 @@ internal fun playlistPageGround(): Color {
  * *independently* of the ground, which is the failure that matters.
  */
 @Composable
-internal fun playlistOnGround(): Color = MaterialTheme.colorScheme.onPrimaryContainer
+internal fun playlistOnGround(): Color =
+    LocalPageGround.current?.ink ?: MaterialTheme.colorScheme.onPrimaryContainer
 
 /**
  * A card or field standing on [playlistPageGround].
@@ -120,6 +136,7 @@ internal fun playlistOnGround(): Color = MaterialTheme.colorScheme.onPrimaryCont
  */
 @Composable
 internal fun playlistRaisedSurface(): Color {
+    LocalPageGround.current?.let { return lerp(it.ground, it.ink, TILE_RAISE) }
     val scheme = MaterialTheme.colorScheme
     val ground = playlistPageGround()
     return if (scheme.background.luminance() < 0.5f) {
@@ -128,6 +145,13 @@ internal fun playlistRaisedSurface(): Color {
         lerp(ground, scheme.primaryContainer, 0.45f)
     }
 }
+
+/** "614 tracks · 38 hr 26 min": a track list's count and running time, for the head of the list. */
+internal fun trackCountLabel(songs: List<com.ivor.ivormusic.data.Song>): String =
+    listOfNotNull(
+        if (songs.size == 1) "1 track" else "${songs.size} tracks",
+        formatTotalDuration(songs.sumOf { it.duration }),
+    ).joinToString("  ·  ")
 
 /** Formats a summed track duration as "1 hr 32 min" / "45 min"; null when unknown. */
 internal fun formatTotalDuration(totalMs: Long): String? {
@@ -165,6 +189,7 @@ internal fun formatTotalDuration(totalMs: Long): String? {
  */
 @Composable
 internal fun aiDjPageGround(): Color {
+    LocalPageGround.current?.let { return it.ground }
     val scheme = MaterialTheme.colorScheme
     if (scheme.background.luminance() < 0.5f) return scheme.tertiaryContainer
     return lerp(scheme.tertiaryContainer, scheme.tertiary, PLAYLIST_GROUND_DEPTH)
@@ -172,7 +197,8 @@ internal fun aiDjPageGround(): Color {
 
 /** Ink for text standing on [aiDjPageGround] or [aiDjRaisedSurface]. */
 @Composable
-internal fun aiDjOnGround(): Color = MaterialTheme.colorScheme.onTertiaryContainer
+internal fun aiDjOnGround(): Color =
+    LocalPageGround.current?.ink ?: MaterialTheme.colorScheme.onTertiaryContainer
 
 /**
  * A card standing on [aiDjPageGround]: the [playlistRaisedSurface] rule in
@@ -181,6 +207,7 @@ internal fun aiDjOnGround(): Color = MaterialTheme.colorScheme.onTertiaryContain
  */
 @Composable
 internal fun aiDjRaisedSurface(): Color {
+    LocalPageGround.current?.let { return lerp(it.ground, it.ink, TILE_RAISE) }
     val scheme = MaterialTheme.colorScheme
     val ground = aiDjPageGround()
     return if (scheme.background.luminance() < 0.5f) {

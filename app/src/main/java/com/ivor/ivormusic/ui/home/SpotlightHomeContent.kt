@@ -676,7 +676,6 @@ fun SpotlightHomeContent(
                         },
                         covers = heroCovers,
                         topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
-                        onBack = { openBlock = null },
                         // Podcasts are a library of shows, not a queue to start from the top.
                         onPlay = if (quickPicks.isNotEmpty() && filter != SpotlightFilter.Podcasts) {
                             { onPlaySongs(quickPicks, quickPicks.firstOrNull()) }

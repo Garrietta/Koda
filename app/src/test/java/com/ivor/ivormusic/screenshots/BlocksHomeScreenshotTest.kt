@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -17,6 +19,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.ui.home.BlockKind
 import com.ivor.ivormusic.ui.home.BlockPageHero
+import com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT
 import com.ivor.ivormusic.ui.home.BlockReveal
 import com.ivor.ivormusic.ui.home.BlocksHome
 import com.ivor.ivormusic.ui.home.SpotlightSectionHeader
@@ -78,7 +81,6 @@ class BlocksHomeScreenshotTest {
                                 title = "For you",
                                 covers = emptyList(),
                                 topInset = 24.dp,
-                                onBack = {},
                                 onPlay = {},
                                 onShuffle = {},
                             )
@@ -169,7 +171,7 @@ class BlocksHomeScreenshotTest {
                         onDismiss = {}, face = faces.layer(BlockKind.ForYou),
                     ) {
                         Column(Modifier.fillMaxSize()) {
-                            BlockPageHero(title = "For you", covers = emptyList(), topInset = 24.dp, onBack = {}, onPlay = {}, onShuffle = {})
+                            BlockPageHero(title = "For you", covers = emptyList(), topInset = 24.dp, onPlay = {}, onShuffle = {})
                         }
                     }
                 }
@@ -184,7 +186,11 @@ class BlocksHomeScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_opening_2.png")
     }
 
-    /** The DJ page's header: its top bar keeps the back arrow, and a long mix name shrinks onto two lines. */
+    /**
+     * The DJ page's header: a long mix name shrinks onto two lines, and
+     * New mix and Download join Play all and Shuffle as filled pills,
+     * wrapping to a second line.
+     */
     @Test
     fun dj_page_header() {
         compose.mainClock.autoAdvance = false
@@ -197,9 +203,13 @@ class BlocksHomeScreenshotTest {
                             title = "Midnight Drift: Smoke & Timberline",
                             covers = List(6) { com.ivor.ivormusic.ui.home.HeroCover("https://example.invalid/$it.jpg") },
                             topInset = 24.dp,
-                            onBack = null,
                             onPlay = {},
                             onShuffle = {},
+                            extras = {
+                                androidx.compose.material3.FilledTonalButton(onClick = {}, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING) { Text("New mix") }
+                                androidx.compose.material3.FilledTonalButton(onClick = {}, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING) { Text("Download") }
+                            },
+                            pillsPerRow = 2,
                         )
                     }
                 }
@@ -222,7 +232,6 @@ class BlocksHomeScreenshotTest {
                             title = "New",
                             covers = List(10) { com.ivor.ivormusic.ui.home.HeroCover("https://example.invalid/$it.jpg") },
                             topInset = 24.dp,
-                            onBack = {},
                             onPlay = null,
                             onShuffle = null,
                         )
@@ -232,6 +241,47 @@ class BlocksHomeScreenshotTest {
         }
         compose.mainClock.advanceTimeBy(2_000)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/block_page_dense_hero.png")
+    }
+
+    /**
+     * Your Likes, opened from the Liked tile: the tile's own dark ground
+     * and the scheme made from it, Download as a third pill, and the list
+     * headed by the count and running time with Edit in the page's ink.
+     */
+    @Test
+    fun liked_page() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                val (ground, ink) = BlockKind.Liked.colors(MaterialTheme.colorScheme)
+                BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        com.ivor.ivormusic.ui.library.LocalPageGround provides com.ivor.ivormusic.ui.home.LocalBlockTile.current,
+                    ) {
+                        Column(Modifier.fillMaxSize().background(com.ivor.ivormusic.ui.library.playlistPageGround())) {
+                            BlockPageHero(
+                                title = "Your Likes",
+                                covers = List(8) { com.ivor.ivormusic.ui.home.HeroCover("https://example.invalid/$it.jpg") },
+                                topInset = 24.dp,
+                                onPlay = {},
+                                onShuffle = {},
+                                extras = {
+                                    androidx.compose.material3.FilledTonalButton(onClick = {}, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Download, null, Modifier.size(20.dp)); androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp)); Text("Download") }
+                                },
+                            )
+                            com.ivor.ivormusic.ui.library.TrackSectionHeader(
+                                countLabel = com.ivor.ivormusic.ui.library.trackCountLabel(List(614) { song(it) }),
+                                manageEnabled = false,
+                                canEdit = true,
+                                onToggleEdit = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/liked_page.png")
     }
 
     @Test

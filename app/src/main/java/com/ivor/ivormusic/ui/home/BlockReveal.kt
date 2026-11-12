@@ -120,6 +120,18 @@ private const val FACE_GONE_BY = 0.55f
  */
 private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.92f, stiffness = 200f)
 
+/**
+ * The tile a page grew out of: its color and the ink on it. A page that
+ * paints its own ground (the DJ, a playlist with no cover) takes this
+ * one, so it opens in exactly the tile's color; a page with no tile
+ * behind it reads null and keeps its usual ground. Being inside a tile's
+ * page is also why such a page has no back arrow: a pull down from the
+ * top closes it, and so does Back.
+ */
+internal class BlockTile(val ground: Color, val ink: Color)
+
+internal val LocalBlockTile = androidx.compose.runtime.compositionLocalOf<BlockTile?> { null }
+
 /** How much of the tile's face shows at window progress [p]. */
 internal fun faceAlpha(p: Float): Float = (1f - p / FACE_GONE_BY).coerceIn(0f, 1f)
 
@@ -326,7 +338,11 @@ internal fun BlockReveal(
         ) {
             MaterialTheme(colorScheme = pageScheme) {
                 // Text that names no color takes the ink too, not the app's own text color.
-                CompositionLocalProvider(LocalContentColor provides pageInk, content = page)
+                CompositionLocalProvider(
+                    LocalContentColor provides pageInk,
+                    LocalBlockTile provides BlockTile(ground, ink),
+                    content = page,
+                )
             }
         }
         // The tile's face, where the tile is, over the page as it grows out from under it.
@@ -352,6 +368,19 @@ internal fun BlockReveal(
     }
 }
 
+/** The height of every pill in a page's header row. */
+internal val HERO_BUTTON_HEIGHT = 52.dp
+
+/**
+ * The pills' side padding: narrower than a 52dp button's own, so Play
+ * all, Shuffle and a third pill (Download) fit one row on a phone.
+ */
+internal val HERO_BUTTON_PADDING = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
+
+/** A pill's icon, and the space between it and the label. */
+internal val HERO_ICON_SIZE = 20.dp
+internal val HERO_ICON_GAP = 6.dp
+
 /** One cover in a page's hero: the picture, and a sharper copy to draw over it. */
 internal data class HeroCover(val art: String?, val sharp: String? = null)
 
@@ -363,9 +392,17 @@ internal data class HeroCover(val art: String?, val sharp: String? = null)
  * fewer covers than shapes the rest are drawn as plain tints, so the
  * page has the same composition before anything has loaded.
  *
- * Under them, the block's name at display size, and the two ways to
- * start it side by side: Play all and Shuffle. Either is left out when
- * the page has nothing to play.
+ * Under them, the block's name at display size, and one row of filled
+ * pills: Play all, Shuffle beside it in the tonal color, then the page's
+ * own [extras] (New mix, Download, Save) in the same tonal pills, wrapping
+ * to a second line when they do not fit. Every page's header is this
+ * row and nothing more; what a page has to say about itself goes in its
+ * list. Play all and Shuffle are left out when there is nothing to play.
+ *
+ * There is no back arrow: a pull down from the top closes the page, and
+ * so does Back. The row the arrow sat in is kept, empty, so the covers
+ * sit at the same height on every page, under a top bar's actions where
+ * a page has them.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -373,10 +410,12 @@ internal fun BlockPageHero(
     title: String,
     covers: List<HeroCover>,
     topInset: Dp,
-    /** Null on a page whose own top bar already has the back arrow: the row is kept, empty. */
-    onBack: (() -> Unit)?,
     onPlay: (() -> Unit)?,
     onShuffle: (() -> Unit)?,
+    /** More pills after Shuffle, each a [FilledTonalButton] [HERO_BUTTON_HEIGHT] high with [HERO_BUTTON_PADDING]. */
+    extras: @Composable () -> Unit = {},
+    /** At most this many pills to a line; the DJ's four sit two and two. */
+    pillsPerRow: Int = Int.MAX_VALUE,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(Modifier.fillMaxWidth().clipToBounds()) {
@@ -398,17 +437,7 @@ internal fun BlockPageHero(
                 .background(scheme.surfaceContainer),
         )
         Column(Modifier.fillMaxWidth().padding(top = topInset)) {
-            if (onBack != null) {
-                IconButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp)) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(R.string.cd_back),
-                        tint = scheme.onBackground,
-                    )
-                }
-            } else {
-                Spacer(Modifier.height(48.dp))
-            }
+            Spacer(Modifier.height(48.dp))
             Box(Modifier.fillMaxWidth().height(176.dp)) {
                 // The first four shapes are always there, as tints until
                 // their covers arrive; the smaller ones in the gaps join only
@@ -439,26 +468,27 @@ internal fun BlockPageHero(
                 ),
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
             )
-            if (onPlay != null || onShuffle != null) {
-                Row(
-                    Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (onPlay != null) {
-                        Button(onClick = onPlay, modifier = Modifier.height(52.dp)) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.action_play_all))
-                        }
-                    }
-                    if (onShuffle != null) {
-                        FilledTonalButton(onClick = onShuffle, modifier = Modifier.height(52.dp)) {
-                            Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.cd_shuffle))
-                        }
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = pillsPerRow,
+            ) {
+                if (onPlay != null) {
+                    Button(onClick = onPlay, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
+                        Spacer(Modifier.width(HERO_ICON_GAP))
+                        Text(stringResource(R.string.action_play_all))
                     }
                 }
+                if (onShuffle != null) {
+                    FilledTonalButton(onClick = onShuffle, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = HERO_BUTTON_PADDING) {
+                        Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(HERO_ICON_SIZE))
+                        Spacer(Modifier.width(HERO_ICON_GAP))
+                        Text(stringResource(R.string.cd_shuffle))
+                    }
+                }
+                extras()
             }
         }
     }

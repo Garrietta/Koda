@@ -105,6 +105,7 @@ import com.ivor.ivormusic.ui.artist.ArtistScreen
 import com.ivor.ivormusic.ui.components.ExpressivePullToRefresh
 import com.ivor.ivormusic.ui.components.VideoThumbnail
 import com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction
+import com.ivor.ivormusic.ui.home.onBlock
 import com.ivor.ivormusic.ui.player.rememberArtworkColorScheme
 import com.ivor.ivormusic.ui.theme.MontserratFamily
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -280,7 +281,11 @@ internal fun TrackSectionHeader(
         if (canEdit) {
             TextButton(
                 onClick = onToggleEdit,
-                modifier = Modifier.heightIn(min = 48.dp)
+                modifier = Modifier.heightIn(min = 48.dp),
+                // In the list's ink: the scheme's primary is a cover's or the
+                // app's accent, and on a page in another color it all but
+                // disappears.
+                colors = ButtonDefaults.textButtonColors(contentColor = ink),
             ) {
                 Icon(
                     imageVector = if (manageEnabled) Icons.Rounded.Done else Icons.Rounded.EditNote,
@@ -1282,12 +1287,23 @@ fun PlaylistDetailScreen(
     // that tints itself from the cover anyway is the switch not working.
     val heroArt = resolvedPlaylist.thumbnailUrl?.takeIf { it.isNotBlank() && it != "null" }
     val artworkColorsEnabled by swipePrefs.playerArtworkColors.collectAsState()
-    val artworkScheme = rememberArtworkColorScheme(
+    val coverScheme = rememberArtworkColorScheme(
         enabled = artworkColorsEnabled,
         albumArtUri = heroArt,
         base = MaterialTheme.colorScheme
     )
+    // Opened straight from a tile on Home, the page has no back arrow (a
+    // pull down closes it, as Back does), and with no cover of its own to
+    // take colors from (Your Likes) it opens in the tile's own colors, so
+    // it is the tile, grown. A page with a cover keeps the cover's.
+    val blockTile = com.ivor.ivormusic.ui.home.LocalBlockTile.current
+    val tileGround = blockTile?.takeIf { heroArt == null }
+    val baseScheme = MaterialTheme.colorScheme
+    val artworkScheme = remember(tileGround, coverScheme, baseScheme) {
+        tileGround?.let { baseScheme.onBlock(it.ground, it.ink) } ?: coverScheme
+    }
     MaterialTheme(colorScheme = artworkScheme) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalPageGround provides tileGround) {
     Scaffold(
         topBar = {
             // The bar settles into the page's ground rather than onto it: an
@@ -1312,11 +1328,13 @@ fun PlaylistDetailScreen(
                             )
                         },
                         navigationIcon = {
-                            IconButton(onClick = {
-                                commitLocalOrder()
-                                onBack()
-                            }) {
-                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                            if (blockTile == null) {
+                                IconButton(onClick = {
+                                    commitLocalOrder()
+                                    onBack()
+                                }) {
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                                }
                             }
                         },
                         actions = {
@@ -1711,6 +1729,69 @@ fun PlaylistDetailScreen(
                             totalDurationLabel
                         ).joinToString("  ·  ")
                     }
+                    // Save and Download: pills in the hero's row on a page with
+                    // a collage header, a centred row of their own under the
+                    // playback controls on a page with a cover.
+                    val headerPills: @Composable (Modifier, PaddingValues) -> Unit = { pillModifier, pillPadding ->
+                        // Keeping a playlist is the whole point of arriving
+                        // here from search, so it sits in the header rather
+                        // than behind the overflow. Play is still the one
+                        // primary action, above this secondary group.
+                        if (canSavePlaylist) {
+                            FilledTonalButton(
+                                onClick = {
+                                    val nowSaved = viewModel.toggleSavedPlaylist(
+                                        resolvedPlaylist,
+                                        isAlbum = isAlbum
+                                    )
+                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    scope.launch {
+                                        val snackbarMsg =
+                                            if (nowSaved) shareContext.getString(R.string.lib_saved_to_library)
+                                            else shareContext.getString(R.string.lib_removed_from_library)
+                                        snackbarHostState.showSnackbar(snackbarMsg)
+                                    }
+                                },
+                                modifier = pillModifier,
+                                contentPadding = pillPadding,
+                            ) {
+                                // Crossfade rather than a spatial spec: the
+                                // button must not resize under the finger that
+                                // is still on it.
+                                AnimatedContent(
+                                    targetState = isSavedPlaylist,
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "savePlaylist"
+                                ) { saved ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (saved) Icons.Rounded.BookmarkAdded
+                                                else Icons.Rounded.BookmarkAdd,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(if (saved) stringResource(R.string.cd_saved) else stringResource(R.string.action_save))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Saving keeps a live reference; downloading makes the
+                        // loaded snapshot available offline. They stay separate
+                        // actions because either can be useful without the other.
+                        if (songs.isNotEmpty()) {
+                            MusicPlaylistDownloadAction(
+                                playlistId = resolvedPlaylist.id,
+                                playlistTitle = resolvedPlaylist.name,
+                                artworkUrl = resolvedPlaylist.thumbnailUrl,
+                                songs = songs,
+                                modifier = pillModifier,
+                                contentPadding = pillPadding,
+                                compact = collageHeader,
+                            )
+                        }
+                    }
                     if (collageHeader) {
                         val collage = remember(songs) {
                             songs.distinctBy { it.albumArtUri ?: it.thumbnailUrl }
@@ -1722,24 +1803,25 @@ fun PlaylistDetailScreen(
                                     )
                                 }
                         }
+                        // The facts line is left out: "Playlist" says nothing
+                        // here, and the count and running time head the list.
                         com.ivor.ivormusic.ui.home.BlockPageHero(
                             title = resolvedPlaylist.name,
                             covers = collage,
-                            // The top bar keeps the back arrow; the shapes start under it.
+                            // The shapes start under the top bar's actions.
                             topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
-                            onBack = null,
                             onPlay = if (!isReorderMode && !isSearchActive) {
                                 { onPlayQueue(songs, songs.first()) }
                             } else null,
                             onShuffle = if (!isReorderMode && !isSearchActive && songs.size > 1) {
                                 { onShuffleQueue(songs) }
                             } else null,
-                        )
-                        Text(
-                            factsLine,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = playlistOnGround().copy(alpha = 0.8f),
-                            modifier = Modifier.padding(horizontal = PLAYLIST_GUTTER).padding(top = 10.dp),
+                            extras = {
+                                headerPills(
+                                    Modifier.height(com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT),
+                                    com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING,
+                                )
+                            },
                         )
                     } else {
                     // Beside the tracks the cover is an object in a column,
@@ -1848,7 +1930,7 @@ fun PlaylistDetailScreen(
                     }
                     }
 
-                    androidx.compose.foundation.layout.FlowRow(
+                    if (!collageHeader) androidx.compose.foundation.layout.FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = PLAYLIST_GUTTER)
@@ -1865,61 +1947,7 @@ fun PlaylistDetailScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Keeping a playlist is the whole point of arriving
-                        // here from search, so it sits in the header rather
-                        // than behind the overflow. Play is still the one
-                        // primary action, above this secondary group.
-                        if (canSavePlaylist) {
-                            FilledTonalButton(
-                                onClick = {
-                                    val nowSaved = viewModel.toggleSavedPlaylist(
-                                        resolvedPlaylist,
-                                        isAlbum = isAlbum
-                                    )
-                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    scope.launch {
-                                        val snackbarMsg =
-                                            if (nowSaved) shareContext.getString(R.string.lib_saved_to_library)
-                                            else shareContext.getString(R.string.lib_removed_from_library)
-                                        snackbarHostState.showSnackbar(snackbarMsg)
-                                    }
-                                },
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            ) {
-                                // Crossfade rather than a spatial spec: the
-                                // button must not resize under the finger that
-                                // is still on it.
-                                AnimatedContent(
-                                    targetState = isSavedPlaylist,
-                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                                    label = "savePlaylist"
-                                ) { saved ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = if (saved) Icons.Rounded.BookmarkAdded
-                                                else Icons.Rounded.BookmarkAdd,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(if (saved) stringResource(R.string.cd_saved) else stringResource(R.string.action_save))
-                                    }
-                                }
-                            }
-                        }
-
-                        // Saving keeps a live reference; downloading makes the
-                        // loaded snapshot available offline. They stay separate
-                        // actions because either can be useful without the other.
-                        if (songs.isNotEmpty()) {
-                            MusicPlaylistDownloadAction(
-                                playlistId = resolvedPlaylist.id,
-                                playlistTitle = resolvedPlaylist.name,
-                                artworkUrl = resolvedPlaylist.thumbnailUrl,
-                                songs = songs,
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            )
-                        }
+                        headerPills(Modifier.heightIn(min = 48.dp), ButtonDefaults.ContentPadding)
                     }
 
                     // Tap to expand: a published playlist's description can
@@ -1951,7 +1979,8 @@ fun PlaylistDetailScreen(
             if (!isSearchActive && !isFetching.value && songs.isNotEmpty()) {
                 item {
                     TrackSectionHeader(
-                        countLabel = if (songs.size == 1) "1 track" else "${songs.size} tracks",
+                        countLabel = if (heroArt == null) trackCountLabel(songs)
+                            else if (songs.size == 1) "1 track" else "${songs.size} tracks",
                         manageEnabled = isReorderMode,
                         canEdit = canEditSongs,
                         onToggleEdit = {
@@ -2198,6 +2227,7 @@ fun PlaylistDetailScreen(
         }
         }
     }
+    } // CompositionLocalProvider(LocalPageGround)
     } // MaterialTheme(artworkScheme)
 
     if (showEditDialog && (isLocalPlaylist || canRenameDeleteYouTube)) {

@@ -33,7 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.ListItemDefaults
@@ -449,7 +448,6 @@ fun AiDjScreen(
             else -> {
                 val currentMix = mix
                 val currentError = error
-                val trackCount = currentMix?.tracks?.size ?: pool.size
                 // Read here, in the composable body: the LazyColumn's DSL
                 // scope below is not a @Composable context, so a
                 // CompositionLocal read inside it does not compile.
@@ -465,8 +463,9 @@ fun AiDjScreen(
                 ) {
                     // Header: the same as every Home page's (For you, Recent,
                     // Podcasts): the mix's own covers set in expressive shapes,
-                    // its name, and Play all with Shuffle beside it. The top
-                    // bar above keeps the back arrow, the menu and settings.
+                    // its name, and one row of pills - Play all, Shuffle, New
+                    // mix, Download. The top bar above keeps the menu and
+                    // settings, and the back arrow outside a Home tile.
                     item(key = "dj_header") {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             val heroCovers = remember(currentMix) {
@@ -485,21 +484,46 @@ fun AiDjScreen(
                                 title = currentMix?.title ?: stringResource(R.string.aidj_title),
                                 covers = heroCovers,
                                 topInset = (padding.calculateTopPadding() - 48.dp).coerceAtLeast(0.dp),
-                                onBack = null,
                                 onPlay = currentMix?.let { m -> { playMix(m) } },
                                 // Shuffle plays the mix's tracks as a plain shuffled
                                 // queue; the DJ mix itself (Play all) stays in order.
                                 onShuffle = currentMix?.let { m -> { onShuffleQueue(m.tracks.map { it.song }) } },
+                                // A new mix and the download are pills in the same row,
+                                // as every page's extras are. Before the first mix,
+                                // making one is the page's only action, so it is the
+                                // filled pill.
+                                extras = {
+                                    val height = Modifier.height(com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT)
+                                    val label: @Composable () -> Unit = {
+                                        Icon(
+                                            if (currentMix == null) Icons.Rounded.AutoAwesome else Icons.Rounded.Refresh,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(com.ivor.ivormusic.ui.home.HERO_ICON_SIZE),
+                                        )
+                                        Spacer(Modifier.size(com.ivor.ivormusic.ui.home.HERO_ICON_GAP))
+                                        Text(
+                                            if (currentMix == null) stringResource(R.string.aidj_generate)
+                                            else stringResource(R.string.aidj_new_mix)
+                                        )
+                                    }
+                                    val pad = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING
+                                    if (currentMix == null) {
+                                        Button(onClick = ::generate, enabled = pool.isNotEmpty(), modifier = height, contentPadding = pad) { label() }
+                                    } else {
+                                        FilledTonalButton(onClick = ::generate, enabled = pool.isNotEmpty(), modifier = height, contentPadding = pad) { label() }
+                                        com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction(
+                                            playlistId = "aidj-mix",
+                                            playlistTitle = currentMix.title,
+                                            songs = currentMix.tracks.map { it.song },
+                                            modifier = height,
+                                            contentPadding = pad,
+                                            compact = true,
+                                        )
+                                    }
+                                },
+                                // Play all and Shuffle, then New mix and Download under them.
+                                pillsPerRow = 2,
                             )
-                            Text(
-                                stringResource(R.string.aidj_pool_size, trackCount),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = aiDjOnGround().copy(alpha = 0.8f),
-                                modifier = Modifier.padding(horizontal = PLAYLIST_GUTTER).padding(top = 10.dp),
-                            )
-                            // DJ extras, kept in their places: the voice
-                            // toggle above the playback rows, New mix under
-                            // Play all, the DJ lines inside the track rows.
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -512,55 +536,6 @@ fun AiDjScreen(
                                         color = aiDjOnGround().copy(alpha = 0.8f),
                                         modifier = Modifier.padding(top = 14.dp, bottom = 12.dp),
                                     )
-                                }
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(top = 14.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.aidj_dj_voice_title),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = aiDjOnGround(),
-                                    )
-                                    Switch(
-                                        checked = djVoiceEnabled,
-                                        onCheckedChange = { repository.setDjVoiceEnabled(it) },
-                                    )
-                                }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 10.dp),
-                                ) {
-                                    FilledTonalButton(
-                                        onClick = ::generate,
-                                        enabled = pool.isNotEmpty(),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 48.dp),
-                                    ) {
-                                        Icon(
-                                            if (currentMix == null) Icons.Rounded.AutoAwesome
-                                            else Icons.Rounded.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.size(8.dp))
-                                        Text(
-                                            if (currentMix == null) stringResource(R.string.aidj_generate)
-                                            else stringResource(R.string.aidj_new_mix)
-                                        )
-                                    }
-                                    if (currentMix != null) {
-                                        com.ivor.ivormusic.ui.downloads.MusicPlaylistDownloadAction(
-                                            playlistId = "aidj-mix",
-                                            playlistTitle = currentMix.title,
-                                            songs = currentMix.tracks.map { it.song },
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
                                 }
                                 if (currentError != null) {
                                     Text(
@@ -578,7 +553,7 @@ fun AiDjScreen(
                         val tracks = currentMix.tracks
                         item {
                             TrackSectionHeader(
-                                countLabel = if (tracks.size == 1) "1 track" else "${tracks.size} tracks",
+                                countLabel = trackCountLabel(tracks.map { it.song }),
                                 manageEnabled = false,
                                 canEdit = false,
                                 onToggleEdit = {},

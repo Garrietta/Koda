@@ -98,6 +98,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -1386,8 +1387,10 @@ fun HomeScreen(
                                                     // page, the way the Library's own Liked row
                                                     // does - never the Library root.
                                                     openLibrary(
+                                                        // Named as the loaded page names it, so the title
+                                                        // does not change under the reader.
                                                         com.ivor.ivormusic.data.PlaylistDisplayItem(
-                                                            context.getString(R.string.liked_songs), "LM", "You", spotlightLiked.size, null
+                                                            context.getString(R.string.your_likes), "LM", "You", spotlightLiked.size, null
                                                         )
                                                     )
                                                 },
@@ -1434,8 +1437,14 @@ fun HomeScreen(
                                                 onDismiss = { djOpen = false },
                                                 onClosed = { djMix = djRepository.reloadCachedMix() },
                                             ) {
+                                                // The DJ page is the tile grown: its ground is the tile's
+                                                // color, and it has no back arrow (pull down, or Back).
+                                                CompositionLocalProvider(
+                                                    com.ivor.ivormusic.ui.library.LocalPageGround provides LocalBlockTile.current,
+                                                ) {
                                                 com.ivor.ivormusic.ui.library.AiDjScreen(
                                                     viewModel = viewModel,
+                                                    showBack = false,
                                                     onBack = { djOpen = false },
                                                     onPlayQueue = { queue, start ->
                                                         playerViewModel.playQueue(queue, start)
@@ -1458,6 +1467,7 @@ fun HomeScreen(
                                                     contentPadding = listContentPadding,
                                                     listState = djPageScroll,
                                                 )
+                                                }
                                             }
                                             BlockReveal(
                                                 open = libraryOpen,
@@ -1472,6 +1482,12 @@ fun HomeScreen(
                                                 // came out nearly invisible.
                                                 appColors = true,
                                             ) {
+                                                // Only a playlist opened straight from a tile is the
+                                                // tile's page; the Library and what is opened from it
+                                                // keep their back arrows and their own colors.
+                                                CompositionLocalProvider(
+                                                    LocalBlockTile provides LocalBlockTile.current.takeIf { libraryReturns },
+                                                ) {
                                                 androidx.compose.runtime.key(librarySession) {
                                                     LibraryContent(
                                                         songs = songs,
@@ -1515,6 +1531,7 @@ fun HomeScreen(
                                                         },
                                                         allSongsListState = libraryPageScroll,
                                                     )
+                                                }
                                                 }
                                             }
                                             }
