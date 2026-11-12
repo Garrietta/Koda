@@ -1292,10 +1292,10 @@ fun PlaylistDetailScreen(
         albumArtUri = heroArt,
         base = MaterialTheme.colorScheme
     )
-    // Opened straight from a tile on Home, the page has no back arrow (a
-    // pull down closes it, as Back does), and with no cover of its own to
-    // take colors from (Your Likes) it opens in the tile's own colors, so
-    // it is the tile, grown. A page with a cover keeps the cover's.
+    // Opened over Home, the page has no back arrow (a pull down closes it,
+    // as Back does). Grown from a tile and with no cover of its own to take
+    // colors from (Your Likes), it opens in the tile's own colors, so it is
+    // the tile, grown. A page with a cover keeps the cover's.
     val blockTile = com.ivor.ivormusic.ui.home.LocalBlockTile.current
     val tileGround = blockTile?.takeIf { heroArt == null }
     val baseScheme = MaterialTheme.colorScheme
@@ -1328,7 +1328,7 @@ fun PlaylistDetailScreen(
                             )
                         },
                         navigationIcon = {
-                            if (blockTile == null) {
+                            if (!com.ivor.ivormusic.ui.home.LocalPopupPage.current) {
                                 IconButton(onClick = {
                                     commitLocalOrder()
                                     onBack()

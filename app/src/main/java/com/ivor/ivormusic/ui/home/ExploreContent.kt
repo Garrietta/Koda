@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -236,11 +238,16 @@ fun ExploreContent(
             .filter { it.artist.equals(name, ignoreCase = true) }
     }
 
+    // Opened as a page over Home, Explore starts under the status bar with
+    // its name at a page's size, the way every page there does.
+    val popup = LocalPopupPage.current
+    val popupTop = androidx.compose.foundation.layout.WindowInsets.statusBars
+        .asPaddingValues().calculateTopPadding() + 56.dp
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            top = contentPadding.calculateTopPadding() + 8.dp,
+            top = if (popup) popupTop else contentPadding.calculateTopPadding() + 8.dp,
             bottom = contentPadding.calculateBottomPadding() + 24.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -248,8 +255,8 @@ fun ExploreContent(
         item(key = "explore_header") {
             Text(
                 stringResource(R.string.tab_explore),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
+                style = if (popup) MaterialTheme.typography.displayMedium else MaterialTheme.typography.headlineLarge,
+                fontWeight = if (popup) null else FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
         }

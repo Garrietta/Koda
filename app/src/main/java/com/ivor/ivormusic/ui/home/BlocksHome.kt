@@ -23,12 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BarChart
-import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivor.ivormusic.R
@@ -72,14 +74,14 @@ import com.ivor.ivormusic.data.Song
  */
 
 /** Everything on Home that can be opened. */
-internal enum class BlockKind { Dj, ForYou, Liked, Episodes, Recent, QuickPicks, Playlists, Library, Charts, NewReleases, Explore }
+internal enum class BlockKind { Dj, ForYou, Liked, Episodes, Recent, QuickPicks, Playlists, Artists, Albums, Charts, NewReleases, Explore }
 
 /** The color a block has on Home, and so the color of the page it opens. */
 internal fun BlockKind.colors(scheme: ColorScheme): Pair<Color, Color> = when (this) {
     BlockKind.Dj, BlockKind.QuickPicks, BlockKind.Explore -> scheme.primaryContainer to scheme.onPrimaryContainer
-    BlockKind.ForYou, BlockKind.NewReleases -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-    BlockKind.Episodes, BlockKind.Charts -> scheme.secondaryContainer to scheme.onSecondaryContainer
-    BlockKind.Liked, BlockKind.Playlists, BlockKind.Library -> scheme.inverseSurface to scheme.inverseOnSurface
+    BlockKind.ForYou, BlockKind.NewReleases, BlockKind.Albums -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+    BlockKind.Episodes, BlockKind.Charts, BlockKind.Artists -> scheme.secondaryContainer to scheme.onSecondaryContainer
+    BlockKind.Liked, BlockKind.Playlists -> scheme.inverseSurface to scheme.inverseOnSurface
     BlockKind.Recent -> scheme.surfaceContainer to scheme.onSurface
 }
 
@@ -146,15 +148,11 @@ internal fun BlocksHome(
         .background(color)
         .clickable(role = Role.Button) { onOpen(kind) }
 
-    Column(
-        modifier.fillMaxWidth().padding(horizontal = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        // The DJ: the widest tile, because it is the one thing on Home that needs no choosing.
+    // The pieces of Home, each a function of its size, so a phone stacks
+    // them in one column and an unfolded screen sets them in two.
+    val djTile: @Composable (Modifier) -> Unit = { size ->
         Box(
-            Modifier
-                .fillMaxWidth()
-                .height(172.dp)
+            size
                 .block(
                     BlockKind.Dj,
                     RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tile, bottomStart = Tight),
@@ -202,11 +200,16 @@ internal fun BlocksHome(
             }
         }
 
+    }
+
+    // For you, with Liked and New episodes stacked beside it.
+    val pairTiles: @Composable (Dp) -> Unit = { height ->
+        val half = (height - 10.dp) / 2
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(
                 Modifier
                     .weight(1f)
-                    .height(230.dp)
+                    .height(height)
                     .block(
                         BlockKind.ForYou,
                         RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tight, bottomStart = Tile),
@@ -231,7 +234,7 @@ internal fun BlocksHome(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .height(110.dp)
+                        .height(half)
                         .block(BlockKind.Liked, CircleShape, scheme.inverseSurface)
                         .padding(horizontal = 22.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -256,7 +259,7 @@ internal fun BlocksHome(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .height(110.dp)
+                        .height(half)
                         .block(
                             BlockKind.Episodes,
                             RoundedCornerShape(topStart = Tight, topEnd = Tile, bottomEnd = Tile, bottomStart = Tile),
@@ -283,8 +286,10 @@ internal fun BlocksHome(
                 }
             }
         }
+    }
 
         // The last few things played, as covers in four different shapes. A tap plays one.
+    val recentPanel: @Composable (Dp) -> Unit = { coverHeight ->
         if (recent.isNotEmpty()) {
             Column(
                 Modifier
@@ -309,7 +314,7 @@ internal fun BlocksHome(
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(72.dp)
+                                .height(coverHeight)
                                 .clip(COVER_SHAPES[index])
                                 .clickable(onClickLabel = song.title, role = Role.Button) { onRecent(song) },
                         ) {
@@ -321,8 +326,36 @@ internal fun BlocksHome(
                 }
             }
         }
+    }
 
-        // For going deeper: each a badge in the color its page will be, on a plain tile.
+    // Explore, drawn as the search it opens with: a page of search and
+    // shelves, the way into anything not already on Home.
+    val exploreTile: @Composable () -> Unit = {
+        val (badge, onBadge) = BlockKind.Explore.colors(scheme)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .block(BlockKind.Explore, CircleShape, scheme.surfaceContainer)
+                .padding(start = 10.dp, end = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(badge), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Search, contentDescription = null, tint = onBadge, modifier = Modifier.size(24.dp))
+            }
+            Text(
+                stringResource(R.string.search_hint),
+                style = MaterialTheme.typography.titleSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+
+    // For going deeper: each a badge in the color its page will be, on a plain tile.
+    val smallTiles: @Composable () -> Unit = {
         for (pair in SMALL_BLOCKS.chunked(2)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (small in pair) {
@@ -354,7 +387,36 @@ internal fun BlocksHome(
             }
         }
     }
+
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
+        if (maxWidth >= WIDE_HOME) {
+            // Unfolded: the tiles that play on the left, the ways in on the
+            // right, the recent covers grown to fill their half.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    djTile(Modifier.fillMaxWidth().height(200.dp))
+                    pairTiles(300.dp)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    recentPanel(128.dp)
+                    exploreTile()
+                    smallTiles()
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                djTile(Modifier.fillMaxWidth().height(172.dp))
+                pairTiles(230.dp)
+                recentPanel(72.dp)
+                exploreTile()
+                smallTiles()
+            }
+        }
+    }
 }
+
+/** From this width Home sets its tiles in two columns. */
+private val WIDE_HOME = 600.dp
 
 private val COVER_SHAPES: List<Shape> = listOf(
     RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 8.dp),
@@ -369,9 +431,9 @@ private val SquareBadge = RoundedCornerShape(16.dp)
 private class SmallBlock(val kind: BlockKind, val icon: ImageVector, val label: Int, val badgeShape: Shape)
 
 private val SMALL_BLOCKS = listOf(
-    SmallBlock(BlockKind.Explore, Icons.Rounded.Explore, R.string.filter_explore, CircleShape),
     SmallBlock(BlockKind.Playlists, Icons.AutoMirrored.Rounded.QueueMusic, R.string.filter_playlists, SquareBadge),
-    SmallBlock(BlockKind.Library, Icons.Rounded.LibraryMusic, R.string.tab_library, LeafBadge),
+    SmallBlock(BlockKind.Artists, Icons.Rounded.Person, R.string.section_artists, CircleShape),
+    SmallBlock(BlockKind.Albums, Icons.Rounded.Album, R.string.section_albums, LeafBadge),
     SmallBlock(BlockKind.Charts, Icons.Rounded.BarChart, R.string.filter_charts, SquareBadge),
     SmallBlock(BlockKind.QuickPicks, Icons.Rounded.Shuffle, R.string.spotlight_quick_picks, LeafBadge),
     SmallBlock(BlockKind.NewReleases, Icons.Rounded.NewReleases, R.string.filter_new_releases, CircleShape),

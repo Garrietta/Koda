@@ -341,6 +341,7 @@ internal fun BlockReveal(
                 CompositionLocalProvider(
                     LocalContentColor provides pageInk,
                     LocalBlockTile provides BlockTile(ground, ink),
+                    LocalPopupPage provides true,
                     content = page,
                 )
             }

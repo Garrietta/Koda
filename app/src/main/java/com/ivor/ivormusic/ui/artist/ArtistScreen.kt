@@ -1337,7 +1337,8 @@ private fun ArtistTopBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FilledIconButton(
+        // A page over Home closes by a pull down or Back, and has no arrow.
+        if (!com.ivor.ivormusic.ui.home.LocalPopupPage.current) FilledIconButton(
             onClick = onBack,
             shape = CircleShape,
             colors = IconButtonDefaults.filledIconButtonColors(

@@ -19,6 +19,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.ui.home.BlockKind
 import com.ivor.ivormusic.ui.home.BlockPageHero
+import com.ivor.ivormusic.ui.home.albumGridItems
 import com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT
 import com.ivor.ivormusic.ui.home.BlockReveal
 import com.ivor.ivormusic.ui.home.BlocksHome
@@ -282,6 +283,35 @@ class BlocksHomeScreenshotTest {
         }
         compose.mainClock.advanceTimeBy(2_000)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/liked_page.png")
+    }
+
+    /** Home unfolded: two columns, the whole width, the recent covers grown to fill their half. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w880dp-h740dp-xhdpi", application = android.app.Application::class)
+    fun blocks_wide() = shoot("blocks_wide", dark = false, djTitle = "Midnight Rain")
+
+    /** The Albums page: the albums the songs come from, covers cut to expressive shapes. */
+    @Test
+    fun albums_page() {
+        compose.mainClock.autoAdvance = false
+        val albums = List(7) { index ->
+            com.ivor.ivormusic.ui.home.LibraryAlbum("Album $index", "Artist $index", null, listOf(song(index)))
+        }
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                val (ground, ink) = BlockKind.Albums.colors(MaterialTheme.colorScheme)
+                BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
+                    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+                        item {
+                            BlockPageHero(title = "Albums", covers = emptyList(), topInset = 24.dp, onPlay = null, onShuffle = null)
+                        }
+                        albumGridItems(albums, 2) {}
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/albums_page.png")
     }
 
     @Test

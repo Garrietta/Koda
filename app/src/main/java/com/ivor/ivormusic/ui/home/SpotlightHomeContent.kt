@@ -118,15 +118,21 @@ fun SpotlightHomeContent(
     onSongLongPress: ((Song) -> Unit)? = null,
     onPlaySongs: (List<Song>, Song?) -> Unit,
     /**
-     * Opens Explore, where search lives. Required: with the navigation bar
-     * turned off, the Explore tile is the only way there.
+     * Opens Explore, where search lives, from where its tile is. Required:
+     * with the navigation bar turned off, the Explore tile is the only way there.
      */
-    onOpenExplore: () -> Unit,
+    onOpenExplore: (androidx.compose.ui.geometry.Rect?) -> Unit,
     /** Plays these with shuffle on. Required: a button left unwired is a dead button. */
     onShuffleSongs: (List<Song>) -> Unit,
     onRecentClick: (Song) -> Unit,
     onPlaylistClick: (PlaylistDisplayItem) -> Unit = {},
-    onOpenLiked: () -> Unit = {},
+    /** Opens Your Likes, growing out of the Liked tile at the given place. */
+    onOpenLiked: (androidx.compose.ui.geometry.Rect?) -> Unit = {},
+    /**
+     * Opens an artist or album as a page over Home, growing out of the given
+     * place, or out of where the finger came down when it is null.
+     */
+    onOpenPage: (HomePage, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> },
     /**
      * Opens the DJ, given where its tile is on the screen so the page can
      * grow out of it. Required: a tile left unwired is a dead tile.
@@ -135,13 +141,6 @@ fun SpotlightHomeContent(
     /** The DJ tile's colors and the name of the mix it would play. */
     djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
     djTitle: String? = null,
-    onShowAllInLibrary: () -> Unit = {},
-    /**
-     * Called with a tile's place on the screen just before that tile opens
-     * the Library over Home (the Liked and Library tiles), so it can grow
-     * out of the tile.
-     */
-    onLibraryOrigin: (androidx.compose.ui.geometry.Rect?) -> Unit = {},
     /** The tiles' recorded faces, for the pages that grow out from under them. */
     blockFaces: BlockFaces? = null,
     /** Opens Spin on the pool the quick picks are showing. */
@@ -192,15 +191,8 @@ fun SpotlightHomeContent(
     val openBlockPage: (BlockKind) -> Unit = { kind ->
         when (kind) {
             BlockKind.Dj -> onOpenDj(blockBounds[kind])
-            BlockKind.Liked -> {
-                onLibraryOrigin(blockBounds[kind])
-                onOpenLiked()
-            }
-            BlockKind.Library -> {
-                onLibraryOrigin(blockBounds[kind])
-                onShowAllInLibrary()
-            }
-            BlockKind.Explore -> onOpenExplore()
+            BlockKind.Liked -> onOpenLiked(blockBounds[kind])
+            BlockKind.Explore -> onOpenExplore(blockBounds[kind])
             else -> {
                 onFilterChange(kind.filter())
                 pageBlock = kind
@@ -230,7 +222,8 @@ fun SpotlightHomeContent(
             SpotlightFilter.Recent -> recentlyPlayed
             SpotlightFilter.Recommended -> discoverySongs
             SpotlightFilter.Podcasts -> newEpisodes
-            SpotlightFilter.MusicHome, SpotlightFilter.Explore, SpotlightFilter.Charts, SpotlightFilter.NewReleases -> emptyList()
+            SpotlightFilter.MusicHome, SpotlightFilter.Explore, SpotlightFilter.Charts, SpotlightFilter.NewReleases,
+            SpotlightFilter.Artists, SpotlightFilter.Albums -> emptyList()
             else -> songs
         }.take(QUICK_PICK_PAGES * QUICK_PICK_ROWS)
     }
@@ -243,31 +236,42 @@ fun SpotlightHomeContent(
     // through a shelf.
     val ownPlaylists = remember(playlists) { playlists.filterNot { isAutoMix(it.name) } }
 
-    val shortcuts = remember(recentlyPlayed, ownPlaylists, likedSongs) {
-        buildShortcuts(likedSongs, recentlyPlayed, ownPlaylists)
+    // The Artists and Albums pages: what the Library's tabs held, from the
+    // songs Home already has (the device's, the liked, the played) and the
+    // artists followed on this device.
+    val playCounts by viewModel.playCounts.collectAsState()
+    val artistPhotos by viewModel.artistPhotos.collectAsState()
+    val tasteContext = androidx.compose.ui.platform.LocalContext.current
+    val tasteStore = remember(tasteContext) { com.ivor.ivormusic.data.TasteProfileStore(tasteContext) }
+    val tasteProfile by tasteStore.profile.collectAsState()
+    val librarySongs = remember(songs, likedSongs, recentlyPlayed) {
+        (songs + likedSongs + recentlyPlayed).distinctBy { it.id }
     }
+    val libArtists = remember(filter, librarySongs, tasteProfile.artists, artistPhotos, playCounts) {
+        if (filter == SpotlightFilter.Artists) {
+            libraryArtists(librarySongs, tasteProfile.artists, artistPhotos, playCounts)
+        } else emptyList()
+    }
+    val libAlbums = remember(filter, librarySongs, playCounts) {
+        if (filter == SpotlightFilter.Albums) libraryAlbums(librarySongs, playCounts) else emptyList()
+    }
+    val gridWidth = com.ivor.ivormusic.ui.theme.windowDpSize().width
+
 
     // What a block's page lists, for whichever filter the block set.
     val pageSections: LazyListScope.() -> Unit = {
-        // AI DJ moved to a floating action button next to the nav pill
-        // (see HomeScreen) — no banner on Home anymore.
-
-        // The shortcut grid only makes sense unfiltered - a two-column grid
-        // of "your most reached-for things" is not a thing you scope.
-        if (filter == SpotlightFilter.All && shortcuts.isNotEmpty()) {
-            item(key = "shortcuts") {
-                SpotlightShortcutGrid(
-                    shortcuts = shortcuts,
-                    onClick = { shortcut ->
-                        when (shortcut) {
-                            is Shortcut.Liked -> onOpenLiked()
-                            is Shortcut.Playlist -> onPlaylistClick(shortcut.playlist)
-                            is Shortcut.Track -> onRecentClick(shortcut.song)
-                        }
-                    },
-                )
+        if (filter == SpotlightFilter.Artists) {
+            artistGridItems(libArtists, columns = (gridWidth / 120.dp).toInt().coerceAtLeast(3)) { artist ->
+                onOpenPage(HomePage.Artist(artist.name, artist.id), null)
             }
         }
+        if (filter == SpotlightFilter.Albums) {
+            albumGridItems(libAlbums, columns = (gridWidth / 170.dp).toInt().coerceAtLeast(2)) { album ->
+                onOpenPage(album.page(), null)
+            }
+        }
+        // AI DJ moved to a floating action button next to the nav pill
+        // (see HomeScreen) — no banner on Home anymore.
 
         // First load of the discovery tab: the grid below is empty and
         // will be for a second or two of network, and an empty page reads
@@ -386,10 +390,7 @@ fun SpotlightHomeContent(
                 item(key = "discovery-artists") {
                     SpotlightArtistRail(
                         artists = discoveryCollections.artists,
-                        // The artist page lives in the Library tab, so this
-                        // is the hand-off the player and the channel page
-                        // already use rather than a route of its own.
-                        onClick = { viewModel.requestArtistPage(it.name) },
+                        onClick = { onOpenPage(HomePage.Artist(it.name, it.id.takeIf { id -> id.startsWith("UC") }), null) },
                     )
                 }
             }
@@ -524,8 +525,6 @@ fun SpotlightHomeContent(
             item(key = "library-header") {
                 SpotlightSectionHeader(
                     title = stringResource(R.string.spotlight_from_your_library),
-                    actionLabel = stringResource(R.string.action_see_all),
-                    onAction = onShowAllInLibrary,
                 )
             }
             item(key = "library-shelf") {
@@ -556,7 +555,7 @@ fun SpotlightHomeContent(
                 onRetry = { viewModel.loadMusicBrowse(if (showingMood) BROWSE_MOOD else key, force = true) },
                 onLoadMore = { viewModel.loadMoreMusicBrowse(if (showingMood) BROWSE_MOOD else key) },
                 onPlaylistClick = onPlaylistClick,
-                onArtistClick = { viewModel.requestArtistPage(it.name) },
+                onArtistClick = { onOpenPage(HomePage.Artist(it.name, it.id.takeIf { id -> id.startsWith("UC") }), null) },
                 onPlayTracks = onPlaySongs,
                 onMoodClick = { viewModel.openMood(it) },
                 onSongLongPress = onSongLongPress,
@@ -564,9 +563,10 @@ fun SpotlightHomeContent(
         }
 
         if (filter.browseKey() == null && !isInitialLoading && !isDiscoveryLoading && quickPicks.isEmpty() &&
-            (filter == SpotlightFilter.Recommended || filter == SpotlightFilter.Podcasts || shortcuts.isEmpty()) &&
             (filter != SpotlightFilter.Recommended || discoveryCollections.isEmpty()) &&
-            (filter != SpotlightFilter.Playlists || ownPlaylists.isEmpty())
+            (filter != SpotlightFilter.Playlists || ownPlaylists.isEmpty()) &&
+            (filter != SpotlightFilter.Artists || libArtists.isEmpty()) &&
+            (filter != SpotlightFilter.Albums || libAlbums.isEmpty())
         ) {
             item(key = "empty") { SpotlightEmptyState(filter) }
         }
@@ -655,7 +655,7 @@ fun SpotlightHomeContent(
                     // playlist page's playlists. A page of shelves has none
                     // and gets the shapes alone.
                     val browseShelves = filter.browseKey()?.let { musicBrowse[it]?.shelves }.orEmpty()
-                    val heroCovers = remember(quickPicks, ownPlaylists, filter, browseShelves) {
+                    val heroCovers = remember(quickPicks, ownPlaylists, filter, browseShelves, libArtists, libAlbums) {
                         when {
                             quickPicks.isNotEmpty() -> quickPicks.distinctBy { it.albumArtUri ?: it.thumbnailUrl }.take(HERO_COVER_COUNT).map {
                                 HeroCover(
@@ -664,6 +664,8 @@ fun SpotlightHomeContent(
                                 )
                             }
                             filter == SpotlightFilter.Playlists -> ownPlaylists.take(HERO_COVER_COUNT).map { HeroCover(it.thumbnailUrl) }
+                            filter == SpotlightFilter.Artists -> libArtists.mapNotNull { it.photo }.take(HERO_COVER_COUNT).map { HeroCover(it) }
+                            filter == SpotlightFilter.Albums -> libAlbums.mapNotNull { it.cover }.take(HERO_COVER_COUNT).map { HeroCover(it) }
                             // A page of shelves (New, Charts, Explore) is made of its own records.
                             else -> heroCoversFromShelves(browseShelves, HERO_COVER_COUNT)
                         }
@@ -855,6 +857,8 @@ enum class SpotlightFilter(val label: String, val quickPickCaption: String?) {
     Liked("Liked", "From songs you liked"),
     Recent("Recent", "From what you played lately"),
     Playlists("Playlists", null),
+    Artists("Artists", null),
+    Albums("Albums", null),
 }
 
 /** The filter a block's page lists. Quick picks is the unfiltered page. */
@@ -866,6 +870,8 @@ private fun BlockKind.filter(): SpotlightFilter = when (this) {
     BlockKind.Charts -> SpotlightFilter.Charts
     BlockKind.NewReleases -> SpotlightFilter.NewReleases
     BlockKind.Explore -> SpotlightFilter.Explore
+    BlockKind.Artists -> SpotlightFilter.Artists
+    BlockKind.Albums -> SpotlightFilter.Albums
     else -> SpotlightFilter.All
 }
 
@@ -897,6 +903,8 @@ private fun spotlightFilterLabel(filter: SpotlightFilter): String = when (filter
     SpotlightFilter.Explore -> stringResource(R.string.filter_explore)
     SpotlightFilter.Charts -> stringResource(R.string.filter_charts)
     SpotlightFilter.NewReleases -> stringResource(R.string.filter_new_releases)
+    SpotlightFilter.Artists -> stringResource(R.string.section_artists)
+    SpotlightFilter.Albums -> stringResource(R.string.section_albums)
 }
 
 @Composable

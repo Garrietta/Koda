@@ -177,6 +177,8 @@ fun LibraryContent(
     isLocalLibrary: Boolean = true,
     onDownloadsClick: () -> Unit = {},
     initialArtist: String? = null,
+    /** The channel id behind [initialArtist] when the caller knows it. */
+    initialArtistId: String? = null,
     onInitialArtistConsumed: () -> Unit = {},
     /**
      * Whether the next hand-off ([initialArtist], [initialPlaylist] or
@@ -240,12 +242,32 @@ fun LibraryContent(
      * the Library tab is re-tapped while already selected.
      */
     resetSignal: Int = 0,
+    /**
+     * Drawn as one page opened over Home (see `HomePage`): only the route a
+     * hand-off opened, with no Library beside or under it, at any width.
+     * Back and a pull down belong to the page around it.
+     */
+    popupPage: Boolean = false,
+    /**
+     * Where an artist, album or playlist tapped inside a route opens. Null
+     * opens it in place, as the Library always has; over Home, each opens
+     * as a page of its own on top of this one, and Back returns here.
+     */
+    onOpenPage: ((com.ivor.ivormusic.ui.home.HomePage) -> Unit)? = null,
 ) {
     // Navigation State
     // Opened on a playlist, the Library starts on it: starting on the
     // landing page and moving on a frame later showed the landing for that
     // frame, a flash of the wrong page every time Liked was opened.
-    var currentRoute by rememberSaveable { mutableStateOf(if (initialPlaylist != null) LibraryRoute.Playlist else LibraryRoute.Main) }
+    var currentRoute by rememberSaveable {
+        mutableStateOf(
+            when {
+                initialPlaylist != null -> LibraryRoute.Playlist
+                initialArtist != null -> LibraryRoute.Artist
+                else -> LibraryRoute.Main
+            }
+        )
+    }
 
     // Re-tapping the Library tab pops back to the landing page and scrolls
     // to the top.
@@ -268,10 +290,10 @@ fun LibraryContent(
     // Arguments for routes
     var selectedPlaylist by remember { mutableStateOf(initialPlaylist) }
     var selectedPodcastFeed by remember { mutableStateOf<com.ivor.ivormusic.data.PodcastFeed?>(null) }
-    var selectedArtistName by remember { mutableStateOf<String?>(null) }
+    var selectedArtistName by remember { mutableStateOf(initialArtist) }
     // The UC id behind the artist route when one resolved it (similar-artist
     // taps carry it); null means the screen resolves from the name itself.
-    var selectedArtistId by remember { mutableStateOf<String?>(null) }
+    var selectedArtistId by remember { mutableStateOf(initialArtistId) }
     // True while the open route is an excursion handed over from another tab:
     // back from it, or from anything opened inside it, ends the excursion on
     // that tab rather than on the Library root. Set with the hand-off that
@@ -323,7 +345,7 @@ fun LibraryContent(
     LaunchedEffect(initialArtist) {
         if (initialArtist != null) {
             selectedArtistName = initialArtist
-            selectedArtistId = null
+            selectedArtistId = initialArtistId
             returnsToCaller = initialReturnToCaller
             currentRoute = LibraryRoute.Artist
             onInitialArtistConsumed()
@@ -549,22 +571,37 @@ fun LibraryContent(
                         onPlayQueue = onPlayQueue,
                         onShuffleQueue = onShuffleQueue,
                         onSongClick = onSongClick,
-                        onAlbumClick = { album, songs -> openAlbum(album, songs) },
+                        onAlbumClick = { album, songs ->
+                            onOpenPage?.invoke(com.ivor.ivormusic.ui.home.HomePage.DeviceAlbum(album))
+                                ?: openAlbum(album, songs)
+                        },
                         onOpenAlbum = { albumItem ->
-                            selectedPlaylist = albumItem
-                            currentRoute = LibraryRoute.Playlist
+                            if (onOpenPage != null) {
+                                onOpenPage(com.ivor.ivormusic.ui.home.HomePage.Playlist(albumItem))
+                            } else {
+                                selectedPlaylist = albumItem
+                                currentRoute = LibraryRoute.Playlist
+                            }
                         },
                         viewModel = viewModel,
                         onSongLongPress = onSongLongPress,
                         onOpenChannel = onOpenChannel,
                         onOpenArtist = { name, id ->
-                            selectedArtistName = name
-                            selectedArtistId = id
-                            currentRoute = LibraryRoute.Artist
+                            if (onOpenPage != null) {
+                                onOpenPage(com.ivor.ivormusic.ui.home.HomePage.Artist(name, id))
+                            } else {
+                                selectedArtistName = name
+                                selectedArtistId = id
+                                currentRoute = LibraryRoute.Artist
+                            }
                         },
                         onOpenPlaylist = { playlist ->
-                            selectedPlaylist = playlist
-                            currentRoute = LibraryRoute.Playlist
+                            if (onOpenPage != null) {
+                                onOpenPage(com.ivor.ivormusic.ui.home.HomePage.Playlist(playlist))
+                            } else {
+                                selectedPlaylist = playlist
+                                currentRoute = LibraryRoute.Playlist
+                            }
                         }
                     )
                 }
@@ -679,7 +716,22 @@ fun LibraryContent(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-    if (maxWidth >= LIBRARY_TWO_PANE_MIN_WIDTH) {
+    if (popupPage) {
+        // One page: what the hand-off opened, and the two routes reached
+        // from inside a playlist, which Back returns from to the playlist.
+        // Every other Back closes the page, which the page around it does.
+        BackHandler(
+            enabled = currentRoute == LibraryRoute.ImportSongs || currentRoute == LibraryRoute.AddSongs
+        ) { back() }
+        AnimatedContent(
+            targetState = currentRoute,
+            label = "LibraryPopupPage",
+            transitionSpec = {
+                fadeIn(animationSpec = effectsSpec) togetherWith fadeOut(animationSpec = effectsSpec) using
+                    SizeTransform(clip = false) { _, _ -> snap() }
+            }
+        ) { route -> routeContent(route) }
+    } else if (maxWidth >= LIBRARY_TWO_PANE_MIN_WIDTH) {
         // List and detail side by side: the library stays where it is and
         // what it opens appears beside it, so moving between playlists is a
         // tap each rather than a push and a pop. Back closes the detail in
