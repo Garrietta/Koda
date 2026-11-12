@@ -1297,7 +1297,14 @@ fun PlaylistDetailScreen(
     // colors from (Your Likes), it opens in the tile's own colors, so it is
     // the tile, grown. A page with a cover keeps the cover's.
     val blockTile = com.ivor.ivormusic.ui.home.LocalBlockTile.current
+    val popupPage = com.ivor.ivormusic.ui.home.LocalPopupPage.current
+    // Over Home, a record with a cover is a page in the cover's color the
+    // way Your Likes is in its tile's: the cover's ground, and every role
+    // stepped from it, so its header can be the Home pages' header.
     val tileGround = blockTile?.takeIf { heroArt == null }
+        ?: if (popupPage && heroArt != null) {
+            com.ivor.ivormusic.ui.home.BlockTile(coverScheme.playlistGround(), coverScheme.onPrimaryContainer)
+        } else null
     val baseScheme = MaterialTheme.colorScheme
     val artworkScheme = remember(tileGround, coverScheme, baseScheme) {
         tileGround?.let { baseScheme.onBlock(it.ground, it.ink) } ?: coverScheme
@@ -1715,7 +1722,7 @@ fun PlaylistDetailScreen(
                     // set in expressive shapes, its name, and Play all with
                     // Shuffle beside it, instead of an empty banner with the
                     // controls pushed down below it.
-                    val collageHeader = showTracks && heroArt == null && songs.isNotEmpty()
+                    val collageHeader = showTracks && songs.isNotEmpty() && (heroArt == null || popupPage)
                     val factsLine = run {
                         val totalDurationLabel = formatTotalDuration(songs.sumOf { it.duration })
                         val releaseType = songs.firstOrNull()?.releaseType ?: resolvedPlaylist.releaseType
@@ -1794,7 +1801,9 @@ fun PlaylistDetailScreen(
                         }
                     }
                     if (collageHeader) {
-                        val collage = remember(songs) {
+                        val collage = if (heroArt != null) {
+                            listOf(com.ivor.ivormusic.ui.home.HeroCover(heroArt, googleImageAtSize(heroArt, HERO_COVER_PX)))
+                        } else remember(songs) {
                             songs.distinctBy { it.albumArtUri ?: it.thumbnailUrl }
                                 .take(com.ivor.ivormusic.ui.home.HERO_COVER_COUNT)
                                 .map {
@@ -1809,6 +1818,10 @@ fun PlaylistDetailScreen(
                         com.ivor.ivormusic.ui.home.BlockPageHero(
                             title = resolvedPlaylist.name,
                             covers = collage,
+                            // A record with its own cover: the cover large, and
+                            // what it is (artist, year, length) under the name.
+                            singleCover = heroArt != null,
+                            subtitle = factsLine.takeIf { heroArt != null },
                             // The shapes start under the top bar's actions.
                             topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
                             onPlay = if (!isReorderMode && !isSearchActive) {

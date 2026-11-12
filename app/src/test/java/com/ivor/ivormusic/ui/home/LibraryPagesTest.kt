@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.home
 
+import com.ivor.ivormusic.data.PlaylistDisplayItem
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.data.SongSource
 import com.ivor.ivormusic.data.TasteArtist
@@ -54,5 +55,19 @@ class LibraryPagesTest {
             emptyMap(),
         ).single()
         assertEquals(HomePage.DeviceAlbum("Home Tapes"), album.page())
+    }
+
+    @Test
+    fun releasesReadNewestFirstWithUndatedLast() {
+        val releases = listOf(
+            PlaylistDisplayItem("Old", "MPREb_1", "A", releaseYear = 2015),
+            PlaylistDisplayItem("Undated", "MPREb_2", "A"),
+            PlaylistDisplayItem("New", "MPREb_3", "A", releaseYear = 2025),
+            PlaylistDisplayItem("Also new", "MPREb_4", "A", releaseYear = 2025),
+        )
+        assertEquals(
+            listOf("New", "Also new", "Old", "Undated"),
+            com.ivor.ivormusic.ui.artist.newestFirst(releases).map { it.name },
+        )
     }
 }

@@ -1851,6 +1851,7 @@
     <string name="section_songs">Songs</string>
     <!-- Artist page sections backed by the YouTube Music artist browse -->
     <string name="ar_section_popular">Popular songs</string>
+    <string name="ar_section_top_songs">Top songs</string>
     <string name="ar_section_on_device">On this device</string>
     <string name="ar_section_about">About</string>
     <string name="ar_section_singles_eps">Singles &amp; EPs</string>

@@ -407,6 +407,9 @@ internal fun PagePills(
     }
 }
 
+/** How tall a single record's cover stands in its page's header. */
+private val SINGLE_COVER_HEIGHT = 200.dp
+
 /** The height of every pill in a page's header row. */
 internal val HERO_BUTTON_HEIGHT = 52.dp
 
@@ -451,6 +454,14 @@ internal fun BlockPageHero(
     topInset: Dp,
     onPlay: (() -> Unit)?,
     onShuffle: (() -> Unit)?,
+    /** A line under the name: an album's artist, year and length. */
+    subtitle: String? = null,
+    /**
+     * One record's own page (an album, a playlist with a cover): its cover
+     * large in an expressive shape, with a few plain shapes beside it,
+     * rather than a collage of many covers.
+     */
+    singleCover: Boolean = false,
     /** More pills after Shuffle, each a [FilledTonalButton] [HERO_BUTTON_HEIGHT] high with [HERO_BUTTON_PADDING]. */
     extras: @Composable () -> Unit = {},
     /** At most this many pills to a line; the DJ's four sit two and two. */
@@ -477,7 +488,20 @@ internal fun BlockPageHero(
         )
         Column(Modifier.fillMaxWidth().padding(top = topInset)) {
             Spacer(Modifier.height(48.dp))
-            Box(Modifier.fillMaxWidth().height(176.dp)) {
+            if (singleCover) Box(Modifier.fillMaxWidth().height(SINGLE_COVER_HEIGHT)) {
+                HeroShape(
+                    covers.firstOrNull(),
+                    MaterialShapes.Cookie9Sided.toShape(),
+                    scheme.surfaceContainerHighest,
+                    Modifier.align(Alignment.TopStart).offset(x = 16.dp).size(SINGLE_COVER_HEIGHT),
+                )
+                HeroShape(null, MaterialShapes.Sunny.toShape(), scheme.surfaceContainerHigh,
+                    Modifier.align(Alignment.TopEnd).offset(x = (-36).dp, y = 20.dp).size(84.dp).rotate(12f))
+                HeroShape(null, MaterialShapes.Pill.toShape(), scheme.surfaceContainerHighest,
+                    Modifier.align(Alignment.BottomEnd).offset(x = (-104).dp, y = (-8).dp).size(56.dp).rotate(-18f))
+                HeroShape(null, MaterialShapes.Flower.toShape(), scheme.surfaceContainerHigh,
+                    Modifier.align(Alignment.BottomEnd).offset(x = (-20).dp, y = (-4).dp).size(44.dp))
+            } else Box(Modifier.fillMaxWidth().height(176.dp)) {
                 // The first four shapes are always there, as tints until
                 // their covers arrive; the smaller ones in the gaps join only
                 // when there are covers for them, so a page with many new
@@ -507,6 +531,16 @@ internal fun BlockPageHero(
                 ),
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
             )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onBackground.copy(alpha = 0.8f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
+                )
+            }
             PagePills(
                 onPlay = onPlay,
                 onShuffle = onShuffle,

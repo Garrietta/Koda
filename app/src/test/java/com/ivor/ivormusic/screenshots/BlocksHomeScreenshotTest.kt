@@ -314,6 +314,79 @@ class BlocksHomeScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/albums_page.png")
     }
 
+    /** An artist over Home: picture and records in shapes, Shuffle, Radio and Follow, then the shelves. */
+    @Test
+    fun artist_page() {
+        compose.mainClock.autoAdvance = false
+        val releases = List(4) { index ->
+            com.ivor.ivormusic.data.PlaylistDisplayItem("Record $index", "MPREb_$index", "Artist", releaseYear = 2025 - index * 3)
+        }
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                androidx.compose.runtime.CompositionLocalProvider(com.ivor.ivormusic.ui.home.LocalPopupPage provides true) {
+                    com.ivor.ivormusic.ui.artist.ArtistPopupOverview(
+                        name = "Tyler Childers",
+                        photo = null,
+                        isLoading = false,
+                        topSongs = List(3, ::song),
+                        canSeeAll = true,
+                        onSeeAll = {},
+                        onPlaySong = {},
+                        onSongLongPress = {},
+                        deviceSongs = emptyList(),
+                        onPlayDeviceSong = {},
+                        albums = releases,
+                        singles = emptyList(),
+                        localAlbums = emptyList(),
+                        similar = listOf(com.ivor.ivormusic.data.SimilarArtist("UC1", "The Red Clay Strays")),
+                        featured = emptyList(),
+                        about = "From Kentucky.",
+                        facts = listOf("2.2M monthly audience"),
+                        isFollowing = false,
+                        onFollowToggle = {},
+                        onShuffle = {},
+                        onRadio = {},
+                        onOpenRelease = {},
+                        onOpenLocalAlbum = { _, _ -> },
+                        onOpenArtist = { _, _ -> },
+                        onOpenPlaylist = {},
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/artist_page.png")
+    }
+
+    /** An album over Home: its cover large in an expressive shape, what it is under its name, the pills. */
+    @Test
+    fun album_page_header() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = true, colorPalette = RONDO_PALETTE_ID) {
+                val (ground, ink) = BlockKind.Albums.colors(MaterialTheme.colorScheme)
+                BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
+                    Column(Modifier.fillMaxSize()) {
+                        BlockPageHero(
+                            title = "Deep Thoughts",
+                            covers = listOf(com.ivor.ivormusic.ui.home.HeroCover(null)),
+                            topInset = 24.dp,
+                            onPlay = {},
+                            onShuffle = {},
+                            subtitle = "Album  ·  Lil Durk  ·  2025  ·  17 tracks  ·  45 min",
+                            singleCover = true,
+                            extras = {
+                                androidx.compose.material3.FilledTonalButton(onClick = {}, modifier = Modifier.height(HERO_BUTTON_HEIGHT), contentPadding = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING) { Text("Save") }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/album_page_header.png")
+    }
+
     @Test
     fun blocks_dark() = shoot("blocks_dark", dark = true, djTitle = "A Sunny Day with Kendrick Lamar")
 

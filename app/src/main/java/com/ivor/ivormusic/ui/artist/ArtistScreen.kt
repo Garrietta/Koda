@@ -1,5 +1,10 @@
 package com.ivor.ivormusic.ui.artist
 
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Button
+import com.ivor.ivormusic.ui.home.onBlock
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -318,6 +323,10 @@ fun ArtistScreen(
      */
     onOpenChannel: ((channelId: String) -> Unit)? = null
 ) {
+    // Opened over Home, the artist is a page like the Home pages: its own
+    // colors, its picture and records in expressive shapes, then shelves.
+    val popupPage = com.ivor.ivormusic.ui.home.LocalPopupPage.current
+
     // Theme colors
     val backgroundColor = MaterialTheme.colorScheme.background
     val cardColor = MaterialTheme.colorScheme.surfaceContainer
@@ -586,6 +595,46 @@ fun ArtistScreen(
         onBack = { showAllSongs = false },
         modifier = modifier,
         background = {
+            if (popupPage) {
+                ArtistPopupOverview(
+                    name = displayName,
+                    photo = heroFallback.second ?: heroFallback.first ?: artistPage?.bannerUrl,
+                    isLoading = isLoading,
+                    topSongs = popularSongs,
+                    canSeeAll = canSeeAllSongs,
+                    onSeeAll = { showAllSongs = true },
+                    onPlaySong = { song -> onPlayQueue(artistSongs, song) },
+                    onSongLongPress = onSongLongPress,
+                    deviceSongs = if (hasLocalSongs) emptyList() else deviceSongs,
+                    onPlayDeviceSong = { song -> onPlayQueue(deviceSongs, song) },
+                    albums = if (hasLocalSongs) emptyList() else newestFirst(fetchedAlbums.filter { !isUnknownAlbum(it.name) }),
+                    singles = if (hasLocalSongs) emptyList() else newestFirst(fetchedSingles.filter { !isUnknownAlbum(it.name) }),
+                    localAlbums = if (hasLocalSongs) {
+                        albums.filter { !isUnknownAlbum(it) }.map { name ->
+                            name to artistSongs.filter { it.album == name }.sortedInAlbumOrder()
+                        }
+                    } else emptyList(),
+                    similar = if (hasLocalSongs) emptyList() else artistPage?.similarArtists.orEmpty(),
+                    featured = if (hasLocalSongs) emptyList() else artistPage?.featuredOn.orEmpty(),
+                    about = artistPage?.bio?.takeIf { !hasLocalSongs && it.isNotBlank() },
+                    facts = heroMetadata,
+                    isFollowing = isFollowing,
+                    onFollowToggle = if (canFollow) {
+                        {
+                            if (isFollowing) tasteStore.unfollow(followArtist)
+                            else tasteStore.follow(followArtist)
+                        }
+                    } else null,
+                    onShuffle = if (artistSongs.isNotEmpty()) shuffleAll else null,
+                    onRadio = startRadio,
+                    onOpenRelease = { release -> onOpenAlbum?.invoke(release) },
+                    onOpenLocalAlbum = { name, songs ->
+                        onAlbumClick?.invoke(name, songs) ?: onPlayQueue(songs, null)
+                    },
+                    onOpenArtist = onOpenArtist,
+                    onOpenPlaylist = onOpenPlaylist,
+                )
+            } else
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1037,6 +1086,270 @@ fun ArtistScreen(
                 )
             } else {
                 Box(Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+/**
+ * Releases newest first, as an artist's records are read: by year, the
+ * newest at the start, and in the order they were served within a year
+ * or when the year is unknown (those last).
+ */
+internal fun newestFirst(releases: List<PlaylistDisplayItem>): List<PlaylistDisplayItem> =
+    releases.sortedByDescending { it.releaseYear ?: Int.MIN_VALUE }
+
+/**
+ * The artist as a page over Home, laid out as the Home pages are: the
+ * artist's picture and records in expressive shapes with the name under
+ * them, a row of pills (Shuffle, Radio, Follow; an artist has no single
+ * thing to Play all of), then shelves - their top songs, their albums and
+ * singles newest first with covers cut to expressive shapes, artists you
+ * might like, playlists they are on, what is on this device, and about.
+ *
+ * The page is drawn in colors made from the artist's picture, as a tile's
+ * page is in the tile's: the picture's most vivid hue as the ground, or
+ * the scheme's third color for a picture with none.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun ArtistPopupOverview(
+    name: String,
+    photo: String?,
+    isLoading: Boolean,
+    topSongs: List<Song>,
+    canSeeAll: Boolean,
+    onSeeAll: () -> Unit,
+    onPlaySong: (Song) -> Unit,
+    onSongLongPress: ((Song) -> Unit)?,
+    deviceSongs: List<Song>,
+    onPlayDeviceSong: (Song) -> Unit,
+    albums: List<PlaylistDisplayItem>,
+    singles: List<PlaylistDisplayItem>,
+    localAlbums: List<Pair<String, List<Song>>>,
+    similar: List<com.ivor.ivormusic.data.SimilarArtist>,
+    featured: List<com.ivor.ivormusic.data.FeaturedPlaylist>,
+    about: String?,
+    facts: List<String>,
+    isFollowing: Boolean,
+    onFollowToggle: (() -> Unit)?,
+    onShuffle: (() -> Unit)?,
+    onRadio: (() -> Unit)?,
+    onOpenRelease: (PlaylistDisplayItem) -> Unit,
+    onOpenLocalAlbum: (String, List<Song>) -> Unit,
+    onOpenArtist: ((String, String) -> Unit)?,
+    onOpenPlaylist: ((PlaylistDisplayItem) -> Unit)?,
+) {
+    val base = MaterialTheme.colorScheme
+    val seed = com.ivor.ivormusic.ui.player.rememberArtworkSeed(enabled = photo != null, albumArtUri = photo)
+    val block = seed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
+    val ground = block?.container ?: base.tertiaryContainer
+    val ink = block?.onContainer ?: base.onTertiaryContainer
+    val scheme = remember(base, ground, ink) {
+        base.onBlock(ground, ink)
+    }
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(ground)
+    MaterialTheme(colorScheme = scheme) {
+        CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides ink) {
+            val heroCovers = remember(photo, albums, singles, localAlbums) {
+                (listOfNotNull(photo) +
+                    (albums + singles).mapNotNull { it.thumbnailUrl } +
+                    localAlbums.mapNotNull { (_, songs) -> songs.firstOrNull()?.let { it.highResThumbnailUrl ?: it.thumbnailUrl } })
+                    .distinct()
+                    .take(com.ivor.ivormusic.ui.home.HERO_COVER_COUNT)
+                    .map { com.ivor.ivormusic.ui.home.HeroCover(it) }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(ground),
+                contentPadding = PaddingValues(bottom = 220.dp),
+            ) {
+                item(key = "hero") {
+                    com.ivor.ivormusic.ui.home.BlockPageHero(
+                        title = name,
+                        covers = heroCovers,
+                        topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+                        onPlay = null,
+                        onShuffle = null,
+                        extras = {
+                            val height = Modifier.height(com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT)
+                            val pad = com.ivor.ivormusic.ui.home.HERO_BUTTON_PADDING
+                            if (onShuffle != null) {
+                                Button(onClick = onShuffle, modifier = height, contentPadding = pad) {
+                                    Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(com.ivor.ivormusic.ui.home.HERO_ICON_SIZE))
+                                    Spacer(Modifier.width(com.ivor.ivormusic.ui.home.HERO_ICON_GAP))
+                                    Text(stringResource(R.string.cd_shuffle))
+                                }
+                            }
+                            if (onRadio != null) {
+                                FilledTonalButton(onClick = onRadio, modifier = height, contentPadding = pad) {
+                                    Icon(Icons.Rounded.Radio, contentDescription = null, modifier = Modifier.size(com.ivor.ivormusic.ui.home.HERO_ICON_SIZE))
+                                    Spacer(Modifier.width(com.ivor.ivormusic.ui.home.HERO_ICON_GAP))
+                                    Text(stringResource(R.string.explore_artist_radio))
+                                }
+                            }
+                            if (onFollowToggle != null) {
+                                FilledTonalButton(onClick = onFollowToggle, modifier = height, contentPadding = pad) {
+                                    Icon(
+                                        if (isFollowing) Icons.Rounded.Check else Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(com.ivor.ivormusic.ui.home.HERO_ICON_SIZE),
+                                    )
+                                    Spacer(Modifier.width(com.ivor.ivormusic.ui.home.HERO_ICON_GAP))
+                                    Text(stringResource(if (isFollowing) R.string.artist_following else R.string.artist_follow))
+                                }
+                            }
+                        },
+                    )
+                }
+                if (isLoading) {
+                    item(key = "loading") {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                            LoadingIndicator(color = ink)
+                        }
+                    }
+                }
+                if (topSongs.isNotEmpty()) {
+                    item(key = "top-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(
+                            title = stringResource(R.string.ar_section_top_songs),
+                            actionLabel = if (canSeeAll) stringResource(R.string.action_see_all) else null,
+                            onAction = onSeeAll,
+                        )
+                    }
+                    items(topSongs, key = { "top_${it.id}" }) { song ->
+                        PopularSongRow(song = song, onClick = { onPlaySong(song) }, onMore = onSongLongPress?.let { press -> { press(song) } })
+                    }
+                }
+                releaseShelf("albums", R.string.section_albums, albums, onOpenRelease)
+                releaseShelf("singles", R.string.ar_section_singles_eps, singles, onOpenRelease)
+                if (localAlbums.isNotEmpty()) {
+                    item(key = "local-albums-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(title = stringResource(R.string.section_albums))
+                    }
+                    item(key = "local-albums") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            itemsIndexed(localAlbums, key = { _, entry -> entry.first }) { index, (albumName, songs) ->
+                                ArtworkCard(
+                                    title = albumName,
+                                    subtitle = pluralStringResource(R.plurals.n_songs, songs.size, songs.size),
+                                    thumbnailUrl = songs.firstOrNull()?.let { it.highResThumbnailUrl ?: it.thumbnailUrl ?: it.albumArtUri?.toString() },
+                                    artShape = com.ivor.ivormusic.ui.home.ALBUM_SHAPES[index % com.ivor.ivormusic.ui.home.ALBUM_SHAPES.size].toShape(),
+                                    onClick = { onOpenLocalAlbum(albumName, songs) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (similar.isNotEmpty() && onOpenArtist != null) {
+                    item(key = "similar-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(title = stringResource(R.string.spotlight_artists_for_you))
+                    }
+                    item(key = "similar") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(similar, key = { it.id }) { entry ->
+                                SimilarArtistCard(entry = entry, onClick = { onOpenArtist(entry.name, entry.id) })
+                            }
+                        }
+                    }
+                }
+                if (featured.isNotEmpty() && onOpenPlaylist != null) {
+                    item(key = "featured-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(title = stringResource(R.string.spotlight_playlists_to_try))
+                    }
+                    item(key = "featured") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            items(featured, key = { it.id }) { entry ->
+                                ArtworkCard(
+                                    title = entry.title,
+                                    subtitle = entry.subtitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.label_playlist),
+                                    thumbnailUrl = entry.thumbnailUrl,
+                                    width = 176.dp,
+                                    artShape = RoundedCornerShape(28.dp),
+                                    placeholderIcon = Icons.AutoMirrored.Rounded.QueueMusic,
+                                    onClick = {
+                                        onOpenPlaylist(
+                                            PlaylistDisplayItem(
+                                                name = entry.title,
+                                                url = "https://music.youtube.com/playlist?list=${entry.id}",
+                                                uploaderName = entry.subtitle?.takeIf { it.isNotBlank() } ?: "YouTube Music",
+                                                thumbnailUrl = entry.thumbnailUrl,
+                                            )
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (deviceSongs.isNotEmpty()) {
+                    item(key = "device-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(title = stringResource(R.string.ar_section_on_device))
+                    }
+                    items(deviceSongs.take(POPULAR_SONG_COUNT), key = { "device_${it.id}" }) { song ->
+                        PopularSongRow(song = song, onClick = { onPlayDeviceSong(song) }, onMore = onSongLongPress?.let { press -> { press(song) } })
+                    }
+                }
+                if (about != null || facts.isNotEmpty()) {
+                    item(key = "about-header") {
+                        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(
+                            title = stringResource(R.string.ar_section_about),
+                            subtitle = facts.joinToString(" · ").takeIf { it.isNotBlank() },
+                        )
+                    }
+                    if (about != null) {
+                        item(key = "about") {
+                            ArtistBioCard(
+                                bio = about,
+                                cardColor = scheme.surfaceContainer,
+                                textColor = ink,
+                                primaryColor = ink,
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A shelf of releases, newest first, each cover cut to an expressive shape. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun androidx.compose.foundation.lazy.LazyListScope.releaseShelf(
+    key: String,
+    title: Int,
+    releases: List<PlaylistDisplayItem>,
+    onOpen: (PlaylistDisplayItem) -> Unit,
+) {
+    if (releases.isEmpty()) return
+    item(key = "$key-header") {
+        com.ivor.ivormusic.ui.home.SpotlightSectionHeader(title = stringResource(title))
+    }
+    item(key = key) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            itemsIndexed(releases, key = { _, release -> release.id }) { index, release ->
+                ArtworkCard(
+                    title = release.name,
+                    subtitle = listOfNotNull(
+                        release.releaseType?.let { stringResource(it.labelRes) },
+                        release.releaseYear?.toString(),
+                    ).joinToString(" · ").ifBlank { null },
+                    thumbnailUrl = release.thumbnailUrl,
+                    artShape = com.ivor.ivormusic.ui.home.ALBUM_SHAPES[index % com.ivor.ivormusic.ui.home.ALBUM_SHAPES.size].toShape(),
+                    onClick = { onOpen(release) },
+                )
             }
         }
     }

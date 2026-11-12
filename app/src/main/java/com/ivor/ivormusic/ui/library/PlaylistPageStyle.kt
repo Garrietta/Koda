@@ -93,6 +93,10 @@ internal fun playlistPageGround(): Color {
     return lerp(scheme.primaryContainer, scheme.primary, PLAYLIST_GROUND_DEPTH)
 }
 
+/** [playlistPageGround] for a scheme held outside composition: the same rule, the same color. */
+internal fun androidx.compose.material3.ColorScheme.playlistGround(): Color =
+    if (background.luminance() < 0.5f) primaryContainer else lerp(primaryContainer, primary, PLAYLIST_GROUND_DEPTH)
+
 /**
  * Ink for text standing on [playlistPageGround] or [playlistRaisedSurface].
  *
