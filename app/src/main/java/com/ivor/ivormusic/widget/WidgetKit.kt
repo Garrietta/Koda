@@ -65,9 +65,12 @@ import com.ivor.ivormusic.R
  * available, that round-against-square contrast is the whole hierarchy: one
  * round primary-filled control per widget, everything else tonal and square.
  *
- * **Color is Koda's palette**, resolved by [KodaWidgetTheme], not raw system
- * dynamic color and not sampled out of the artwork. There is no literal color
- * in widget content: nothing is drawn over the cover, so nothing needs a scrim.
+ * **Each widget is one of Home's tiles.** The card is the playing cover's
+ * most vivid color, or the DJ tile's with nothing playing, in the tile's
+ * shape (three round corners, one tight), and every other role is stepped
+ * from it as a Home page's are ([KodaWidgetTheme.blockColors]): the hero
+ * is the ink, the other controls a tonal step off the card. The colors are
+ * computed, never literal, and nothing is drawn over the cover.
  *
  * Container radii come from tinted shape drawables because
  * `GlanceModifier.cornerRadius` is a no-op below API 31 and minSdk here is 30;
@@ -79,6 +82,8 @@ import com.ivor.ivormusic.R
 /** M3 corner-radius scale, as the drawables that back it. */
 internal object WidgetShape {
     @DrawableRes val Full = R.drawable.widget_shape_full
+    /** A Home tile: round corners and one tight one, as the DJ tile has. */
+    @DrawableRes val Tile = R.drawable.widget_shape_tile
     @DrawableRes val ExtraLarge = R.drawable.widget_shape_xlarge
     @DrawableRes val LargeIncreased = R.drawable.widget_shape_large_increased
     @DrawableRes val Large = R.drawable.widget_shape_large
@@ -122,13 +127,13 @@ internal fun widgetString(@StringRes id: Int): String = LocalContext.current.get
 @Composable
 internal fun WidgetSurface(
     modifier: GlanceModifier = GlanceModifier,
-    background: ColorProvider? = GlanceTheme.colors.widgetBackground,
+    background: ColorProvider? = GlanceTheme.colors.background,
     openAppOnTap: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     var surface = modifier.fillMaxSize()
     if (background != null) {
-        surface = surface.shaped(WidgetShape.ExtraLarge, background)
+        surface = surface.shaped(WidgetShape.Tile, background)
     }
     if (openAppOnTap) {
         surface = surface.cornerRadius(28.dp).clickable(actionStartActivity<MainActivity>())
@@ -214,11 +219,9 @@ internal fun WidgetSquareButton(
  * A secondary control on a card, one tonal step off the card itself.
  *
  * [WidgetSquareButton]'s surfaceVariant default is for controls standing on
- * the wallpaper (Bloom, Vinyl). On a card it is the wrong family:
- * `widgetBackground` is secondaryContainer moved five tones lighter in light
- * and ten darker in dark (Glance's own adjustment, read off the AAR), so the
- * unadjusted secondaryContainer is exactly one visible step from the card in
- * both themes and stays in its hue, where surfaceVariant read as a grey patch.
+ * the wallpaper (Bloom, Vinyl). On a card, secondaryContainer is the tonal
+ * step off the card's own color, the same step a Home page's Shuffle pill
+ * takes, so the control reads as the card's and not as a grey patch.
  */
 @Composable
 internal fun CardSquareButton(

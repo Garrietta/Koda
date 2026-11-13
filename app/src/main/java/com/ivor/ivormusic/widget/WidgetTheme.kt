@@ -10,6 +10,7 @@ import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.ui.theme.ThemeMode
 import com.ivor.ivormusic.ui.theme.buildSeedColorScheme
 import com.ivor.ivormusic.ui.theme.kodaColorScheme
+import com.ivor.ivormusic.ui.home.onBlock
 
 /**
  * The widget family draws in Koda's palette, not in raw system dynamic color.
@@ -46,6 +47,29 @@ internal object KodaWidgetTheme {
                 light = kodaColorScheme(context, false, palette, amoled, style),
                 dark = kodaColorScheme(context, true, palette, amoled, style),
             )
+        }
+    }
+
+    /**
+     * The widget as one of Home's tiles: the playing cover's most vivid
+     * color as the card, and every role stepped from it the way a Home
+     * page's are ([onBlock]), so the hero is the ink and the other
+     * controls a tonal step off the card. With nothing playing, or a cover
+     * with no color to speak of, it is the DJ tile's colors.
+     */
+    fun blockColors(context: Context, artworkColor: Int?): ColorProviders {
+        val prefs = ThemePreferences(context)
+        val palette = prefs.colorPalette.value
+        val amoled = prefs.amoledTheme.value
+        val style = prefs.paletteStyle.value
+        val block = artworkColor?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(Color(it)) }
+        fun tile(dark: Boolean) = kodaColorScheme(context, dark, palette, amoled, style).let { scheme ->
+            scheme.onBlock(block?.container ?: scheme.primaryContainer, block?.onContainer ?: scheme.onPrimaryContainer)
+        }
+        return when (prefs.themeMode.value) {
+            ThemeMode.LIGHT -> tile(false).let { ColorProviders(light = it, dark = it) }
+            ThemeMode.DARK -> tile(true).let { ColorProviders(light = it, dark = it) }
+            ThemeMode.SYSTEM -> ColorProviders(light = tile(false), dark = tile(true))
         }
     }
 

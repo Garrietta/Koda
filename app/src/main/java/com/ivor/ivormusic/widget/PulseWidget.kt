@@ -65,7 +65,7 @@ class PulseWidget : GlanceAppWidget() {
             // while updateAll only recomposes, so a value read out here would
             // never change again for the life of that session.
             val ui by PlayerWidgetHost.state.collectAsState()
-            GlanceTheme(colors = KodaWidgetTheme.colors(context)) {
+            GlanceTheme(colors = KodaWidgetTheme.blockColors(context, ui.snapshot.artworkColor)) {
                 PulseContent(ui)
             }
         }
@@ -96,7 +96,7 @@ private fun PulseStrip(ui: PlayerWidgetUi, withNext: Boolean) {
             .padding(horizontal = CARD_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WidgetArtwork(ui.artwork, size = 48.dp, shape = ArtworkShape.SQUIRCLE)
+        WidgetArtwork(ui.artwork, size = 48.dp, shape = ArtworkShape.COOKIE)
         Spacer(modifier = GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             PulseTitle(ui.snapshot, fontSize = 14.sp, maxLines = 1)
@@ -147,7 +147,7 @@ private fun PulseCard(ui: PlayerWidgetUi, width: Dp, height: Dp) {
         modifier = GlanceModifier.fillMaxSize().padding(CARD_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WidgetArtwork(ui.artwork, size = cover, shape = ArtworkShape.SQUIRCLE)
+        WidgetArtwork(ui.artwork, size = cover, shape = ArtworkShape.COOKIE)
         Spacer(modifier = GlanceModifier.width(COVER_GAP))
         Column(modifier = GlanceModifier.defaultWeight().height(cover)) {
             PulseTitle(

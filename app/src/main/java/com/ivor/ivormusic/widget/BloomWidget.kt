@@ -68,7 +68,7 @@ class BloomWidget : GlanceAppWidget() {
         PlayerWidgetHost.ensureSeeded(context)
         provideContent {
             val ui by PlayerWidgetHost.state.collectAsState()
-            GlanceTheme(colors = KodaWidgetTheme.colors(context)) {
+            GlanceTheme(colors = KodaWidgetTheme.blockColors(context, ui.snapshot.artworkColor)) {
                 BloomContent(ui)
             }
         }

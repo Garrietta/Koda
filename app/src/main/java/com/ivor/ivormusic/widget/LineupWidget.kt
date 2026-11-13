@@ -59,7 +59,7 @@ class LineupWidget : GlanceAppWidget() {
         PlayerWidgetHost.ensureSeeded(context)
         provideContent {
             val ui by PlayerWidgetHost.state.collectAsState()
-            GlanceTheme(colors = KodaWidgetTheme.colors(context)) {
+            GlanceTheme(colors = KodaWidgetTheme.blockColors(context, ui.snapshot.artworkColor)) {
                 LineupContent(ui)
             }
         }
@@ -106,7 +106,7 @@ private fun LineupHeader(ui: PlayerWidgetUi) {
         modifier = GlanceModifier.fillMaxWidth().height(HEADER),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WidgetArtwork(ui.artwork, size = HEADER, shape = ArtworkShape.SQUIRCLE)
+        WidgetArtwork(ui.artwork, size = HEADER, shape = ArtworkShape.COOKIE)
         Spacer(modifier = GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             WidgetTitle(
