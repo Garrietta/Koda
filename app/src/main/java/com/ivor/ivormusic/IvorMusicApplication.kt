@@ -31,6 +31,8 @@ class IvorMusicApplication : Application(), ImageLoaderFactory {
         // file to offer on the next launch. It wraps - never replaces - the
         // platform handler.
         CrashReporter.install(this)
+        // Browse responses kept on disk, so pages seen before open at once.
+        com.ivor.ivormusic.data.youtube.BrowseCache.init(cacheDir)
         // Reconcile the persisted periodic job with the user's current opt-in.
         // The setting handler does the same immediately when the value changes.
         com.ivor.ivormusic.work.UploadCheckWorker.sync(this)
@@ -92,5 +94,27 @@ class IvorMusicApplication : Application(), ImageLoaderFactory {
                 add(LocalVideoThumbnailFetcher.Factory(this@IvorMusicApplication))
                 add(LocalVideoThumbnailFetcher.ThumbnailKeyer())
             }
+            // A music app is mostly pictures, and a picture seen once should
+            // never be waited for again: a third of the app's memory for
+            // decoded images, a gigabyte on disk, and covers kept whatever
+            // the server says about how long they last (cover URLs do not
+            // change under the same address).
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(IMAGE_MEMORY_SHARE)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(IMAGE_DISK_BYTES)
+                    .build()
+            }
+            .respectCacheHeaders(false)
             .build()
+
+    private companion object {
+        const val IMAGE_MEMORY_SHARE = 0.33
+        const val IMAGE_DISK_BYTES = 1024L * 1024 * 1024
+    }
 }

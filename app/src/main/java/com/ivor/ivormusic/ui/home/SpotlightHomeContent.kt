@@ -259,6 +259,13 @@ fun SpotlightHomeContent(
     }
     val gridWidth = com.ivor.ivormusic.ui.theme.windowDpSize().width
     val homeSearch = rememberHomeSearch(viewModel, librarySongs, ownPlaylists)
+    // The covers and photos the pages will want, fetched ahead to disk.
+    PrefetchArt(key = listOf(likedSongs.size, recentlyPlayed.size, ownPlaylists.size, artistPhotos.size)) {
+        likedSongs.take(150).map { it.thumbnailUrl ?: it.albumArtUri?.toString() } +
+            recentlyPlayed.take(40).flatMap { listOf(it.thumbnailUrl ?: it.albumArtUri?.toString(), it.highResThumbnailUrl) } +
+            ownPlaylists.map { it.thumbnailUrl } +
+            artistPhotos.values
+    }
 
 
     // What a block's page lists, for whichever filter the block set.

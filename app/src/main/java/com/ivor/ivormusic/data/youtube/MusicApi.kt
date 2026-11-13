@@ -73,10 +73,23 @@ internal class MusicApi(
      * cookies are attached when logged in so results are personalized.
      * Unlike [fetchInternalApi], this does NOT require a login.
      */
-    fun browseMusic(browseId: String, params: String? = null): String? =
-        postMusicMetadata("browse", JSONObject().put("browseId", browseId).apply {
+    /**
+     * A music browse, answered from [BrowseCache] while its copy is fresh,
+     * and from any copy when the network gives nothing. [fresh] skips the
+     * cache for reads that act on what they return (a playlist's set ids
+     * before an edit).
+     */
+    fun browseMusic(browseId: String, params: String? = null, fresh: Boolean = false): String? {
+        val ttl = if (fresh) null else BrowseCache.ttlFor(browseId)
+        val key = BrowseCache.key(browseId, params)
+        if (ttl != null) BrowseCache.get(key, ttl)?.let { return it }
+        val body = postMusicMetadata("browse", JSONObject().put("browseId", browseId).apply {
             if (params != null) put("params", params)
         })?.toString()
+        if (ttl == null) return body
+        if (body != null) BrowseCache.put(key, body) else return BrowseCache.get(key, maxAgeMs = null)
+        return body
+    }
 
     fun fetchInternalApi(endpoint: String): String {
         val session = sessionManager.captureSession() ?: return ""
@@ -217,6 +230,8 @@ internal class MusicApi(
      * hash is rejected here). Returns the raw body or null on failure.
      */
     fun postMusicApi(endpoint: String, body: JSONObject): String? {
+        // An account write may change a playlist: its kept copies go.
+        BrowseCache.forgetPlaylists()
         val session = sessionManager.captureSession() ?: return null
         // Signing is not optional here: these are account writes, and an
         // unsigned one answers 200 having done nothing.

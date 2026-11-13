@@ -3443,6 +3443,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Search Wrapper Functions for UI
      */
+    /**
+     * Artist names already resolved to channel ids, kept across launches:
+     * opening an artist by name searches for them only the first time.
+     */
+    private val artistIds by lazy { getApplication<android.app.Application>().getSharedPreferences("artist_ids", android.content.Context.MODE_PRIVATE) }
+
+    fun knownArtistId(name: String): String? = artistIds.getString(name.trim().lowercase(), null)
+
+    fun rememberArtistId(name: String, id: String) {
+        if (id.startsWith("UC")) artistIds.edit().putString(name.trim().lowercase(), id).apply()
+    }
+
     suspend fun searchArtists(query: String): List<ArtistItem> {
         if (query.isBlank()) return emptyList()
         val key = searchKey(query)

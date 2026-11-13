@@ -402,8 +402,10 @@ fun ArtistScreen(
             viewModel.hasNetworkConnection()
         ) {
             val exactId = artistId?.takeIf { it.startsWith("UC") }
+                ?: viewModel.knownArtistId(artistName)
                 ?: viewModel.searchArtists(artistName)
                     .firstOrNull { it.name.equals(artistName, ignoreCase = true) }?.id
+                    ?.also { viewModel.rememberArtistId(artistName, it) }
             exactId?.let { id -> viewModel.getArtistPage(id)?.let { id to it } }
                 ?.takeIf { (_, page) -> page.songs.isNotEmpty() }
         } else null
@@ -427,11 +429,14 @@ fun ArtistScreen(
         } else if (viewModel != null) {
             // Resolve a channel id when the caller only knows the name
             // (e.g. Library navigation passes the artist name as the id).
+            // A name resolved once is kept, so the page (itself kept by the
+            // browse cache) opens without a search first.
             val resolvedId = artistId?.takeIf { it.startsWith("UC") }
+                ?: viewModel.knownArtistId(artistName)
                 ?: viewModel.searchArtists(artistName).let { results ->
                     (results.firstOrNull { it.name.equals(artistName, ignoreCase = true) }
                         ?: results.firstOrNull())?.id
-                }
+                }?.also { viewModel.rememberArtistId(artistName, it) }
 
             resolvedChannelId = resolvedId
             if (resolvedId != null) {

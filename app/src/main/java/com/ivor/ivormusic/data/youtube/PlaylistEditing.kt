@@ -267,7 +267,7 @@ internal class PlaylistEditing(
         withContext(Dispatchers.IO) {
             if (!sessionManager.isLoggedIn()) return@withContext emptyMap()
             val browseId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
-            var raw = musicApi.browseMusic(browseId) ?: return@withContext emptyMap()
+            var raw = musicApi.browseMusic(browseId, fresh = true) ?: return@withContext emptyMap()
             try {
                 val idsByVideo = linkedMapOf<String, MutableList<String>>()
                 val seenTokens = mutableSetOf<String>()
