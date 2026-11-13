@@ -251,10 +251,16 @@ class BlocksHomeScreenshotTest {
      * headed by the count and running time with Edit in the page's ink.
      */
     @Test
-    fun liked_page() {
+    fun liked_page() = likedPage("liked_page", dark = false)
+
+    /** Your Likes in dark mode: the tile turned inside out, a black page written in the Liked tile's cream. */
+    @Test
+    fun liked_page_dark() = likedPage("liked_page_dark", dark = true)
+
+    private fun likedPage(name: String, dark: Boolean) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+            IvorMusicTheme(darkTheme = dark, colorPalette = RONDO_PALETTE_ID) {
                 val (ground, ink) = BlockKind.Liked.colors(MaterialTheme.colorScheme)
                 BlockReveal(open = true, origin = null, container = ground, content = ink, onDismiss = {}) {
                     androidx.compose.runtime.CompositionLocalProvider(
@@ -283,7 +289,7 @@ class BlocksHomeScreenshotTest {
             }
         }
         compose.mainClock.advanceTimeBy(2_000)
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/liked_page.png")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
     /** Home unfolded: two columns, the whole width, the recent covers grown to fill their half. */

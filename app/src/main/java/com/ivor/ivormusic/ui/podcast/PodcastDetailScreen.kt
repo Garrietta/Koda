@@ -90,6 +90,9 @@ fun PodcastDetailScreen(
 
     val ground = MaterialTheme.colorScheme.background
     val layoutDirection = LocalLayoutDirection.current
+    // The cover runs up under the status bar (and whatever bar the page
+    // sits under); only the back arrow keeps clear of it.
+    val topInset = contentPadding.calculateTopPadding()
 
     LazyColumn(
         modifier = Modifier
@@ -97,7 +100,6 @@ fun PodcastDetailScreen(
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(
             start = contentPadding.calculateStartPadding(layoutDirection),
-            top = contentPadding.calculateTopPadding(),
             end = contentPadding.calculateEndPadding(layoutDirection),
             bottom = contentPadding.calculateBottomPadding() + 24.dp,
         ),
@@ -107,7 +109,7 @@ fun PodcastDetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(320.dp)
+                    .height(320.dp + topInset)
             ) {
                 // Artwork (or gradient placeholder).
                 if (feed.artworkUrl != null) {
@@ -158,7 +160,7 @@ fun PodcastDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(96.dp)
+                        .height(96.dp + topInset)
                         .align(Alignment.TopCenter)
                         .background(
                             Brush.verticalGradient(
@@ -174,7 +176,7 @@ fun PodcastDetailScreen(
                     onClick = onBack,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(8.dp),
+                        .padding(start = 8.dp, top = topInset + 8.dp),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,

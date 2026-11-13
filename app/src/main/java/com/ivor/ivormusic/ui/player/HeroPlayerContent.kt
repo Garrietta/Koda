@@ -164,14 +164,17 @@ fun HeroPlayerSheetContent(
     // the whole screen it read loud (feedback, September 2026). The field is
     // taken halfway down to the surface there: still the cover's colour, but a
     // ground the play disc stands up out of rather than one it competes with.
-    // The ink roles only gain contrast from it. Light schemes keep the pastel.
+    // Light schemes keep the pastel. The ink is picked against the field as
+    // drawn: a cover whose container is light (a sky blue) carries dark ink,
+    // which vanishes once the field is taken down, so there the theme's
+    // light text takes over.
     val scheme = MaterialTheme.colorScheme
     val field = if (scheme.surface.luminance() < 0.5f) {
         lerp(scheme.primaryContainer, scheme.surface, HERO_DARK_FIELD_DEPTH)
     } else {
         scheme.primaryContainer
     }
-    val ink = MaterialTheme.colorScheme.onPrimaryContainer
+    val ink = com.ivor.ivormusic.ui.theme.readableOn(field, scheme.onPrimaryContainer, scheme.onSurface)
     val accent = MaterialTheme.colorScheme.primary
     val onAccent = MaterialTheme.colorScheme.onPrimary
     val sleepTimer = rememberSleepTimerControl(viewModel = viewModel)

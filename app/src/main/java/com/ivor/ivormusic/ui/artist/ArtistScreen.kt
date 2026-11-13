@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.artist
 
+import com.ivor.ivormusic.ui.home.asPage
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.FilledTonalButton
@@ -1150,14 +1151,21 @@ internal fun ArtistPopupOverview(
     val block = seed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
     // A plain ground until the picture has been read, then its color
     // fading in, rather than another color first and a jump to the
-    // picture's once it arrives. A grey picture keeps the plain one.
-    val ground by androidx.compose.animation.animateColorAsState(
+    // picture's once it arrives. A grey picture keeps the plain one. In
+    // dark mode the page is black throughout and the picture's color
+    // fades into the ink instead.
+    val blackPages = com.ivor.ivormusic.ui.home.LocalBlackPages.current
+    val tile = com.ivor.ivormusic.ui.home.BlockTile(
         block?.container ?: base.surfaceContainerHigh,
+        block?.onContainer ?: base.onSurface,
+    ).asPage(blackPages)
+    val ground by androidx.compose.animation.animateColorAsState(
+        tile.ground,
         androidx.compose.animation.core.tween(ARTIST_COLOR_FADE_MS),
         label = "artist ground",
     )
     val ink by androidx.compose.animation.animateColorAsState(
-        block?.onContainer ?: base.onSurface,
+        tile.ink,
         androidx.compose.animation.core.tween(ARTIST_COLOR_FADE_MS),
         label = "artist ink",
     )

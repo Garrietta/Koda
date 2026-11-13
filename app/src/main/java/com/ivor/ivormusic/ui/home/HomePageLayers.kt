@@ -63,7 +63,7 @@ internal fun HomePageLayers(
             ) {
                 // Only a page grown from a tile wears the tile; one grown
                 // from a fingertip keeps its own colors.
-                CompositionLocalProvider(LocalBlockTile provides entry.tile) {
+                CompositionLocalProvider(LocalBlockTile provides entry.tile?.asPage(LocalBlackPages.current)) {
                     when (val page = entry.page) {
                         HomePage.Explore -> ExplorePage(
                             songs = songs,

@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
@@ -128,6 +129,17 @@ private val BLOCK_PAGE_SPRING = androidx.compose.animation.core.spring<Float>(da
 internal class BlockTile(val ground: Color, val ink: Color)
 
 internal val LocalBlockTile = androidx.compose.runtime.compositionLocalOf<BlockTile?> { null }
+
+/**
+ * True inside a page opened from Home while the app is dark. Such a page
+ * is black, with its tile's color as the ink ([asPage]); a page that
+ * picks its own colors (an artist's, a cover's) turns them the same way.
+ */
+internal val LocalBlackPages = androidx.compose.runtime.compositionLocalOf { false }
+
+/** The tile as its page wears it: as it is in light, turned inside out onto black in dark. */
+internal fun BlockTile.asPage(black: Boolean): BlockTile =
+    if (black) BlockTile(com.ivor.ivormusic.ui.theme.PageBlack, com.ivor.ivormusic.ui.theme.blackPageInk(ground, ink)) else this
 
 /**
  * Where a page tells the window it grows in what its own ground is, so
@@ -342,12 +354,17 @@ internal fun BlockReveal(
     // so it decides whether the icons are dark or light: white icons on
     // the cream Library page would be unreadable.
     val scheme = MaterialTheme.colorScheme
-    val pageGround = if (appColors) scheme.background else ground
-    val pageInk = if (appColors) scheme.onBackground else ink
-    com.ivor.ivormusic.ui.theme.StatusBarAppearance(pageGround)
+    // In dark mode the page is the tile turned inside out: black, in the tile's color.
+    val black = scheme.background.luminance() < 0.5f
+    val pageTile = remember(ground, ink, black) { BlockTile(ground, ink).asPage(black) }
+    val pageGround = if (appColors) scheme.background else pageTile.ground
+    val pageInk = if (appColors) scheme.onBackground else pageTile.ink
+    com.ivor.ivormusic.ui.theme.StatusBarAppearance(reportedGround.value ?: pageGround)
     BackHandler(enabled = open, onBack = onDismiss)
     var hostInRoot by remember { mutableStateOf(Offset.Zero) }
-    val pageScheme = remember(scheme, ground, ink, appColors) { if (appColors) scheme else scheme.onBlock(ground, ink) }
+    val pageScheme = remember(scheme, pageTile, appColors) {
+        if (appColors) scheme else scheme.onBlock(pageTile.ground, pageTile.ink)
+    }
     val contentShown = { ((progress.value - CONTENT_FROM) / (CONTENT_BY - CONTENT_FROM)).coerceIn(0f, 1f) }
     Box(
         Modifier
@@ -376,8 +393,19 @@ internal fun BlockReveal(
             }
             .drawBehind {
                 // The tile's color, giving way to the page's own ground as
-                // the page appears (the same color when the page is in the tile's).
-                drawRect(reportedGround.value ?: if (appColors) lerp(ground, pageGround, contentShown()) else ground)
+                // the page appears (the same color when the page is in the
+                // tile's), and back to the tile's as it closes into it. A
+                // page grown from a fingertip has no tile to start from and
+                // is its own ground throughout.
+                val shown = contentShown()
+                val reported = reportedGround.value
+                drawRect(
+                    when {
+                        reported == null -> lerp(ground, pageGround, shown)
+                        heldFace != null -> lerp(ground, reported, shown)
+                        else -> reported
+                    },
+                )
             }
             // The Home underneath is not pressed through the page.
             .pointerInput(Unit) { detectTapGestures { } },
@@ -389,7 +417,8 @@ internal fun BlockReveal(
                 // Text that names no color takes the ink too, not the app's own text color.
                 CompositionLocalProvider(
                     LocalContentColor provides pageInk,
-                    LocalBlockTile provides BlockTile(ground, ink),
+                    LocalBlockTile provides pageTile,
+                    LocalBlackPages provides black,
                     LocalPopupPage provides true,
                     LocalRevealGround provides reportedGround,
                     content = page,

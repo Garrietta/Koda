@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.library
 
+import com.ivor.ivormusic.ui.home.asPage
 import com.ivor.ivormusic.ui.components.DismissibleSnackbarHost
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -1299,9 +1300,13 @@ fun PlaylistDetailScreen(
     // Over Home, a record with a cover is a page in the cover's color the
     // way Your Likes is in its tile's: the cover's ground, and every role
     // stepped from it, so its header can be the Home pages' header.
+    // In dark mode it is turned inside out like every page over Home:
+    // black, written in the cover's color.
+    val blackPages = com.ivor.ivormusic.ui.home.LocalBlackPages.current
     val tileGround = blockTile?.takeIf { heroArt == null }
         ?: if (popupPage && heroArt != null) {
             com.ivor.ivormusic.ui.home.BlockTile(coverScheme.playlistGround(), coverScheme.onPrimaryContainer)
+                .asPage(blackPages)
         } else null
     val baseScheme = MaterialTheme.colorScheme
     val artworkScheme = remember(tileGround, coverScheme, baseScheme) {
