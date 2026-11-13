@@ -29,7 +29,8 @@ import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Podcasts
-import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -74,13 +75,13 @@ import com.ivor.ivormusic.data.Song
  */
 
 /** Everything on Home that can be opened. */
-internal enum class BlockKind { Dj, ForYou, Liked, Episodes, Recent, QuickPicks, Playlists, Artists, Albums, Charts, NewReleases, Explore }
+internal enum class BlockKind { Dj, ForYou, Liked, Episodes, Recent, QuickPicks, Playlists, Artists, Albums, Charts, NewReleases, Explore, Downloads }
 
 /** The color a block has on Home, and so the color of the page it opens. */
 internal fun BlockKind.colors(scheme: ColorScheme): Pair<Color, Color> = when (this) {
     BlockKind.Dj, BlockKind.QuickPicks, BlockKind.Explore -> scheme.primaryContainer to scheme.onPrimaryContainer
     BlockKind.ForYou, BlockKind.NewReleases, BlockKind.Albums -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-    BlockKind.Episodes, BlockKind.Charts, BlockKind.Artists -> scheme.secondaryContainer to scheme.onSecondaryContainer
+    BlockKind.Episodes, BlockKind.Charts, BlockKind.Artists, BlockKind.Downloads -> scheme.secondaryContainer to scheme.onSecondaryContainer
     BlockKind.Liked, BlockKind.Playlists -> scheme.inverseSurface to scheme.inverseOnSurface
     BlockKind.Recent -> scheme.surfaceContainer to scheme.onSurface
 }
@@ -328,32 +329,6 @@ internal fun BlocksHome(
         }
     }
 
-    // Explore, drawn as the search it opens with: a page of search and
-    // shelves, the way into anything not already on Home.
-    val exploreTile: @Composable () -> Unit = {
-        val (badge, onBadge) = BlockKind.Explore.colors(scheme)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .block(BlockKind.Explore, CircleShape, scheme.surfaceContainer)
-                .padding(start = 10.dp, end = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Box(Modifier.size(44.dp).clip(CircleShape).background(badge), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.Search, contentDescription = null, tint = onBadge, modifier = Modifier.size(24.dp))
-            }
-            Text(
-                stringResource(R.string.search_hint),
-                style = MaterialTheme.typography.titleSmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-
     // For going deeper: each a badge in the color its page will be, on a plain tile.
     val smallTiles: @Composable () -> Unit = {
         for (pair in SMALL_BLOCKS.chunked(2)) {
@@ -399,7 +374,6 @@ internal fun BlocksHome(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     recentPanel(128.dp)
-                    exploreTile()
                     smallTiles()
                 }
             }
@@ -408,7 +382,6 @@ internal fun BlocksHome(
                 djTile(Modifier.fillMaxWidth().height(172.dp))
                 pairTiles(230.dp)
                 recentPanel(72.dp)
-                exploreTile()
                 smallTiles()
             }
         }
@@ -437,6 +410,8 @@ private val SMALL_BLOCKS = listOf(
     SmallBlock(BlockKind.Charts, Icons.Rounded.BarChart, R.string.filter_charts, SquareBadge),
     SmallBlock(BlockKind.QuickPicks, Icons.Rounded.Shuffle, R.string.spotlight_quick_picks, LeafBadge),
     SmallBlock(BlockKind.NewReleases, Icons.Rounded.NewReleases, R.string.filter_new_releases, CircleShape),
+    SmallBlock(BlockKind.Explore, Icons.Rounded.Explore, R.string.filter_explore, SquareBadge),
+    SmallBlock(BlockKind.Downloads, Icons.Rounded.Download, R.string.cd_downloads, LeafBadge),
 )
 
 @Composable

@@ -216,12 +216,14 @@ fun SpotlightHomeContent(
         filter.browseKey()?.let { viewModel.loadMusicBrowse(it) }
     }
 
-    val quickPicks = remember(filter, songs, likedSongs, recentlyPlayed, discoverySongs, newEpisodes) {
+    val downloadedSongs by viewModel.downloadedSongs.collectAsState()
+    val quickPicks = remember(filter, songs, likedSongs, recentlyPlayed, discoverySongs, newEpisodes, downloadedSongs) {
         when (filter) {
             SpotlightFilter.Liked -> likedSongs
             SpotlightFilter.Recent -> recentlyPlayed
             SpotlightFilter.Recommended -> discoverySongs
             SpotlightFilter.Podcasts -> newEpisodes
+            SpotlightFilter.Downloads -> downloadedSongs
             SpotlightFilter.MusicHome, SpotlightFilter.Explore, SpotlightFilter.Charts, SpotlightFilter.NewReleases,
             SpotlightFilter.Artists, SpotlightFilter.Albums -> emptyList()
             else -> songs
@@ -256,6 +258,7 @@ fun SpotlightHomeContent(
         if (filter == SpotlightFilter.Albums) libraryAlbums(librarySongs, playCounts) else emptyList()
     }
     val gridWidth = com.ivor.ivormusic.ui.theme.windowDpSize().width
+    val homeSearch = rememberHomeSearch(viewModel, librarySongs, ownPlaylists)
 
 
     // What a block's page lists, for whichever filter the block set.
@@ -611,7 +614,19 @@ fun SpotlightHomeContent(
                     )
                 }
 
-                item(key = "blocks") {
+                // Search at the top of Home, searching as it is typed into:
+                // while there is a query, its results take the tiles' place.
+                item(key = "search") {
+                    HomeSearchField(homeSearch, Modifier.padding(top = 4.dp, bottom = 6.dp))
+                }
+                if (homeSearch.active) {
+                    homeSearchResults(
+                        homeSearch,
+                        onPlaySongs = onPlaySongs,
+                        onSongLongPress = onSongLongPress,
+                        onOpenPage = { page -> onOpenPage(page, null) },
+                    )
+                } else item(key = "blocks") {
                     BlocksHome(
                         likedCount = likedSongs.size,
                         newEpisodes = newEpisodes,
@@ -859,6 +874,7 @@ enum class SpotlightFilter(val label: String, val quickPickCaption: String?) {
     Playlists("Playlists", null),
     Artists("Artists", null),
     Albums("Albums", null),
+    Downloads("Downloads", null),
 }
 
 /** The filter a block's page lists. Quick picks is the unfiltered page. */
@@ -872,6 +888,7 @@ private fun BlockKind.filter(): SpotlightFilter = when (this) {
     BlockKind.Explore -> SpotlightFilter.Explore
     BlockKind.Artists -> SpotlightFilter.Artists
     BlockKind.Albums -> SpotlightFilter.Albums
+    BlockKind.Downloads -> SpotlightFilter.Downloads
     else -> SpotlightFilter.All
 }
 
@@ -905,6 +922,7 @@ private fun spotlightFilterLabel(filter: SpotlightFilter): String = when (filter
     SpotlightFilter.NewReleases -> stringResource(R.string.filter_new_releases)
     SpotlightFilter.Artists -> stringResource(R.string.section_artists)
     SpotlightFilter.Albums -> stringResource(R.string.section_albums)
+    SpotlightFilter.Downloads -> stringResource(R.string.cd_downloads)
 }
 
 @Composable

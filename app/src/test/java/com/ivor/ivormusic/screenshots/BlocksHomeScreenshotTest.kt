@@ -20,6 +20,7 @@ import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.ui.home.BlockKind
 import com.ivor.ivormusic.ui.home.BlockPageHero
 import com.ivor.ivormusic.ui.home.albumGridItems
+import com.ivor.ivormusic.ui.home.homeSearchResults
 import com.ivor.ivormusic.ui.home.HERO_BUTTON_HEIGHT
 import com.ivor.ivormusic.ui.home.BlockReveal
 import com.ivor.ivormusic.ui.home.BlocksHome
@@ -385,6 +386,31 @@ class BlocksHomeScreenshotTest {
         }
         compose.mainClock.advanceTimeBy(2_000)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/album_page_header.png")
+    }
+
+    /** Home while searching: the field at the top, the results where the tiles were. */
+    @Test
+    fun home_search() {
+        compose.mainClock.autoAdvance = false
+        val search = com.ivor.ivormusic.ui.home.HomeSearchState().apply {
+            query = "tyler"
+            songs = List(3, ::song)
+            artists = listOf(
+                com.ivor.ivormusic.ui.home.SearchArtist("Tyler Childers", null, null),
+                com.ivor.ivormusic.ui.home.SearchArtist("Tyler, The Creator", null, null),
+            )
+            albums = listOf(com.ivor.ivormusic.ui.home.HomePage.DeviceAlbum("Rustin' in the Rain"), com.ivor.ivormusic.ui.home.HomePage.DeviceAlbum("Can I Take My Hounds"))
+        }
+        compose.setContent {
+            IvorMusicTheme(darkTheme = false, colorPalette = RONDO_PALETTE_ID) {
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(top = 24.dp)) {
+                    item { com.ivor.ivormusic.ui.home.HomeSearchField(search) }
+                    homeSearchResults(search, onPlaySongs = { _, _ -> }, onSongLongPress = null, onOpenPage = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/home_search.png")
     }
 
     @Test

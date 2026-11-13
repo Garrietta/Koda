@@ -261,8 +261,9 @@ fun ExploreContent(
             )
         }
 
-        // Search bar: no auto-focus, keyboard only opens on tap.
-        item(key = "explore_search") {
+        // Search bar: no auto-focus, keyboard only opens on tap. Over Home
+        // Explore is the shelves alone: search is the field at Home's top.
+        if (!popup) item(key = "explore_search") {
             androidx.compose.material3.OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
