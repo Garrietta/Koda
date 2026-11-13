@@ -132,6 +132,21 @@ internal class BlockTile(val ground: Color, val ink: Color)
 
 internal val LocalBlockTile = androidx.compose.runtime.compositionLocalOf<BlockTile?> { null }
 
+/**
+ * Where a page tells the window it grows in what its own ground is, so
+ * the window grows and shrinks in the page's color: an artist page opened
+ * from a fingertip closes as its own color shrinking away, not as a plain
+ * box left behind once the page has faded.
+ */
+internal val LocalRevealGround = androidx.compose.runtime.compositionLocalOf<androidx.compose.runtime.MutableState<Color?>?> { null }
+
+/** Tells the window this page grows in that [color] is the page's ground. */
+@Composable
+internal fun ReportRevealGround(color: Color) {
+    val sink = LocalRevealGround.current
+    androidx.compose.runtime.SideEffect { sink?.value = color }
+}
+
 /** How much of the tile's face shows at window progress [p]. */
 internal fun faceAlpha(p: Float): Float = (1f - p / FACE_GONE_BY).coerceIn(0f, 1f)
 
@@ -233,6 +248,7 @@ internal fun BlockReveal(
     var ground by remember { mutableStateOf(container) }
     var ink by remember { mutableStateOf(content) }
     var heldFace by remember { mutableStateOf(face) }
+    val reportedGround = remember { mutableStateOf<Color?>(null) }
     val openSpec = BLOCK_PAGE_SPRING
     val closeSpec = PLAYER_CONTAINER_SPRING
     LaunchedEffect(open) {
@@ -328,7 +344,7 @@ internal fun BlockReveal(
             .drawBehind {
                 // The tile's color, giving way to the page's own ground as
                 // the page appears (the same color when the page is in the tile's).
-                drawRect(if (appColors) lerp(ground, pageGround, contentShown()) else ground)
+                drawRect(reportedGround.value ?: if (appColors) lerp(ground, pageGround, contentShown()) else ground)
             }
             // The Home underneath is not pressed through the page.
             .pointerInput(Unit) { detectTapGestures { } },
@@ -342,6 +358,7 @@ internal fun BlockReveal(
                     LocalContentColor provides pageInk,
                     LocalBlockTile provides BlockTile(ground, ink),
                     LocalPopupPage provides true,
+                    LocalRevealGround provides reportedGround,
                     content = page,
                 )
             }

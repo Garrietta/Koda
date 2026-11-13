@@ -1860,8 +1860,8 @@ private fun SearchSongCard(
                     contentAlignment = Alignment.Center
                 ) {
                     if (song.albumArtUri != null || song.thumbnailUrl != null) {
-                        AsyncImage(
-                            model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl,
+                        com.ivor.ivormusic.ui.components.SongArtwork(
+                            song,
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -2031,8 +2031,8 @@ private fun SearchTopResultCard(
             .songRowClick(onClick = onPlay, onLongClick = onLongClick)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            AsyncImage(
-                model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl,
+            com.ivor.ivormusic.ui.components.SongArtwork(
+                song,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

@@ -1143,11 +1143,23 @@ internal fun ArtistPopupOverview(
     val base = MaterialTheme.colorScheme
     val seed = com.ivor.ivormusic.ui.player.rememberArtworkSeed(enabled = photo != null, albumArtUri = photo)
     val block = seed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
-    val ground = block?.container ?: base.tertiaryContainer
-    val ink = block?.onContainer ?: base.onTertiaryContainer
+    // A plain ground until the picture has been read, then its color
+    // fading in, rather than another color first and a jump to the
+    // picture's once it arrives. A grey picture keeps the plain one.
+    val ground by androidx.compose.animation.animateColorAsState(
+        block?.container ?: base.surfaceContainerHigh,
+        androidx.compose.animation.core.tween(ARTIST_COLOR_FADE_MS),
+        label = "artist ground",
+    )
+    val ink by androidx.compose.animation.animateColorAsState(
+        block?.onContainer ?: base.onSurface,
+        androidx.compose.animation.core.tween(ARTIST_COLOR_FADE_MS),
+        label = "artist ink",
+    )
     val scheme = remember(base, ground, ink) {
         base.onBlock(ground, ink)
     }
+    com.ivor.ivormusic.ui.home.ReportRevealGround(ground)
     com.ivor.ivormusic.ui.theme.StatusBarAppearance(ground)
     MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides ink) {
@@ -1354,6 +1366,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.releaseShelf(
         }
     }
 }
+
+/** How long an artist page takes to turn from its plain ground to its picture's color. */
+private const val ARTIST_COLOR_FADE_MS = 450
 
 /** Pixels asked for when the hero falls back to a square avatar. */
 private const val HERO_FALLBACK_PX = 1080

@@ -504,12 +504,10 @@ internal fun PlaylistTrackRow(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     if (song.albumArtUri != null || song.thumbnailUrl != null) {
-                        AsyncImage(
-                            model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        // The small cover first and the sharp one over it: many
+                        // videos have no maxres thumbnail, and asking for it
+                        // alone left those rows blank.
+                        com.ivor.ivormusic.ui.components.SongArtwork(song, contentDescription = null, modifier = Modifier.fillMaxSize())
                     } else {
                         Icon(
                             Icons.Rounded.MusicNote,
@@ -1311,6 +1309,7 @@ fun PlaylistDetailScreen(
     }
     MaterialTheme(colorScheme = artworkScheme) {
     androidx.compose.runtime.CompositionLocalProvider(LocalPageGround provides tileGround) {
+    com.ivor.ivormusic.ui.home.ReportRevealGround(playlistPageGround())
     Scaffold(
         topBar = {
             // The bar settles into the page's ground rather than onto it: an
@@ -2186,7 +2185,9 @@ fun PlaylistDetailScreen(
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val wide = maxWidth >= PLAYLIST_WIDE_MIN_WIDTH
+            // Over Home the page is one column at any width, its header the
+            // Home pages' header, as every page there is.
+            val wide = maxWidth >= PLAYLIST_WIDE_MIN_WIDTH && !popupPage
             if (wide) {
                 // Under the transparent top bar, which the tracks scroll
                 // beneath and which fades in over them as they do.

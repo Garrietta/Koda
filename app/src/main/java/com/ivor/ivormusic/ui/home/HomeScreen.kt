@@ -4022,8 +4022,8 @@ fun JumpBackInSection(
                             .background(cardBgColor)
                     ) {
                         if (song.albumArtUri != null || song.thumbnailUrl != null) {
-                            AsyncImage(
-                                model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl,
+                            com.ivor.ivormusic.ui.components.SongArtwork(
+                                song,
                                 contentDescription = song.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop

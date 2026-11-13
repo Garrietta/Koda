@@ -42,7 +42,14 @@ import com.ivor.ivormusic.data.isUnknownArtist
 internal data class LibraryArtist(val name: String, val id: String?, val photo: String?, val songCount: Int)
 
 /** An album on the Albums page, made of the songs the user has from it. */
-internal data class LibraryAlbum(val name: String, val artist: String, val cover: String?, val songs: List<Song>)
+internal data class LibraryAlbum(
+    val name: String,
+    val artist: String,
+    val cover: String?,
+    val songs: List<Song>,
+    /** A sharper copy of [cover], drawn over it once it loads (it may not exist). */
+    val sharpCover: String? = null,
+)
 
 /**
  * The Artists page: the artists followed on this device first, in the
@@ -96,8 +103,9 @@ internal fun libraryAlbums(songs: List<Song>, playCounts: Map<String, Int>): Lis
             LibraryAlbum(
                 name = name,
                 artist = first.artist,
-                cover = group.firstNotNullOfOrNull { it.highResThumbnailUrl ?: it.albumArtUri?.toString() ?: it.thumbnailUrl },
+                cover = group.firstNotNullOfOrNull { it.thumbnailUrl ?: it.albumArtUri?.toString() },
                 songs = group,
+                sharpCover = group.firstNotNullOfOrNull { it.highResThumbnailUrl },
             )
         }
 
@@ -163,6 +171,7 @@ internal fun LazyListScope.albumGridItems(
                         title = album.name,
                         subtitle = album.artist,
                         art = album.cover,
+                        sharpArt = album.sharpCover,
                         shape = ALBUM_SHAPES[(row * columns + index) % ALBUM_SHAPES.size].toShape(),
                         placeholder = Icons.Rounded.Album,
                         onClick = { onClick(album) },
@@ -208,6 +217,7 @@ private fun GridCell(
     title: String,
     art: String?,
     shape: Shape,
+    sharpArt: String? = null,
     placeholder: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -221,6 +231,7 @@ private fun GridCell(
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(shape)) {
             com.ivor.ivormusic.ui.components.VideoThumbnail(
                 thumbnailUrl = art,
+                highResThumbnailUrl = sharpArt?.takeIf { it != art },
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop,

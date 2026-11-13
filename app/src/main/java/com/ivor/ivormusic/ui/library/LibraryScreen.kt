@@ -2798,7 +2798,7 @@ fun SongListItem(
                     modifier = Modifier.size(48.dp)
                 ) {
                     if (song.albumArtUri != null || song.thumbnailUrl != null)
-                        AsyncImage(model = song.highResThumbnailUrl ?: song.albumArtUri ?: song.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop)
+                        com.ivor.ivormusic.ui.components.SongArtwork(song, contentDescription = null, modifier = Modifier.fillMaxSize())
                     else
                         Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
