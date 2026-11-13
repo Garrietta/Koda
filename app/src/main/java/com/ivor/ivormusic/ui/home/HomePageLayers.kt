@@ -54,6 +54,7 @@ internal fun HomePageLayers(
                 open = entry.open,
                 origin = entry.origin,
                 face = faces.faceAt(entry.origin),
+                originShape = entry.shape,
                 container = ground,
                 content = ink,
                 onDismiss = { entry.open = false },

@@ -58,4 +58,20 @@ class BlockRevealTest {
         assertTrue(faceAlpha(0.2f) in 0.5f..0.7f)
         assertEquals(0f, faceAlpha(0.8f), 0.001f)
     }
+
+    @Test
+    fun theWindowStartsAsItsTilesOwnCorners() {
+        val density = androidx.compose.ui.unit.Density(1f)
+        val ltr = androidx.compose.ui.unit.LayoutDirection.Ltr
+        val size = androidx.compose.ui.geometry.Size(300f, 110f)
+        val pill = cornersOf(androidx.compose.foundation.shape.CircleShape, size, density, ltr, 40f)
+        assertEquals(listOf(55f, 55f, 55f, 55f), pill.toList())
+        val dj = androidx.compose.foundation.shape.RoundedCornerShape(
+            topStart = androidx.compose.ui.unit.Dp(40f), topEnd = androidx.compose.ui.unit.Dp(40f),
+            bottomEnd = androidx.compose.ui.unit.Dp(40f), bottomStart = androidx.compose.ui.unit.Dp(14f),
+        )
+        assertEquals(listOf(40f, 40f, 40f, 14f), cornersOf(dj, size, density, ltr, 0f).toList())
+        assertEquals(listOf(40f, 40f, 14f, 40f), cornersOf(dj, size, density, androidx.compose.ui.unit.LayoutDirection.Rtl, 0f).toList())
+        assertEquals(listOf(9f, 9f, 9f, 9f), cornersOf(null, size, density, ltr, 9f).toList())
+    }
 }

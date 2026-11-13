@@ -650,6 +650,7 @@ fun SpotlightHomeContent(
             open = openBlock != null,
             origin = blockBounds[pageBlock],
             face = blockFaces?.layer(pageBlock),
+            originShape = blockFaces?.shapes?.get(pageBlock),
             container = blockColor,
             content = onBlockColor,
             onDismiss = { openBlock = null },

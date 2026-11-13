@@ -161,9 +161,33 @@ internal fun pulledProgress(pulledPx: Float, heightPx: Float): Float =
 internal fun pullCloses(pulledPx: Float, heightPx: Float, velocityY: Float): Boolean =
     pulledPx > heightPx * PULL_TO_CLOSE || (pulledPx > 0f && velocityY > 1800f)
 
-private class RevealWindow(private val window: Rect, private val corner: Float) : Shape {
+/** The page's window: a rectangle with its own radius at each corner, top left first, clockwise. */
+private class RevealWindow(private val window: Rect, private val corners: FloatArray) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        Outline.Rounded(RoundRect(window, CornerRadius(corner)))
+        Outline.Rounded(
+            RoundRect(
+                window,
+                topLeft = CornerRadius(corners[0]),
+                topRight = CornerRadius(corners[1]),
+                bottomRight = CornerRadius(corners[2]),
+                bottomLeft = CornerRadius(corners[3]),
+            ),
+        )
+}
+
+/**
+ * The corners of [shape] drawn at [size], top left first, clockwise: a
+ * tile's own corners, so the window starts (and, closing, ends) as the
+ * tile itself - a pill as a pill, the DJ's one tight corner as tight.
+ * A shape that is not a rounded rectangle gets [fallback] all round.
+ */
+internal fun cornersOf(shape: Shape?, size: Size, density: Density, layoutDirection: LayoutDirection, fallback: Float): FloatArray {
+    val rounded = shape as? androidx.compose.foundation.shape.CornerBasedShape
+        ?: return floatArrayOf(fallback, fallback, fallback, fallback)
+    val max = minOf(size.width, size.height) / 2f
+    fun px(corner: androidx.compose.foundation.shape.CornerSize) = corner.toPx(size, density).coerceIn(0f, max)
+    val start = floatArrayOf(px(rounded.topStart), px(rounded.topEnd), px(rounded.bottomEnd), px(rounded.bottomStart))
+    return if (layoutDirection == LayoutDirection.Ltr) start else floatArrayOf(start[1], start[0], start[3], start[2])
 }
 
 /**
@@ -235,6 +259,8 @@ internal fun BlockReveal(
     appColors: Boolean = false,
     /** The tile's face, recorded by the tile itself (see [BlockFaces]); null draws none. */
     face: androidx.compose.ui.graphics.layer.GraphicsLayer? = null,
+    /** The outline of what the page grows from, which its window starts as and closes into. */
+    originShape: Shape? = null,
     page: @Composable () -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -245,6 +271,8 @@ internal fun BlockReveal(
     var ground by remember { mutableStateOf(container) }
     var ink by remember { mutableStateOf(content) }
     var heldFace by remember { mutableStateOf(face) }
+    var heldShape by remember { mutableStateOf(originShape) }
+    val revealDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
     val reportedGround = remember { mutableStateOf<Color?>(null) }
     val openSpec = BLOCK_PAGE_SPRING
     val closeSpec = BLOCK_PAGE_SPRING
@@ -254,6 +282,7 @@ internal fun BlockReveal(
             ground = container
             ink = content
             heldFace = face
+            heldShape = originShape
             shown = true
             progress.animateTo(1f, openSpec)
         } else if (shown) {
@@ -335,7 +364,14 @@ internal fun BlockReveal(
                 val whole = Rect(0f, 0f, size.width, size.height)
                 val start = from?.translate(-hostInRoot.x, -hostInRoot.y)
                     ?: Rect(center = whole.center, radius = TILE_CORNER.toPx())
-                shape = RevealWindow(lerp(start, whole, p), TILE_CORNER.toPx() * (1f - p))
+                // Each corner from the origin's own radius to square, so the
+                // window leaves as the tile's shape and lands back into it.
+                val startCorners = cornersOf(heldShape, start.size, this, revealDirection, TILE_CORNER.toPx())
+                val k = 1f - p
+                shape = RevealWindow(
+                    lerp(start, whole, p),
+                    floatArrayOf(startCorners[0] * k, startCorners[1] * k, startCorners[2] * k, startCorners[3] * k),
+                )
                 clip = true
             }
             .drawBehind {

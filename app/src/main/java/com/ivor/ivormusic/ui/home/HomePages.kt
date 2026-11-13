@@ -48,6 +48,8 @@ internal class HomePageEntry(
     val page: HomePage,
     val origin: Rect?,
     val tile: BlockTile?,
+    /** The outline the page grows from and closes into: its tile's, or a fingertip's circle. */
+    val shape: androidx.compose.ui.graphics.Shape?,
 ) {
     var open by mutableStateOf(true)
 }
@@ -60,8 +62,10 @@ internal class HomePageStack {
     /** The last place a finger came down, in root pixels: where a page with no tile grows from. */
     var lastTouch: Offset? = null
 
-    fun push(page: HomePage, origin: Rect? = null, tile: BlockTile? = null) {
-        entries.add(HomePageEntry(nextId++, page, origin ?: touchOrigin(), tile))
+    fun push(page: HomePage, origin: Rect? = null, tile: BlockTile? = null, shape: androidx.compose.ui.graphics.Shape? = null) {
+        val from = origin ?: touchOrigin()
+        val outline = shape ?: if (origin == null) androidx.compose.foundation.shape.CircleShape else null
+        entries.add(HomePageEntry(nextId++, page, from, tile, outline))
     }
 
     /** Sends the top page back into what it grew from. */

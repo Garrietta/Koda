@@ -100,7 +100,13 @@ private val METER = listOf(18, 40, 28, 52, 34, 22, 44)
 @androidx.compose.runtime.Stable
 class BlockFaces internal constructor(private val layers: Map<BlockKind, androidx.compose.ui.graphics.layer.GraphicsLayer>) {
     internal val bounds = mutableMapOf<BlockKind, Rect>()
+
+    /** Each tile's own outline, so a page closing into a tile takes the tile's shape as it lands. */
+    internal val shapes = mutableMapOf<BlockKind, Shape>()
     internal fun layer(kind: BlockKind) = layers[kind]
+
+    /** The outline of the tile at [rect]. */
+    internal fun shapeAt(rect: Rect?) = rect?.let { r -> bounds.entries.firstOrNull { it.value == r }?.key?.let(shapes::get) }
 
     /** The face of the tile at [rect], the tile a page opened from. */
     internal fun faceAt(rect: Rect?) = rect?.let { r -> bounds.entries.firstOrNull { it.value == r }?.key?.let(layers::get) }
@@ -136,6 +142,7 @@ internal fun BlocksHome(
         .onGloballyPositioned {
             onBounds(kind, it.boundsInRoot())
             faces?.bounds?.set(kind, it.boundsInRoot())
+            faces?.shapes?.set(kind, shape)
         }
         .then(
             faces?.layer(kind)?.let { layer ->

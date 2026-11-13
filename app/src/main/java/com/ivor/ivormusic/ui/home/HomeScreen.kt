@@ -1389,13 +1389,14 @@ fun HomeScreen(
                                                         ),
                                                         origin,
                                                         BlockTile(homeScheme.inverseSurface, homeScheme.inverseOnSurface),
+                                                        blockFaces.shapeAt(origin),
                                                     )
                                                 },
                                                 onOpenPage = { page, origin -> homePages.push(page, origin) },
                                                 blockFaces = blockFaces,
                                                 onOpenExplore = { origin ->
                                                     val (ground, ink) = BlockKind.Explore.colors(homeScheme)
-                                                    homePages.push(HomePage.Explore, origin, BlockTile(ground, ink))
+                                                    homePages.push(HomePage.Explore, origin, BlockTile(ground, ink), blockFaces.shapeAt(origin))
                                                 },
                                                 onShuffleSongs = { queue ->
                                                     playerViewModel.playQueueShuffled(queue)
@@ -1431,6 +1432,7 @@ fun HomeScreen(
                                                 open = djOpen,
                                                 origin = djOrigin,
                                                 face = blockFaces.layer(BlockKind.Dj),
+                                                originShape = blockFaces.shapes[BlockKind.Dj],
                                                 container = djFill,
                                                 content = djInk,
                                                 onDismiss = { djOpen = false },
