@@ -18,6 +18,5 @@
     android:widgetCategory="home_screen"
     android:updatePeriodMillis="1800000"
     android:description="@string/widget_bloom_description"
-    android:previewLayout="@layout/widget_preview_bloom"
-    android:previewImage="@drawable/widget_preview_bloom_image"
+    android:previewImage="@drawable/widget_preview_bloom"
     android:initialLayout="@layout/glance_default_loading_layout" />

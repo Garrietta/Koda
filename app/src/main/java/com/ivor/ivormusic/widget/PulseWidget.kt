@@ -44,6 +44,7 @@ import androidx.glance.LocalContext
 import androidx.glance.layout.width
 import androidx.glance.LocalContext
 import androidx.glance.text.FontWeight
+import androidx.media3.common.Player
 import com.ivor.ivormusic.R
 
 /**
@@ -76,27 +77,29 @@ private val CARD_PADDING = 12.dp
 private val COVER_GAP = 14.dp
 
 @Composable
-private fun PulseContent(ui: PlayerWidgetUi) {
+internal fun PulseContent(ui: PlayerWidgetUi) {
     val size = LocalSize.current
     WidgetSurface {
         when {
             !ui.snapshot.hasMedia -> WidgetEmptyState()
+            size.height >= TALL -> PulseTall(ui, size.width, size.height)
             size.height >= 110.dp -> PulseCard(ui, size.width, size.height)
-            else -> PulseStrip(ui, withNext = size.width >= 300.dp)
+            else -> PulseStrip(ui, size.height, withNext = size.width >= 300.dp)
         }
     }
 }
 
 /** 4x1: cover, two lines, the hero, and next once the strip is wide enough. */
 @Composable
-private fun PulseStrip(ui: PlayerWidgetUi, withNext: Boolean) {
+private fun PulseStrip(ui: PlayerWidgetUi, height: Dp, withNext: Boolean) {
     Row(
         modifier = GlanceModifier
             .fillMaxSize()
             .padding(horizontal = CARD_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WidgetArtwork(ui.artwork, size = 48.dp, shape = ArtworkShape.COOKIE)
+        // The cover as tall as the strip lets it be.
+        WidgetArtwork(ui.artwork, size = (height - 16.dp).coerceIn(48.dp, 72.dp), shape = ArtworkShape.COOKIE)
         Spacer(modifier = GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             PulseTitle(ui.snapshot, fontSize = 14.sp, maxLines = 1)
@@ -133,7 +136,7 @@ private fun PulseCard(ui: PlayerWidgetUi, width: Dp, height: Dp) {
     // little, and never below what the column beside it needs to stand in
     // (a title, an artist and the 48dp hero, about 86dp). Past that, previous
     // is what goes.
-    val byHeight = minOf(height - CARD_PADDING * 2, 128.dp)
+    val byHeight = minOf(height - CARD_PADDING * 2, 150.dp)
     val withRoomForAll = width - CARD_PADDING * 2 - COVER_GAP - full
     val cover = when {
         withRoomForAll >= byHeight -> byHeight
@@ -169,12 +172,66 @@ private fun PulseCard(ui: PlayerWidgetUi, width: Dp, height: Dp) {
     }
 }
 
+/** From here up the card is tall enough to stack the controls under the song. */
+private val TALL = 230.dp
+
+/**
+ * 4x3 and taller: the cover large at the top left with the song beside it,
+ * and the whole transport across the bottom - shuffle, previous, the hero,
+ * next and repeat - spread over the width, as the player lays it out.
+ */
+@Composable
+private fun PulseTall(ui: PlayerWidgetUi, width: Dp, height: Dp) {
+    val snapshot = ui.snapshot
+    val hero = 64.dp
+    val cover = minOf(width * 0.5f, height - CARD_PADDING * 2 - hero - 20.dp, 200.dp)
+    Column(modifier = GlanceModifier.fillMaxSize().padding(CARD_PADDING + 2.dp)) {
+        Row(modifier = GlanceModifier.fillMaxWidth().height(cover)) {
+            WidgetArtwork(ui.artwork, size = cover, shape = ArtworkShape.COOKIE)
+            Spacer(modifier = GlanceModifier.width(COVER_GAP))
+            Column(modifier = GlanceModifier.defaultWeight().height(cover)) {
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                if (snapshot.album != null) {
+                    WidgetSubtitle(snapshot.album, fontSize = 12.sp)
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+                }
+                PulseTitle(snapshot, fontSize = 20.sp, maxLines = 3)
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                WidgetSubtitle(snapshot.artist ?: "", fontSize = 14.sp)
+            }
+        }
+        Spacer(modifier = GlanceModifier.defaultWeight())
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            WidgetToggleButton(
+                iconRes = R.drawable.ic_media_shuffle,
+                description = widgetString(R.string.widget_action_shuffle),
+                action = widgetTransportAction(WidgetActionActivity.ACTION_SHUFFLE),
+                selected = snapshot.shuffleEnabled,
+                size = 44.dp,
+            )
+            Spacer(modifier = GlanceModifier.defaultWeight())
+            CardTransportRow(snapshot, heroSize = hero, sideSize = 48.dp, gap = 10.dp)
+            Spacer(modifier = GlanceModifier.defaultWeight())
+            WidgetToggleButton(
+                iconRes = if (snapshot.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_media_repeat_one else R.drawable.ic_media_repeat,
+                description = widgetString(R.string.widget_action_repeat),
+                action = widgetTransportAction(WidgetActionActivity.ACTION_CYCLE_REPEAT),
+                selected = snapshot.repeatMode != Player.REPEAT_MODE_OFF,
+                size = 44.dp,
+            )
+        }
+    }
+}
+
 @Composable
 private fun PulseTitle(snapshot: PlayerWidgetSnapshot, fontSize: TextUnit, maxLines: Int) {
     WidgetTitle(
         snapshot.title ?: widgetString(R.string.app_name),
         fontSize = fontSize,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Bold,
         maxLines = maxLines,
     )
 }

@@ -2,8 +2,8 @@
 <!--
     Picker preview for the Vinyl widget (4x2): a record half out of its sleeve,
     with play and next beside it. No card behind it, because the widget has
-    none - it stands on the wallpaper. Fixed colours throughout, from the
-    family's preview palette (drawable/widget_preview_card.xml).
+    none - it stands on the wallpaper. Fixed colours throughout, Rondo's own:
+    a cream play button and an ink next button, ink and cream glyphs on them.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -49,7 +49,7 @@
                 android:layout_height="22dp"
                 android:layout_gravity="center"
                 android:contentDescription="@string/widget_action_play"
-                android:tint="#FF5E1133"
+                android:tint="#FF17130F"
                 android:src="@drawable/ic_media_play" />
         </FrameLayout>
 
@@ -64,7 +64,7 @@
                 android:layout_height="20dp"
                 android:layout_gravity="center"
                 android:contentDescription="@string/widget_action_next"
-                android:tint="#FFF2DEE5"
+                android:tint="#FFFFF1E0"
                 android:src="@drawable/ic_media_next" />
         </FrameLayout>
     </LinearLayout>

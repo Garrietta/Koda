@@ -658,6 +658,14 @@ class MainActivity : ComponentActivity() {
                 return
             }
         }
+        // A home screen widget's tile: Home in music mode, with that tile's page open.
+        val homePage = intent.getStringExtra(EXTRA_HOME_PAGE)
+        if (homePage != null) {
+            neutralize(intent)
+            pendingModeRequest.value = false
+            pendingHomePage.value = homePage
+            return
+        }
         val navTarget = intent.getStringExtra("navigate_to")
         if (navTarget != null) {
             neutralize(intent)
@@ -725,6 +733,7 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
         intent.removeExtra(Intent.EXTRA_STREAM)
         intent.removeExtra("navigate_to")
+        intent.removeExtra(EXTRA_HOME_PAGE)
     }
 
     companion object {
@@ -732,6 +741,12 @@ class MainActivity : ComponentActivity() {
 
         /** Video mode (true) or music mode (false) asked for by a launcher shortcut. */
         var pendingModeRequest = androidx.compose.runtime.mutableStateOf<Boolean?>(null)
+
+        /** The extra a widget's tile names a Home page by ([com.ivor.ivormusic.ui.home.widgetKey]). */
+        const val EXTRA_HOME_PAGE = "open_home_page"
+
+        /** A Home page asked for by a widget, waiting for Home to open it. */
+        var pendingHomePage = androidx.compose.runtime.mutableStateOf<String?>(null)
     }
 }
 

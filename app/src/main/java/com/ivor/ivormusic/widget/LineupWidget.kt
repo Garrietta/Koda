@@ -1,6 +1,7 @@
 package com.ivor.ivormusic.widget
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -47,9 +48,9 @@ import com.ivor.ivormusic.R
  * timeline is the play order (shuffle rearranges it rather than layering an
  * order over it), so the next index is the next song even while shuffling.
  *
- * How many rows fit is derived from the cell rather than baked into a size,
- * and capped at four: the whole column including the header has to stay inside
- * a Glance container's ten-child limit, past which it truncates silently.
+ * How many rows fit is derived from the cell rather than baked into a size
+ * ([lineupPlan]), and capped at four: the queue's column has to stay inside a
+ * Glance container's ten-child limit, past which it truncates silently.
  */
 class LineupWidget : GlanceAppWidget() {
 
@@ -67,69 +68,145 @@ class LineupWidget : GlanceAppWidget() {
 }
 
 /** The card's inner gutter; the list's corners are drawn concentric with it. */
-private val GUTTER = 8.dp
-private val HEADER = 48.dp
-private val HEADER_GAP = 6.dp
-private val ROW_HEIGHT = 38.dp
+private val GUTTER = 12.dp
+private val HEADER_GAP = 10.dp
+/** "Up next" and the space under it. */
+private val LABEL = 20.dp
+private val ROW_HEIGHT = 44.dp
+private val THUMB = 32.dp
 private val SEAM = 2.dp
+private val HEADER_MIN = 52.dp
+private val HEADER_MAX = 140.dp
+private const val MAX_ROWS = 4
 
-/** Everything above the first row, top gutter included. */
-private val LIST_TOP = GUTTER + HEADER + HEADER_GAP
+/**
+ * How the card's height is shared: the queue gets as many rows as it has
+ * songs and the cell has room for (at most four), and the now-playing
+ * header takes the rest, up to a cover that would start to crowd the
+ * text. A short queue in a tall cell is a big cover, not empty card.
+ * "Up next" is dropped where leaving it out is what lets one more row in.
+ */
+internal data class LineupPlan(val rows: Int, val header: Dp, val label: Boolean)
 
-private fun rowsThatFit(height: Dp): Int {
-    // n rows take n * ROW_HEIGHT + (n - 1) * SEAM, plus the bottom gutter.
-    val room = height - LIST_TOP - GUTTER + SEAM
-    return (room.value / (ROW_HEIGHT + SEAM).value).toInt().coerceIn(1, 4)
+internal fun lineupPlan(height: Dp, queued: Int): LineupPlan {
+    val inner = height - GUTTER * 2
+    fun listHeight(rows: Int, label: Boolean) =
+        if (rows == 0) 0.dp else (if (label) LABEL else 0.dp) + ROW_HEIGHT * rows + SEAM * (rows - 1)
+    fun rowsFor(label: Boolean): Int {
+        var rows = queued.coerceIn(1, MAX_ROWS)
+        while (rows > 0 && inner - HEADER_GAP - listHeight(rows, label) < HEADER_MIN) rows--
+        return rows
+    }
+    val withLabel = rowsFor(label = true)
+    val label = rowsFor(label = false) <= withLabel
+    val rows = if (label) withLabel else rowsFor(label = false)
+    val room = if (rows == 0) inner else inner - HEADER_GAP - listHeight(rows, label)
+    return LineupPlan(rows, room.coerceIn(HEADER_MIN.coerceAtMost(inner), HEADER_MAX), label && rows > 0)
 }
 
 @Composable
-private fun LineupContent(ui: PlayerWidgetUi) {
+internal fun LineupContent(ui: PlayerWidgetUi) {
     val snapshot = ui.snapshot
-    val rows = rowsThatFit(LocalSize.current.height)
+    val size = LocalSize.current
 
     WidgetSurface {
         if (!snapshot.hasMedia) {
             WidgetEmptyState()
             return@WidgetSurface
         }
+        val plan = lineupPlan(size.height, snapshot.upNext.size)
         Column(modifier = GlanceModifier.fillMaxSize().padding(GUTTER)) {
-            LineupHeader(ui)
-            Spacer(modifier = GlanceModifier.height(HEADER_GAP))
-            LineupList(snapshot.upNext.take(rows))
+            LineupHeader(ui, plan.header, size.width - GUTTER * 2)
+            if (plan.rows > 0) {
+                // The header holds the top edge and the queue the bottom one;
+                // whatever the plan could not hand out sits between them.
+                Spacer(modifier = GlanceModifier.defaultWeight())
+                if (plan.label) Text(
+                    text = widgetString(R.string.widget_up_next),
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    maxLines = 1,
+                    modifier = GlanceModifier.height(LABEL).padding(start = 4.dp),
+                ) else Spacer(modifier = GlanceModifier.height(HEADER_GAP))
+                LineupList(snapshot.upNext.take(plan.rows), ui.upNextArt)
+            }
         }
     }
 }
 
+/**
+ * The song playing: its cover as large as the plan allows, and beside it
+ * the title, the artist and the controls. A tall header stacks the
+ * controls under the text, as Pulse does; a short one sets play and next
+ * at the end of the row.
+ */
 @Composable
-private fun LineupHeader(ui: PlayerWidgetUi) {
+private fun LineupHeader(ui: PlayerWidgetUi, height: Dp, width: Dp) {
+    val snapshot = ui.snapshot
+    val tall = height >= 96.dp
     Row(
-        modifier = GlanceModifier.fillMaxWidth().height(HEADER),
+        modifier = GlanceModifier.fillMaxWidth().height(height),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WidgetArtwork(ui.artwork, size = HEADER, shape = ArtworkShape.COOKIE)
-        Spacer(modifier = GlanceModifier.width(12.dp))
-        Column(modifier = GlanceModifier.defaultWeight()) {
-            WidgetTitle(
-                ui.snapshot.title ?: widgetString(R.string.app_name),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(modifier = GlanceModifier.height(1.dp))
-            WidgetSubtitle(ui.snapshot.artist ?: "", fontSize = 12.sp)
+        WidgetArtwork(ui.artwork, size = height, shape = ArtworkShape.COOKIE)
+        Spacer(modifier = GlanceModifier.width(14.dp))
+        if (tall) {
+            val column = width - height - 14.dp
+            Column(modifier = GlanceModifier.defaultWeight().height(height)) {
+                // Two lines of title only where the controls still fit under them.
+                WidgetTitle(
+                    snapshot.title ?: widgetString(R.string.app_name),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = if (height >= 118.dp) 2 else 1,
+                )
+                Spacer(modifier = GlanceModifier.height(2.dp))
+                WidgetSubtitle(snapshot.artist ?: "", fontSize = 13.sp)
+                Spacer(modifier = GlanceModifier.defaultWeight())
+                CardTransportRow(
+                    snapshot,
+                    heroSize = 48.dp,
+                    sideSize = 40.dp,
+                    gap = 6.dp,
+                    withPrevious = column >= cardTransportWidth(48.dp, 40.dp, 6.dp),
+                )
+            }
+        } else {
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                WidgetTitle(
+                    snapshot.title ?: widgetString(R.string.app_name),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = GlanceModifier.height(1.dp))
+                WidgetSubtitle(snapshot.artist ?: "", fontSize = 12.sp)
+            }
+            Spacer(modifier = GlanceModifier.width(8.dp))
+            HeroPlayButton(isPlaying = snapshot.isPlaying, size = 48.dp)
+            if (width >= 280.dp) {
+                Spacer(modifier = GlanceModifier.width(6.dp))
+                CardSquareButton(
+                    iconRes = R.drawable.ic_media_next,
+                    description = widgetString(R.string.widget_action_next),
+                    action = actionRunCallback<SkipNextAction>(),
+                    size = 40.dp,
+                )
+            }
         }
-        Spacer(modifier = GlanceModifier.width(8.dp))
-        HeroPlayButton(isPlaying = ui.snapshot.isPlaying, size = HEADER)
     }
 }
 
 @Composable
-private fun LineupList(entries: List<UpNextEntry>) {
+private fun LineupList(entries: List<UpNextEntry>, art: Map<String, Bitmap>) {
     if (entries.isEmpty()) {
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .height(ROW_HEIGHT)
-                .shaped(R.drawable.widget_shape_segment_single, GlanceTheme.colors.surface)
+                .shaped(R.drawable.widget_shape_segment_single, GlanceTheme.colors.surfaceVariant)
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -144,7 +221,7 @@ private fun LineupList(entries: List<UpNextEntry>) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         entries.forEachIndexed { position, entry ->
             if (position > 0) Spacer(modifier = GlanceModifier.height(SEAM))
-            LineupRow(entry, segmentShape(position, entries.size))
+            LineupRow(entry, entry.artworkUri?.let(art::get), segmentShape(position, entries.size))
         }
     }
 }
@@ -157,13 +234,17 @@ private fun segmentShape(position: Int, count: Int): Int = when {
     else -> R.drawable.widget_shape_segment_middle
 }
 
+/**
+ * One song still to come, on a tonal step of the card: its cover, its
+ * title and artist. The whole row is a jump to it.
+ */
 @Composable
-private fun LineupRow(entry: UpNextEntry, @DrawableRes shape: Int) {
+private fun LineupRow(entry: UpNextEntry, cover: Bitmap?, @DrawableRes shape: Int) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
             .height(ROW_HEIGHT)
-            .shaped(shape, GlanceTheme.colors.surface)
+            .shaped(shape, GlanceTheme.colors.surfaceVariant)
             // The shape draws the row; this only clips its ripple on API 31+.
             // One radius between the 4dp seams and the 20dp ends: a ripple a
             // little rounder than a middle row stays inside it, and one a
@@ -175,9 +256,11 @@ private fun LineupRow(entry: UpNextEntry, @DrawableRes shape: Int) {
                     entry.index
                 )
             )
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        WidgetArtwork(cover, size = THUMB, shape = ArtworkShape.ROUNDED)
+        Spacer(modifier = GlanceModifier.width(10.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
                 text = entry.title,

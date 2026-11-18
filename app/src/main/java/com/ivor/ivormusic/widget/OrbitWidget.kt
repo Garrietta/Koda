@@ -51,7 +51,7 @@ class OrbitWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun OrbitContent(ui: PlayerWidgetUi) {
+internal fun OrbitContent(ui: PlayerWidgetUi) {
     val cell = minOf(LocalSize.current.width, LocalSize.current.height)
     // A few dp of air, for the same reason as Bloom: the bucket is a lower
     // bound on the cell, not its edge.

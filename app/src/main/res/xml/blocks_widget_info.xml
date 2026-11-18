@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Blocks: Home's tiles on the home screen, each opening Rondo on its page.
+    A row of four at 4x1, the DJ over two at 2x2, over three at 4x2, and
+    Home's own arrangement from 4x3. Nothing here follows playback, so the
+    heartbeat is the platform floor and nothing more.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="50dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000"
+    android:description="@string/widget_blocks_description"
+    android:previewImage="@drawable/widget_preview_blocks"
+    android:initialLayout="@layout/glance_default_loading_layout" />

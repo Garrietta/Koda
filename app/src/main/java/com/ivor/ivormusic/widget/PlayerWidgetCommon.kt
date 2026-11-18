@@ -102,6 +102,8 @@ data class UpNextEntry(
     val index: Int,
     val title: String,
     val artist: String?,
+    /** The row's cover, drawn small beside it in the Lineup widget. */
+    val artworkUri: String? = null,
 )
 
 /** How many queue rows the Lineup widget can ever want. */
@@ -196,6 +198,7 @@ internal fun PlayerWidgetSnapshot.toJson(): JSONObject {
                             put("index", entry.index)
                             put("title", entry.title)
                             put("artist", entry.artist ?: JSONObject.NULL)
+                            put("artwork", entry.artworkUri ?: JSONObject.NULL)
                         }
                     )
                 }
@@ -220,6 +223,7 @@ internal fun snapshotFromJson(raw: String): PlayerWidgetSnapshot? {
                         index = index,
                         title = item.optString("title", ""),
                         artist = item.optString("artist", "").takeIf { it.isNotBlank() },
+                        artworkUri = item.optString("artwork", "").takeIf { it.isNotBlank() && it != "null" },
                     )
                 )
             }
@@ -358,6 +362,21 @@ internal object PlayerWidgetReader {
     @Volatile
     private var artworkCache: Pair<String, Bitmap>? = null
 
+    /** A small cover for a queue row, outside the one-entry cache the playing cover keeps. */
+    suspend fun loadThumbnail(context: Context, uri: Uri, sizePx: Int): Bitmap? = try {
+        val request = ImageRequest.Builder(context)
+            .data(uri)
+            .allowHardware(false)
+            .size(sizePx)
+            .build()
+        (context.imageLoader.execute(request).drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        KLog.w(TAG, "Widget row artwork failed: ${e.message}")
+        null
+    }
+
     suspend fun loadArtwork(context: Context, uri: Uri, sizePx: Int): Bitmap? {
         val key = "$uri@$sizePx"
         artworkCache?.let { (cachedKey, bitmap) -> if (cachedKey == key) return bitmap }
@@ -399,6 +418,7 @@ internal fun Player.toWidgetSnapshot(): PlayerWidgetSnapshot {
                 index = index,
                 title = metadata.title?.toString()?.takeIf { it.isNotBlank() } ?: "Unknown",
                 artist = metadata.artist?.toString()?.takeIf { it.isNotBlank() },
+                artworkUri = metadata.artworkUri?.toString()?.takeIf { it.isNotBlank() },
             )
         )
         index++

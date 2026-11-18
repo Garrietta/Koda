@@ -76,7 +76,7 @@ class BloomWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun BloomContent(ui: PlayerWidgetUi) {
+internal fun BloomContent(ui: PlayerWidgetUi) {
     if (!ui.snapshot.hasMedia) {
         WidgetSurface { WidgetEmptyState() }
         return

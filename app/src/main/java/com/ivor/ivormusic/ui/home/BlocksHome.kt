@@ -77,6 +77,30 @@ import com.ivor.ivormusic.data.Song
 /** Everything on Home that can be opened. */
 internal enum class BlockKind { Dj, ForYou, Liked, Episodes, Recent, QuickPicks, Playlists, Artists, Albums, Charts, NewReleases, Explore, Downloads }
 
+/**
+ * The name a home screen widget opens this block by. It is written into the
+ * intent of every placed widget, so these are fixed: renaming one leaves an
+ * old widget's tile opening nothing.
+ */
+internal val BlockKind.widgetKey: String
+    get() = when (this) {
+        BlockKind.Dj -> "dj"
+        BlockKind.ForYou -> "for_you"
+        BlockKind.Liked -> "liked"
+        BlockKind.Episodes -> "episodes"
+        BlockKind.Recent -> "recent"
+        BlockKind.QuickPicks -> "quick_picks"
+        BlockKind.Playlists -> "playlists"
+        BlockKind.Artists -> "artists"
+        BlockKind.Albums -> "albums"
+        BlockKind.Charts -> "charts"
+        BlockKind.NewReleases -> "new"
+        BlockKind.Explore -> "explore"
+        BlockKind.Downloads -> "downloads"
+    }
+
+internal fun blockKindForWidgetKey(key: String): BlockKind? = BlockKind.entries.firstOrNull { it.widgetKey == key }
+
 /** The color a block has on Home, and so the color of the page it opens. */
 internal fun BlockKind.colors(scheme: ColorScheme): Pair<Color, Color> = when (this) {
     BlockKind.Dj, BlockKind.QuickPicks, BlockKind.Explore -> scheme.primaryContainer to scheme.onPrimaryContainer

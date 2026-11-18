@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    For you on the Blocks widget: three sparkles, as Home's For you tile wears.
+    A solid shape on transparent, tinted to the tile's ink where it is drawn.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.5 5.5Q10.85 11.65 17 13Q10.85 14.35 9.5 20.5Q8.15 14.35 2 13Q8.15 11.65 9.5 5.5ZM17.5 1.9Q18.15 4.85 21.1 5.5Q18.15 6.15 17.5 9.1Q16.85 6.15 13.9 5.5Q16.85 4.85 17.5 1.9ZM18 15.2Q18.5 17.5 20.8 18Q18.5 18.5 18 20.8Q17.5 18.5 15.2 18Q17.5 17.5 18 15.2Z" />
+</vector>

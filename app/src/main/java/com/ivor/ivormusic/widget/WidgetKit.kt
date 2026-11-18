@@ -44,6 +44,7 @@ import androidx.glance.unit.ColorProvider
 import androidx.media3.common.Player
 import com.ivor.ivormusic.MainActivity
 import com.ivor.ivormusic.R
+import com.ivor.ivormusic.ui.home.widgetKey
 
 /**
  * The widget family's design kit. Every widget shares it; only Pixel draws a
@@ -389,25 +390,32 @@ internal fun WidgetSubtitle(
 }
 
 /**
- * Nothing has ever played. Centred rather than left-aligned - the left-aligned
- * version left two thirds of the card empty and read as a widget that had
- * failed to load rather than one waiting to be used.
+ * Nothing is playing. Rather than a note to tap, it offers the two places
+ * a listen most often starts - the DJ and Liked - each opening Rondo on
+ * that page. Centred rather than left-aligned: the left-aligned version
+ * left two thirds of the card empty and read as a widget that had failed
+ * to load rather than one waiting to be used.
  */
 @Composable
 internal fun WidgetEmptyState() {
+    val size = androidx.glance.LocalSize.current
+    val context = LocalContext.current
     // The stacked version needs about 130dp; below that it would be clipped
     // away with nothing logged, so short cells get the row instead.
-    val compact = androidx.glance.LocalSize.current.height < 130.dp
-    if (compact) {
+    if (size.height < 130.dp) {
         Row(
             modifier = GlanceModifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            EmptyMark(38.dp)
+            EmptyMark(40.dp)
             Spacer(modifier = GlanceModifier.width(12.dp))
-            Column {
-                WidgetTitle(widgetString(R.string.app_name), fontSize = 14.sp)
-                WidgetSubtitle(widgetString(R.string.widget_tap_to_listen), fontSize = 11.sp)
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                WidgetTitle(widgetString(R.string.widget_nothing_playing), fontSize = 15.sp)
+                WidgetSubtitle(widgetString(R.string.app_name), fontSize = 12.sp)
+            }
+            if (size.width >= 240.dp) {
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                EmptyStartButton(context, com.ivor.ivormusic.ui.home.BlockKind.Dj, primary = true)
             }
         }
         return
@@ -417,13 +425,44 @@ internal fun WidgetEmptyState() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        EmptyMark(56.dp)
+        EmptyMark(52.dp)
         Spacer(modifier = GlanceModifier.height(10.dp))
-        WidgetTitle(widgetString(R.string.app_name))
-        Spacer(modifier = GlanceModifier.height(2.dp))
-        WidgetSubtitle(widgetString(R.string.widget_tap_to_listen))
+        WidgetTitle(widgetString(R.string.widget_nothing_playing))
+        Spacer(modifier = GlanceModifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EmptyStartButton(context, com.ivor.ivormusic.ui.home.BlockKind.Dj, primary = true)
+            if (size.width >= 220.dp) {
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                EmptyStartButton(context, com.ivor.ivormusic.ui.home.BlockKind.Liked, primary = false)
+            }
+        }
     }
 }
+
+@Composable
+private fun EmptyStartButton(context: android.content.Context, kind: com.ivor.ivormusic.ui.home.BlockKind, primary: Boolean) {
+    androidx.glance.appwidget.components.FilledButton(
+        text = widgetString(if (kind == com.ivor.ivormusic.ui.home.BlockKind.Dj) R.string.widget_start_dj else R.string.widget_start_liked),
+        onClick = openHomeBlockAction(context, kind),
+        colors = androidx.glance.ButtonDefaults.buttonColors(
+            backgroundColor = if (primary) GlanceTheme.colors.primary else GlanceTheme.colors.secondaryContainer,
+            contentColor = if (primary) GlanceTheme.colors.onPrimary else GlanceTheme.colors.onSecondaryContainer,
+        ),
+    )
+}
+
+/**
+ * Opens Rondo on one of Home's pages, grown out of its tile there as a tap
+ * on Home grows it. The data makes each page's intent its own, so the
+ * launcher never hands one tile's tap to another.
+ */
+internal fun openHomeBlockAction(context: android.content.Context, kind: com.ivor.ivormusic.ui.home.BlockKind): Action =
+    androidx.glance.appwidget.action.actionStartActivity(
+        android.content.Intent(context, MainActivity::class.java)
+            .setData(android.net.Uri.parse("rondo://home/${kind.widgetKey}"))
+            .putExtra(MainActivity.EXTRA_HOME_PAGE, kind.widgetKey)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 
 /** The brand mark on a clover, so even the empty state carries the shape language. */
 @Composable

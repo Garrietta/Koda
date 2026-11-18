@@ -99,7 +99,7 @@ private val SPIN_FRAMES = intArrayOf(
 )
 
 @Composable
-private fun PixelContent(ui: PlayerWidgetUi) {
+internal fun PixelContent(ui: PlayerWidgetUi) {
     if (!ui.snapshot.hasMedia) {
         WidgetSurface { WidgetEmptyState() }
         return

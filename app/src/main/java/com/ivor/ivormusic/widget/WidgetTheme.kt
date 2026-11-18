@@ -10,6 +10,7 @@ import com.ivor.ivormusic.data.ThemePreferences
 import com.ivor.ivormusic.ui.theme.ThemeMode
 import com.ivor.ivormusic.ui.theme.buildSeedColorScheme
 import com.ivor.ivormusic.ui.theme.kodaColorScheme
+import com.ivor.ivormusic.ui.home.colors
 import com.ivor.ivormusic.ui.home.onBlock
 
 /**
@@ -74,6 +75,33 @@ internal object KodaWidgetTheme {
     }
 
     /**
+     * Home's tiles' colors, for the Blocks widget: each tile's ground and
+     * ink as Home gives them ([com.ivor.ivormusic.ui.home.colors]), for the
+     * host's light and dark, or pinned to one when the app is.
+     */
+    fun blockTiles(context: Context): Map<com.ivor.ivormusic.ui.home.BlockKind, WidgetBlockTile> {
+        val prefs = ThemePreferences(context)
+        val palette = prefs.colorPalette.value
+        val amoled = prefs.amoledTheme.value
+        val style = prefs.paletteStyle.value
+        val light = kodaColorScheme(context, false, palette, amoled, style)
+        val dark = kodaColorScheme(context, true, palette, amoled, style)
+        val (day, night) = when (prefs.themeMode.value) {
+            ThemeMode.LIGHT -> light to light
+            ThemeMode.DARK -> dark to dark
+            ThemeMode.SYSTEM -> light to dark
+        }
+        return com.ivor.ivormusic.ui.home.BlockKind.entries.associateWith { kind ->
+            val (dayGround, dayInk) = kind.colors(day)
+            val (nightGround, nightInk) = kind.colors(night)
+            WidgetBlockTile(
+                ground = androidx.glance.color.ColorProvider(day = dayGround, night = nightGround),
+                ink = androidx.glance.color.ColorProvider(day = dayInk, night = nightInk),
+            )
+        }
+    }
+
+    /**
      * The primary the app UI is actually wearing right now, as an ARGB int
      * - for surfaces that need a raw color, like the vinyl widget's baked
      * button bitmaps. Glance's own [GlanceTheme.colors] roles are
@@ -116,3 +144,6 @@ internal object KodaWidgetTheme {
         }
     }
 }
+
+/** One of Home's tiles as a widget draws it. */
+internal class WidgetBlockTile(val ground: androidx.glance.unit.ColorProvider, val ink: androidx.glance.unit.ColorProvider)

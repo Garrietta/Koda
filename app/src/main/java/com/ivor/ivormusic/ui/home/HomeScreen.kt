@@ -1426,7 +1426,9 @@ fun HomeScreen(
                                                 modeToggleState = modeToggleState,
                                                 listState = musicHomeScrollState,
                                                 filter = spotlightFilter,
-                                                onFilterChange = { spotlightFilter = it }
+                                                onFilterChange = { spotlightFilter = it },
+                                                requestedBlock = com.ivor.ivormusic.MainActivity.pendingHomePage.value,
+                                                onRequestedBlockHandled = { com.ivor.ivormusic.MainActivity.pendingHomePage.value = null },
                                             )
                                             BlockReveal(
                                                 open = djOpen,

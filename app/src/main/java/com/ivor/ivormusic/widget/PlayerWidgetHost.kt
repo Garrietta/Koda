@@ -2,6 +2,7 @@ package com.ivor.ivormusic.widget
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -47,6 +48,8 @@ import kotlinx.coroutines.withContext
 internal data class PlayerWidgetUi(
     val snapshot: PlayerWidgetSnapshot,
     val artwork: Bitmap?,
+    /** Small covers for the queue rows, by their artwork uri. */
+    val upNextArt: Map<String, Bitmap> = emptyMap(),
 ) {
     companion object {
         val Empty = PlayerWidgetUi(PlayerWidgetSnapshot.empty(), null)
@@ -59,6 +62,10 @@ internal object PlayerWidgetHost {
 
     /** Decoded at this size and re-cut per widget; large enough for the 2x4. */
     private const val ARTWORK_PX = 384
+
+    /** The queue rows' covers: as many rows as the Lineup can show, at a size a 40dp thumb is sharp at. */
+    private const val UP_NEXT_ART_ROWS = 4
+    private const val UP_NEXT_ART_PX = 144
 
     private val _state = MutableStateFlow(PlayerWidgetUi.Empty)
     val state: StateFlow<PlayerWidgetUi> = _state.asStateFlow()
@@ -133,6 +140,7 @@ internal object PlayerWidgetHost {
                 PlayerWidgetStore.write(context, enriched)
                 _state.value = PlayerWidgetUi(enriched, artwork)
                 if (artwork != null) persistArtwork(context, enriched, artwork)
+                _state.value = _state.value.copy(upNextArt = loadUpNextArt(context, enriched, emptyMap()))
             }
             // Only latch once something was actually resolved, so a failed bind
             // retries on the next render instead of caching an empty widget.
@@ -151,9 +159,35 @@ internal object PlayerWidgetHost {
         // long as the song plays.
         val sameCover = current.snapshot.artworkUri == snapshot.artworkUri && current.artwork != null
         val artwork = if (sameCover) current.artwork else loadArtworkOrCached(context, snapshot)
-        _state.value = PlayerWidgetUi(snapshot, artwork)
+        _state.value = PlayerWidgetUi(snapshot, artwork, current.upNextArt)
         seeded = true
         if (artwork != null) persistArtwork(context, snapshot, artwork)
+        // The rows' covers follow the now-playing one: the widget is right at
+        // once, and the small covers fill in as they arrive.
+        val rowArt = loadUpNextArt(context, snapshot, current.upNextArt)
+        if (rowArt != current.upNextArt && _state.value.snapshot == snapshot) {
+            _state.value = _state.value.copy(upNextArt = rowArt)
+        }
+    }
+
+    /**
+     * The covers of the next few rows, small, keeping any already held so a
+     * skip loads only the one row that is new. Coil keeps them on disk, so a
+     * cover seen before costs a decode, not a download.
+     */
+    private suspend fun loadUpNextArt(
+        context: Context,
+        snapshot: PlayerWidgetSnapshot,
+        held: Map<String, Bitmap>,
+    ): Map<String, Bitmap> {
+        val wanted = snapshot.upNext.take(UP_NEXT_ART_ROWS).mapNotNull { it.artworkUri }.distinct()
+        if (wanted.isEmpty()) return emptyMap()
+        val out = LinkedHashMap<String, Bitmap>()
+        for (uri in wanted) {
+            val bitmap = held[uri] ?: PlayerWidgetReader.loadThumbnail(context, Uri.parse(uri), UP_NEXT_ART_PX)
+            if (bitmap != null) out[uri] = bitmap
+        }
+        return out
     }
 
     private suspend fun loadArtwork(context: Context, snapshot: PlayerWidgetSnapshot): Bitmap? {

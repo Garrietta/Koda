@@ -39,6 +39,13 @@
     <!-- Widget content descriptions and in-widget copy. -->
     <string name="widget_vinyl_label">Vinyl</string>
     <string name="widget_vinyl_description">A record sliding out of its sleeve, turning while your music plays</string>
+    <string name="widget_blocks_label">Blocks</string>
+    <string name="widget_blocks_description">Your DJ, For you, Liked and new episodes, each a tap away</string>
+    <string name="widget_blocks_dj_caption">Your mix</string>
+    <string name="widget_blocks_episodes">Episodes</string>
+    <string name="widget_nothing_playing">Nothing playing</string>
+    <string name="widget_start_dj">Your DJ</string>
+    <string name="widget_start_liked">Liked</string>
     <string name="widget_pixel_label">Pixel</string>
     <string name="widget_pixel_description">A pixel-art turntable that spins while your music plays</string>
     <string name="widget_action_open_app">Open Rondo</string>
@@ -51,6 +58,7 @@
     <string name="widget_action_repeat_one">Repeat one</string>
     <string name="widget_action_repeat_all">Repeat all</string>
     <string name="widget_nothing_up_next">Nothing up next</string>
+    <string name="widget_up_next">Up next</string>
 
     <!-- Static sample content for the launcher picker previews (previewLayout).
         Never shown on an installed widget; the live Glance UI owns that. -->

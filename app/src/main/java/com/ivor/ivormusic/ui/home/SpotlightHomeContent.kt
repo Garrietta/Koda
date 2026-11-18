@@ -166,6 +166,9 @@ fun SpotlightHomeContent(
      */
     filter: SpotlightFilter,
     onFilterChange: (SpotlightFilter) -> Unit,
+    /** A block to open as if tapped, by its widget key, asked for from outside Home (a widget's tile). */
+    requestedBlock: String? = null,
+    onRequestedBlockHandled: () -> Unit = {},
 ) {
     val isRefreshing by viewModel.isLoading.collectAsState()
 
@@ -199,6 +202,14 @@ fun SpotlightHomeContent(
                 openBlock = kind
             }
         }
+    }
+    // Opened after a frame, so the tiles have reported where they are and the
+    // page grows out of its own tile, exactly as a tap there opens it.
+    LaunchedEffect(requestedBlock) {
+        val key = requestedBlock ?: return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        blockKindForWidgetKey(key)?.let(openBlockPage)
+        onRequestedBlockHandled()
     }
     LaunchedEffect(openBlock) {
         if (openBlock != null) {
