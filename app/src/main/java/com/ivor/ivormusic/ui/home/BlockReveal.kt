@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.ui.home
 
+import com.ivor.ivormusic.ui.theme.risoRecord
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
@@ -555,7 +556,14 @@ internal fun BlockPageHero(
                 .offset(x = 96.dp, y = (-120).dp)
                 .size(340.dp)
                 .clip(MaterialShapes.Cookie12Sided.toShape())
-                .background(scheme.surfaceContainerLow),
+                // The page's moment: the record printed in riso dots, the
+                // label solid and the grooves as rings thinning to the rim.
+                .risoRecord(
+                    ground = scheme.surfaceContainerLow,
+                    // A little over a quarter of the way to the ink: quiet on a tile's color,
+                    // and on a black page a faint print in the page's own color.
+                    ink = androidx.compose.ui.graphics.lerp(scheme.surfaceContainerLow, scheme.onBackground, 0.28f),
+                ),
         )
         Box(
             Modifier

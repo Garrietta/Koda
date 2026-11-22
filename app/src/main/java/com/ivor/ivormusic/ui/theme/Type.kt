@@ -35,13 +35,26 @@ private const val ROUND = 100f
 /** Every weight the font has, so no call site is ever given a faked bold. */
 private val WEIGHTS = intArrayOf(300, 400, 500, 600, 700, 800, 900)
 
+/**
+ * The weight each named weight is drawn at. Bold and heavier are cut
+ * lighter than their names, so the heaviest text in the app sits near
+ * 600: hierarchy comes from size and the wide, round cut, not from
+ * weight. Everything that asks for Bold is tuned here at once.
+ */
+internal fun cut(weight: Int): Int = when {
+    weight >= 900 -> 650
+    weight >= 800 -> 630
+    weight >= 700 -> 610
+    else -> weight
+}
+
 private fun flex(width: Float, round: Float): FontFamily = FontFamily(
     WEIGHTS.map { weight ->
         Font(
             resId = R.font.google_sans_flex,
             weight = FontWeight(weight),
             variationSettings = FontVariation.Settings(
-                FontVariation.weight(weight),
+                FontVariation.weight(cut(weight)),
                 FontVariation.width(width),
                 FontVariation.Setting("ROND", round),
             ),

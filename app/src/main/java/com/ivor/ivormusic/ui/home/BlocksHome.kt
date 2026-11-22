@@ -1,5 +1,7 @@
 package com.ivor.ivormusic.ui.home
 
+import com.ivor.ivormusic.ui.theme.vividNeighbor
+import com.ivor.ivormusic.ui.theme.grainGlow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.runtime.remember
@@ -162,7 +164,8 @@ internal fun BlocksHome(
     val scheme = MaterialTheme.colorScheme
     val djFill = djColors?.container ?: scheme.primaryContainer
     val djInk = djColors?.onContainer ?: scheme.onPrimaryContainer
-    fun Modifier.block(kind: BlockKind, shape: Shape, color: Color): Modifier = this
+    val djGlow = remember(djFill) { djFill.vividNeighbor()?.let { androidx.compose.ui.graphics.lerp(djFill, it, 0.8f) } }
+    fun Modifier.block(kind: BlockKind, shape: Shape, color: Color, glow: Color? = null): Modifier = this
         .onGloballyPositioned {
             onBounds(kind, it.boundsInRoot())
             faces?.bounds?.set(kind, it.boundsInRoot())
@@ -177,7 +180,13 @@ internal fun BlocksHome(
             } ?: Modifier,
         )
         .clip(shape)
-        .background(color)
+        .then(
+            if (glow != null) {
+                Modifier.grainGlow(hot = glow, ground = color, from = androidx.compose.ui.geometry.Offset(0.92f, 1f), reach = 0.95f)
+            } else {
+                Modifier.background(color)
+            },
+        )
         .clickable(role = Role.Button) { onOpen(kind) }
 
     // The pieces of Home, each a function of its size, so a phone stacks
@@ -189,6 +198,9 @@ internal fun BlocksHome(
                     BlockKind.Dj,
                     RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tile, bottomStart = Tight),
                     djFill,
+                    // Home's one bright thing: the DJ glows from its meter toward
+                    // the hue beside its own, with grain over it.
+                    glow = djGlow,
                 ),
         ) {
             Text(

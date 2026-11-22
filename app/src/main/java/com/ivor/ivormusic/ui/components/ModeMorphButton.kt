@@ -247,28 +247,34 @@ fun TopBarDownloadsButton(
 }
 
 /**
- * A short greeting for the Home top bar, by the hour: the bar's one line of
- * text, beside the profile picture.
+ * The Home top bar's one line of text, beside the profile picture: when it
+ * is, "Saturday evening", rather than a greeting. It names the moment the
+ * way a page names its subject, and it is the same few words every visit
+ * of that evening.
  *
- * Read once per composition of the bar rather than ticking: a greeting that
+ * Read once per composition of the bar rather than ticking: a line that
  * changed under someone mid-scroll would be noise, and the bar is recomposed
  * often enough (a tab change, a return from another screen) to stay right.
  */
 @Composable
 fun HomeGreeting(modifier: Modifier = Modifier) {
-    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val now = remember { java.time.LocalDateTime.now() }
+    val day = remember(now) {
+        now.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+    }
     Text(
         text = stringResource(
-            when (hour) {
-                in 5..11 -> R.string.home_greeting_morning
-                in 12..16 -> R.string.home_greeting_afternoon
-                in 17..21 -> R.string.home_greeting_evening
-                else -> R.string.home_greeting_night
-            }
+            when (now.hour) {
+                in 5..11 -> R.string.home_period_morning
+                in 12..16 -> R.string.home_period_afternoon
+                in 17..21 -> R.string.home_period_evening
+                else -> R.string.home_period_night
+            },
+            day,
         ),
         modifier = modifier,
         style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onBackground,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis

@@ -547,6 +547,10 @@
     <string name="cz_section_players">Players</string>
     <string name="cz_section_layout">Layout and touch</string>
     <string name="cz_section_home_layout">Layout</string>
+    <string name="home_period_morning">%1$s morning</string>
+    <string name="home_period_afternoon">%1$s afternoon</string>
+    <string name="home_period_evening">%1$s evening</string>
+    <string name="home_period_night">%1$s night</string>
     <string name="home_greeting_morning">Good morning</string>
     <string name="home_greeting_afternoon">Good afternoon</string>
     <string name="home_greeting_evening">Good evening</string>

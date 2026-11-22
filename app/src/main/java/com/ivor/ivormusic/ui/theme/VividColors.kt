@@ -85,6 +85,14 @@ fun vividBlock(hue: Double): VividBlock {
 /** Ink on a block reads at this contrast or better. */
 private const val READABLE = 4.6
 
+/**
+ * The vivid color beside this one on the wheel, as orchid stands beside
+ * iris in Rondo's own three: what a block's glow turns toward. Null for a
+ * grey color, which has no neighbour worth glowing toward.
+ */
+fun Color.vividNeighbor(): Color? =
+    hct(this).takeIf { it.chroma >= GREY_CHROMA }?.let { vividBlock(wrap(it.hue + SECOND_OFFSET)).container }
+
 /** The block for [seed]'s hue, or null when [seed] is grey. */
 fun vividBlockOf(seed: Color): VividBlock? = hct(seed).takeIf { it.chroma >= GREY_CHROMA }?.let { vividBlock(it.hue) }
 
