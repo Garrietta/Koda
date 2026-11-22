@@ -42,21 +42,13 @@ class BlockStepsTest {
     }
 
     @Test
-    fun aSwipeTurnsAStepOnceItIsLongEnough() {
-        assertEquals(0, swipeSteps(0.05f))
-        assertEquals(0, swipeSteps(-0.11f))
-        assertEquals(1, swipeSteps(0.12f))
-        assertEquals(-1, swipeSteps(-0.3f))
-    }
-
-    @Test
-    fun aLongerSwipeTurnsMoreStepsOneStretchAtATime() {
-        assertEquals(1, swipeSteps(0.7f))
-        assertEquals(2, swipeSteps(0.75f))
-        assertEquals(3, swipeSteps(1.4f))
-        assertEquals(-4, swipeSteps(-2.0f))
-        // Turning back undoes them as the finger returns.
-        assertEquals(1, swipeSteps(0.5f))
+    fun aSwipeTurnsOneStepHoweverLong() {
+        assertEquals(0, swipeTurn(0.05f))
+        assertEquals(0, swipeTurn(-0.11f))
+        assertEquals(1, swipeTurn(0.12f))
+        assertEquals(1, swipeTurn(1.8f))
+        assertEquals(-1, swipeTurn(-0.3f))
+        assertEquals(-1, swipeTurn(-2.5f))
     }
 
     @Test
@@ -67,15 +59,17 @@ class BlockStepsTest {
     }
 
     @Test
-    fun aReleaseAddsOneStepAtMost() {
-        // A flick turns one when the swipe turned none.
-        assertEquals(1, releaseSteps(turned = 0, velocity = 3f))
-        assertEquals(0, releaseSteps(turned = 0, velocity = 1f))
-        // A fast release carries one more in the swipe's direction, never against it, never two.
-        assertEquals(1, releaseSteps(turned = 2, velocity = 30f))
-        assertEquals(0, releaseSteps(turned = 2, velocity = 4f))
-        assertEquals(0, releaseSteps(turned = 2, velocity = -30f))
-        assertEquals(-1, releaseSteps(turned = -1, velocity = -9f))
+    fun aHeldFingerTurnsTheNextStepAMomentAfterEachLanding() {
+        // Not before the swipe has turned its own step.
+        assertEquals(false, holdTurns(turned = false, direction = 1, landedMillis = 2_000, heldSteps = 0))
+        // Not while the finger is back where it went down.
+        assertEquals(false, holdTurns(turned = true, direction = 0, landedMillis = 2_000, heldSteps = 0))
+        // A swipe lifted at its natural end is gone before the first held step.
+        assertEquals(false, holdTurns(turned = true, direction = 1, landedMillis = 200, heldSteps = 0))
+        assertEquals(true, holdTurns(turned = true, direction = 1, landedMillis = 300, heldSteps = 0))
+        // Once holding, the steps follow sooner.
+        assertEquals(true, holdTurns(turned = true, direction = -1, landedMillis = 130, heldSteps = 2))
+        assertEquals(false, holdTurns(turned = true, direction = -1, landedMillis = 60, heldSteps = 2))
     }
 
     @Test
