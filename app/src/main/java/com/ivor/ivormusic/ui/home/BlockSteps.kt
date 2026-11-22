@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -23,8 +24,15 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ivor.ivormusic.util.rememberKodaHaptics
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
@@ -45,10 +53,15 @@ import kotlin.math.sign
  * can follow.
  *
  * A step is rigid. The blocks never follow the finger and never rest
- * between steps: once a swipe has travelled a short way, or is a flick, one
- * step is turned at once and plays out as a short fixed snap with a haptic
- * tick, whatever the finger does next. One coroutine owns the animation,
- * so nothing can stop a step part way.
+ * between steps: once a swipe has travelled a short way, or is a flick, a
+ * step turns at once and plays out as a short fixed snap that lands with a
+ * haptic tick. A longer swipe turns more steps, one for each further stretch
+ * of travel from where the finger went down, and a finger held down past
+ * the first step keeps turning them at a steady pace, so the bottom is a
+ * swipe away and the steps never race past the one wanted. When several
+ * are due they play one after another, each landing before the next, a
+ * little quicker than a single one. One coroutine owns the animation, so
+ * nothing can stop a step part way.
  *
  * The steps take their own drags rather than scrolling, so a swipe here
  * neither hides the navigation nor closes the bar into its bubble: on
@@ -70,11 +83,25 @@ private const val STEP_HOLD_OPEN = 0.72f
 /** A swipe turns a step once it has moved this share of a step... */
 private const val STEP_TURN_AT = 0.12f
 
-/** ...or when it ends faster than this, in steps a second. */
+/** ...and one more for each further stretch this long... */
+private const val STEP_MORE_AT = 0.6f
+
+/** ...or, with the finger held still past the first step, one more after this wait, then at this pace. */
+private const val STEP_HOLD_MILLIS = 550L
+private const val STEP_HOLD_REPEAT_MILLIS = 300L
+
+/** A swipe that turned nothing turns one if it ends faster than this, in steps a second... */
 private const val STEP_FLICK = 2f
 
-/** A step: a short snap with no lingering tail. */
+/** ...and a swipe that turned some turns one more if it ends faster than this. */
+private const val STEP_FLING_MORE = 8f
+
+/** The share of the last step over which the Now playing block fades in out of the bar. */
+private const val BAR_BLOCK_FADE_IN = 0.15f
+
+/** A step: a short snap with no lingering tail. Steps on the way to a later one are a little quicker. */
 private const val STEP_MILLIS = 220
+private const val STEP_RUN_MILLIS = 150
 
 /**
  * Where Home's steps stand, shared with the screen that hosts the bar:
@@ -154,14 +181,16 @@ internal fun stepLayer(position: Float): Float = when {
 }
 
 /**
- * Whether a swipe that has moved [moved] steps (positive onward) turns a
- * step yet: +1 onward, -1 back, 0 not yet. Checked as the finger moves, so
- * the step turns the moment the swipe is long enough.
+ * How many steps a swipe that has moved [moved] steps from where the
+ * finger went down (positive onward) has turned: none until
+ * [STEP_TURN_AT], then one, and one more for each further [STEP_MORE_AT].
+ * Checked as the finger moves, so each step turns the moment it is due.
  */
-internal fun swipeTurn(moved: Float): Int = when {
-    moved >= STEP_TURN_AT -> 1
-    moved <= -STEP_TURN_AT -> -1
-    else -> 0
+internal fun swipeSteps(moved: Float): Int {
+    val distance = abs(moved)
+    if (distance < STEP_TURN_AT) return 0
+    val steps = 1 + floor((distance - STEP_TURN_AT) / STEP_MORE_AT).toInt()
+    return if (moved > 0f) steps else -steps
 }
 
 /** Whether a swipe that ended without turning a step was a flick at [velocity] steps a second (positive onward). */
@@ -171,14 +200,40 @@ internal fun flickTurn(velocity: Float): Int = when {
     else -> 0
 }
 
+/**
+ * The steps a swipe's release adds after it turned [turned]: a flick turns
+ * one when the swipe turned none, and a fast release in the swipe's own
+ * direction one more. Never more than one, so a hard swipe does not race
+ * past the step wanted.
+ */
+internal fun releaseSteps(turned: Int, velocity: Float): Int = when {
+    turned == 0 -> flickTurn(velocity)
+    turned > 0 && velocity >= STEP_FLING_MORE -> 1
+    turned < 0 && velocity <= -STEP_FLING_MORE -> -1
+    else -> 0
+}
+
 /** The step a turn of [direction] from [from] lands on, one step at most and within the steps. */
 internal fun stepTarget(from: Int, direction: Int, last: Int): Int =
     (from + direction.sign).coerceIn(0, last)
 
-/** The swipe in progress: how far it has moved, in steps, and whether it has turned its step. */
+/** The next whole step from [position] on the way to [target]. */
+internal fun nextStepToward(position: Float, target: Int): Float = when {
+    target > position -> minOf(floor(position) + 1f, target.toFloat())
+    target < position -> maxOf(ceil(position) - 1f, target.toFloat())
+    else -> position
+}
+
+/**
+ * The swipe in progress: the step it began on, how far the finger has
+ * moved in steps, the steps added by holding, and when a step last turned.
+ */
 private class StepSwipe {
+    var from = 0
     var moved = 0f
-    var turned = false
+    var held = 0
+    var lastTurn = 0L
+    var hold: Job? = null
 }
 
 /**
@@ -197,40 +252,52 @@ internal fun BlockSteps(
     block: @Composable (index: Int, morph: () -> Float) -> Unit,
 ) {
     val haptics = rememberKodaHaptics()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(count, endsWithBar) {
         steps.count = count
         steps.endsWithBar = endsWithBar
         if (steps.target > steps.lastStep) steps.stepTo(steps.lastStep)
     }
     // The one owner of the position. A step cut short when Home last left
-    // the screen lands first; after that each new target plays as one
-    // snap, and a target that changes mid-snap takes over from where the
-    // blocks are.
+    // the screen lands first. After that the blocks go to each new target
+    // one whole step at a time, every step a snap that lands with a tick; a
+    // target that changes on the way takes over from where the blocks are.
     LaunchedEffect(steps) {
         if (steps.position.value != steps.target.toFloat()) steps.position.snapTo(steps.target.toFloat())
-        snapshotFlow { steps.target }.drop(1).collectLatest { target ->
-            steps.position.animateTo(target.toFloat(), tween(STEP_MILLIS, easing = FastOutSlowInEasing))
+        snapshotFlow { steps.target }.drop(1).collectLatest {
+            while (true) {
+                val target = steps.target
+                val position = steps.position.value
+                if (position == target.toFloat()) break
+                val next = nextStepToward(position, target)
+                val millis = if (abs(target - position) > 1.01f) STEP_RUN_MILLIS else STEP_MILLIS
+                steps.position.animateTo(next, tween(millis, easing = FastOutSlowInEasing))
+                haptics.tick()
+            }
         }
     }
     var stepPx by remember { mutableStateOf(1f) }
     val swipe = remember { StepSwipe() }
-    fun turn(direction: Int) {
-        val next = stepTarget(steps.target, direction, steps.lastStep)
-        if (next != steps.target) {
-            steps.stepTo(next)
-            haptics.tick()
+    // The finger never moves the blocks: it only decides which step they
+    // go to, from how far it has moved and how long it has been held.
+    fun follow() {
+        val last = steps.lastStep
+        val wanted = swipeSteps(swipe.moved) + swipe.held
+        // Past either end, the start moves with the finger, so turning back
+        // turns a step back at once.
+        if (swipe.from + wanted > last) swipe.from = last - wanted
+        if (swipe.from + wanted < 0) swipe.from = -wanted
+        val target = (swipe.from + wanted).coerceIn(0, last)
+        if (target != steps.target) {
+            steps.stepTo(target)
+            swipe.lastTurn = System.currentTimeMillis()
         }
     }
-    // The finger never moves the blocks: it only decides when a step turns.
     val drag = rememberDraggableState { delta ->
-        if (!swipe.turned) {
-            swipe.moved -= delta / stepPx
-            val direction = swipeTurn(swipe.moved)
-            if (direction != 0) {
-                swipe.turned = true
-                turn(direction)
-            }
-        }
+        swipe.moved -= delta / stepPx
+        val direction = swipeSteps(swipe.moved).sign
+        if (swipe.held != 0 && swipe.held.sign != direction) swipe.held = 0
+        follow()
     }
     Layout(
         content = { for (i in 0 until count) block(i) { if (endsWithBar && i == count - 1) steps.morph else 0f } },
@@ -240,11 +307,30 @@ internal fun BlockSteps(
                 drag,
                 Orientation.Vertical,
                 onDragStarted = {
+                    swipe.from = steps.target
                     swipe.moved = 0f
-                    swipe.turned = false
+                    swipe.held = 0
+                    swipe.lastTurn = System.currentTimeMillis()
+                    // A finger held still past the first step keeps turning them.
+                    swipe.hold?.cancel()
+                    swipe.hold = scope.launch {
+                        while (isActive) {
+                            delay(40)
+                            val direction = swipeSteps(swipe.moved).sign
+                            if (direction == 0) continue
+                            val wait = if (swipe.held == 0) STEP_HOLD_MILLIS else STEP_HOLD_REPEAT_MILLIS
+                            val next = steps.target + direction
+                            if (System.currentTimeMillis() - swipe.lastTurn >= wait && next in 0..steps.lastStep) {
+                                swipe.held += direction
+                                follow()
+                            }
+                        }
+                    }
                 },
                 onDragStopped = { velocity ->
-                    if (!swipe.turned) turn(flickTurn(-velocity / stepPx))
+                    swipe.hold?.cancel()
+                    val extra = releaseSteps(swipeSteps(swipe.moved) + swipe.held, -velocity / stepPx)
+                    if (extra != 0) steps.stepTo(steps.target + extra)
                 },
             ),
     ) { measurables, constraints ->
@@ -264,12 +350,18 @@ internal fun BlockSteps(
                 if (isBarBlock) {
                     // Grown out of the bar: from its rectangle at the foot of
                     // the box to the bottom slot and the bar's room below it.
+                    // Until the last step begins it is not drawn at all, and
+                    // it fades in over the first moments of the turn, so its
+                    // corners never show around the bar's round ends.
                     val m = (2f - at).coerceIn(0f, 1f)
+                    if (m <= 0f) return@forEachIndexed
                     val full = slot + bar
                     val h = (barHeight + (full - barHeight) * m).roundToInt().coerceAtLeast(1)
                     val top = ((height - barHeight) + ((slot + gap) - (height - barHeight)) * m).roundToInt()
                     val placeable = measurable.measure(Constraints.fixed(width, h))
-                    placeable.place(0, top, zIndex = 0.5f)
+                    placeable.placeWithLayer(0, top, zIndex = 0.5f) {
+                        alpha = (m / BAR_BLOCK_FADE_IN).coerceIn(0f, 1f)
+                    }
                 } else {
                     val look = stepLook(at)
                     val placeable = measurable.measure(Constraints.fixed(width, slot))

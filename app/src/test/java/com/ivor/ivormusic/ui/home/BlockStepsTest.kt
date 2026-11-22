@@ -43,10 +43,20 @@ class BlockStepsTest {
 
     @Test
     fun aSwipeTurnsAStepOnceItIsLongEnough() {
-        assertEquals(0, swipeTurn(0.05f))
-        assertEquals(0, swipeTurn(-0.11f))
-        assertEquals(1, swipeTurn(0.12f))
-        assertEquals(-1, swipeTurn(-0.3f))
+        assertEquals(0, swipeSteps(0.05f))
+        assertEquals(0, swipeSteps(-0.11f))
+        assertEquals(1, swipeSteps(0.12f))
+        assertEquals(-1, swipeSteps(-0.3f))
+    }
+
+    @Test
+    fun aLongerSwipeTurnsMoreStepsOneStretchAtATime() {
+        assertEquals(1, swipeSteps(0.7f))
+        assertEquals(2, swipeSteps(0.75f))
+        assertEquals(3, swipeSteps(1.4f))
+        assertEquals(-4, swipeSteps(-2.0f))
+        // Turning back undoes them as the finger returns.
+        assertEquals(1, swipeSteps(0.5f))
     }
 
     @Test
@@ -54,6 +64,28 @@ class BlockStepsTest {
         assertEquals(0, flickTurn(1f))
         assertEquals(1, flickTurn(4f))
         assertEquals(-1, flickTurn(-2f))
+    }
+
+    @Test
+    fun aReleaseAddsOneStepAtMost() {
+        // A flick turns one when the swipe turned none.
+        assertEquals(1, releaseSteps(turned = 0, velocity = 3f))
+        assertEquals(0, releaseSteps(turned = 0, velocity = 1f))
+        // A fast release carries one more in the swipe's direction, never against it, never two.
+        assertEquals(1, releaseSteps(turned = 2, velocity = 30f))
+        assertEquals(0, releaseSteps(turned = 2, velocity = 4f))
+        assertEquals(0, releaseSteps(turned = 2, velocity = -30f))
+        assertEquals(-1, releaseSteps(turned = -1, velocity = -9f))
+    }
+
+    @Test
+    fun stepsPlayOneWholeStepAtATime() {
+        assertEquals(3f, nextStepToward(2f, 5), 0f)
+        assertEquals(3f, nextStepToward(2.4f, 5), 0f)
+        assertEquals(2f, nextStepToward(2.4f, 0), 0f)
+        assertEquals(1f, nextStepToward(2f, 0), 0f)
+        assertEquals(2f, nextStepToward(1.6f, 2), 0f)
+        assertEquals(2f, nextStepToward(2f, 2), 0f)
     }
 
     @Test

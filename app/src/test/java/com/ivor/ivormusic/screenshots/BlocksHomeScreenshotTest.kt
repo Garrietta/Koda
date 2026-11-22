@@ -173,6 +173,8 @@ class BlocksHomeScreenshotTest {
     @Test fun steps_0_half() = steps("steps_0_half", 0, 0.5f)
     @Test fun steps_1() = steps("steps_1", 1, 0f)
     @Test fun steps_2() = steps("steps_2", 2, 0f)
+    /** The step before the last: nothing of the Now playing block may show around the bar. */
+    @Test fun steps_3() = steps("steps_3", 3, 0f)
     @Test fun steps_3_half() = steps("steps_3_half", 3, 0.5f)
     @Test fun steps_last() = steps("steps_last", 4, 0f)
     @Test fun steps_nothing_playing() = steps("steps_nothing_playing", 0, 0f, playing = false)
