@@ -126,6 +126,13 @@ fun ExpandablePlayer(
      */
     collapsedBubbleFraction: () -> Float = { 0f },
     /**
+     * How far the collapsed bar has turned into something on the page
+     * (Home's Now playing block), 0 to 1: it rises a little and fades, and
+     * once gone takes no room or touches, so the block under it is tapped.
+     * Read in the draw and layout phases, never in composition.
+     */
+    collapsedHiddenFraction: () -> Float = { 0f },
+    /**
      * Where the page the pill floats over begins and ends: a navigation rail
      * on the start edge, and a phone on its side's cutout or system bar. The
      * pill centres between them, and the expanded player still fills the
@@ -430,8 +437,20 @@ fun ExpandablePlayer(
                     // Fades with the downward pull, at most halfway until the
                     // release commits, then all the way as it leaves.
                     val fadeLimit = if (isDismissing) 1f else 0.5f
-                    alpha = 1f - (miniOffsetY().coerceAtLeast(0f) / (miniDismissThresholdPx * 2f))
-                        .coerceIn(0f, fadeLimit)
+                    val turned = collapsedHiddenFraction().coerceIn(0f, 1f) * (1f - expandProgress)
+                    alpha = (1f - (miniOffsetY().coerceAtLeast(0f) / (miniDismissThresholdPx * 2f))
+                        .coerceIn(0f, fadeLimit)) * (1f - turned)
+                    // Rising into the block as it goes.
+                    translationY = -turned * 24.dp.toPx()
+                }
+                .layout { measurable, constraints ->
+                    // Gone into the block: no room and no touches.
+                    if (collapsedHiddenFraction() >= 0.99f && expandProgress == 0f) {
+                        layout(0, 0) {}
+                    } else {
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                    }
                 }
                 .fillMaxWidth()
                 .height(height.coerceAtLeast(0.dp))

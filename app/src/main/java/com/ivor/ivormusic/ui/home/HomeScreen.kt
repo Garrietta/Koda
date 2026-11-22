@@ -692,6 +692,9 @@ fun HomeScreen(
     // Pages opened over the tiled Home: albums, playlists, artists and
     // Explore, each growing out of what was tapped (HomePages.kt).
     val homePages = remember { HomePageStack() }
+    // Where the stepped Home's blocks stand, shared with the player so the
+    // bar can stay a bar there and turn into the last block.
+    val homeSteps = remember { HomeSteps() }
     val pendingArtistPage by viewModel.pendingArtistPage.collectAsState()
     LaunchedEffect(pendingArtistPage) {
         if (spotlightHome && !videoMode) pendingArtistPage?.let { artist ->
@@ -963,10 +966,16 @@ fun HomeScreen(
     val miniShrink = remember(miniShrinkContext) {
         com.ivor.ivormusic.data.ThemePreferences(miniShrinkContext)
     }.miniPlayerCustomization.collectAsState().value.shrink
-    val miniBubbleWanted = when (miniShrink) {
-        com.ivor.ivormusic.data.MiniPlayerShrink.NEVER -> false
-        com.ivor.ivormusic.data.MiniPlayerShrink.ALWAYS -> true
-        com.ivor.ivormusic.data.MiniPlayerShrink.ON_SCROLL -> miniBubble
+    // On the stepped Home the bar is always a full bar: it turns into the
+    // last block there rather than closing into its bubble. Pages opened over
+    // Home (the DJ, Liked, a tile's page) keep the usual choice.
+    val steppingHome = homeSteps.stepping && !homePages.anyOpen && selectedTab == TAB_HOME && !videoMode
+    val steppingHomeNow by rememberUpdatedState(steppingHome)
+    val miniBubbleWanted = when {
+        steppingHome -> false
+        miniShrink == com.ivor.ivormusic.data.MiniPlayerShrink.NEVER -> false
+        miniShrink == com.ivor.ivormusic.data.MiniPlayerShrink.ALWAYS -> true
+        else -> miniBubble
     }
     val miniBubbleFraction = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (miniBubbleWanted && !nonExpressiveNavigationBar && !useRail) 1f else 0f,
@@ -1323,6 +1332,7 @@ fun HomeScreen(
                                             // The DJ opens from its tile as a page over Home,
                                             // in the tile's color, rather than as a change of tab.
                                             var djOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                                            androidx.compose.runtime.SideEffect { homeSteps.overlayOpen = djOpen }
                                             var djOrigin by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
                                             val blockFaces = rememberBlockFaces()
                                             val djPageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1428,6 +1438,15 @@ fun HomeScreen(
                                                 filter = spotlightFilter,
                                                 onFilterChange = { spotlightFilter = it },
                                                 requestedBlock = com.ivor.ivormusic.MainActivity.pendingHomePage.value,
+                                                homeSteps = homeSteps,
+                                                // The steps end at the bar's lower edge, or above the
+                                                // navigation with nothing playing.
+                                                stepsBottom = if (musicPillVisible) {
+                                                    miniPlayerCollapsedSpacing + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                                                } else {
+                                                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                                        (if (barShown) navigationOverlayInset else 0.dp) + 12.dp
+                                                },
                                                 nowPlaying = currentSong?.let { song ->
                                                     NowPlaying(
                                                         song = song,
@@ -2275,6 +2294,8 @@ fun HomeScreen(
             // Read in the lambda, so the bubble animating does not recompose
             // this screen.
             collapsedBubbleFraction = { miniBubbleFraction.value.coerceIn(0f, 1f) },
+            // On Home's last step the bar turns into the Now playing block.
+            collapsedHiddenFraction = { if (steppingHomeNow) homeSteps.morph else 0f },
             collapsedStartInset = contentStartInset,
             collapsedEndInset = contentEndInset,
             collapsedMaxWidth = if (useRail) MINI_PLAYER_MAX_WIDE_WIDTH else androidx.compose.ui.unit.Dp.Unspecified,

@@ -1,5 +1,7 @@
 package com.ivor.ivormusic.ui.home
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -170,8 +172,10 @@ internal fun BlocksHome(
     stepped: Boolean = false,
     /** What is playing, for the Now playing block that ends the steps; null leaves it out. */
     nowPlaying: NowPlaying? = null,
-    /** The steps' pager, for a caller that drives it (a test, a jump back to the top); null keeps one here. */
-    stepState: androidx.compose.foundation.pager.PagerState? = null,
+    /** Where the steps stand, shared with the screen that hosts the now-playing bar. */
+    steps: HomeSteps? = null,
+    /** The now-playing bar and the gap above it, which the last block grows over. */
+    barReserve: Dp = STEP_BAR + STEP_GAP,
     /** Where the tiles record their faces for the pages that open from them; null records none. */
     faces: BlockFaces? = null,
 ) {
@@ -436,33 +440,41 @@ internal fun BlocksHome(
                     smallTiles(SMALL_BLOCKS, 72.dp)
                 }
             }
-        } else if (stepped && constraints.hasBoundedHeight) {
-            // A phone: the blocks as steps, two in view, each half the room.
-            val steps = buildList<@Composable (Dp) -> Unit> {
-                add { slot -> djTile(Modifier.fillMaxWidth().height(slot)) }
-                add { slot -> pairTiles(slot) }
+        } else if (stepped && steps != null && constraints.hasBoundedHeight) {
+            // A phone: the blocks as steps, two in view above the bar, each
+            // filling the height the stepper gives it.
+            val blocks = buildList<@Composable (() -> Float) -> Unit> {
+                add { _ -> djTile(Modifier.fillMaxSize()) }
+                add { _ -> androidx.compose.foundation.layout.BoxWithConstraints { pairTiles(maxHeight) } }
                 // Jump back in fills its slot: larger covers, the row at its foot.
-                if (recent.isNotEmpty()) add { slot -> recentPanel((slot - 76.dp).coerceIn(56.dp, 132.dp), true) }
-                add { slot ->
-                    Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
-                        smallTiles(SMALL_BLOCKS.take(4), (slot - STEP_GAP) / 2)
+                if (recent.isNotEmpty()) add { _ ->
+                    androidx.compose.foundation.layout.BoxWithConstraints { recentPanel((maxHeight - 76.dp).coerceIn(56.dp, 160.dp), true) }
+                }
+                add { _ ->
+                    androidx.compose.foundation.layout.BoxWithConstraints {
+                        val row = (maxHeight - STEP_GAP) / 2
+                        Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                            smallTiles(SMALL_BLOCKS.take(4), row)
+                        }
                     }
                 }
-                add { slot ->
-                    Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
-                        smallTiles(SMALL_BLOCKS.drop(4), (slot - STEP_GAP) / 2)
+                add { _ ->
+                    androidx.compose.foundation.layout.BoxWithConstraints {
+                        val row = (maxHeight - STEP_GAP) / 2
+                        Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                            smallTiles(SMALL_BLOCKS.drop(4), row)
+                        }
                     }
                 }
-                nowPlaying?.let { playing -> add { slot -> NowPlayingBlock(playing, slot) } }
+                nowPlaying?.let { playing -> add { morph -> NowPlayingBlock(playing, morph) } }
             }
-            val latest by androidx.compose.runtime.rememberUpdatedState(steps)
-            val own = androidx.compose.foundation.pager.rememberPagerState { latest.size }
-            val pager = stepState ?: own
             BlockSteps(
-                state = pager,
-                height = maxHeight,
+                steps = steps,
+                count = blocks.size,
+                endsWithBar = nowPlaying != null,
+                barReserve = barReserve,
                 modifier = Modifier.padding(horizontal = 14.dp),
-            ) { index, slot -> latest.getOrNull(index)?.invoke(slot) }
+            ) { index, morph -> blocks.getOrNull(index)?.invoke(morph) }
         } else {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 djTile(Modifier.fillMaxWidth().height(172.dp))
@@ -487,9 +499,13 @@ class NowPlaying(
  * What is playing, as the last of Home's steps: the cover large, in the
  * cover's own vivid color, with the title, the artist, and play and next.
  * A tap anywhere else opens the player.
+ *
+ * It grows out of the now-playing bar ([morph] 0 is the bar's rectangle,
+ * 1 the block): the ground turns from the bar's color to the cover's and
+ * the contents come up as it opens, so the bar reads as turning into it.
  */
 @Composable
-private fun NowPlayingBlock(playing: NowPlaying, height: Dp) {
+private fun NowPlayingBlock(playing: NowPlaying, morph: () -> Float) {
     val scheme = MaterialTheme.colorScheme
     val song = playing.song
     val art = song.albumArtUri?.toString() ?: song.highResThumbnailUrl ?: song.thumbnailUrl
@@ -497,58 +513,59 @@ private fun NowPlayingBlock(playing: NowPlaying, height: Dp) {
     val block = seed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
     val ground = block?.container ?: scheme.surfaceContainerHigh
     val ink = block?.onContainer ?: scheme.onSurface
+    val barColor = scheme.primaryContainer
     androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier
-            .fillMaxWidth()
-            .height(height)
+            .fillMaxSize()
             .clip(RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tile, bottomStart = Tight))
-            .background(ground)
+            .drawBehind { drawRect(androidx.compose.ui.graphics.lerp(barColor, ground, morph())) }
             .clickable(onClickLabel = song.title, role = Role.Button, onClick = playing.onOpen)
-            .padding(14.dp),
+            .padding(14.dp)
+            .graphicsLayer { alpha = (morph() * 1.6f - 0.6f).coerceIn(0f, 1f) },
     ) {
-    // The cover as tall as the block, but never more than two fifths of its
-    // width, so the words beside it keep a line.
-    val cover = minOf(maxHeight, maxWidth * 0.42f)
-    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(cover).clip(RoundedCornerShape(28.dp))) { BlockCover(song) }
-        Spacer(Modifier.width(16.dp))
-        // The words and the buttons as one group, centred beside the cover.
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column {
-                Text(stringResource(R.string.blocks_now_playing), style = MaterialTheme.typography.labelLarge, color = ink.copy(alpha = 0.8f))
-                Text(
-                    song.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.FilledIconButton(
-                    onClick = playing.onToggle,
-                    modifier = Modifier.size(52.dp),
-                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = ink, contentColor = ground),
-                ) {
-                    Icon(
-                        if (playing.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = stringResource(if (playing.isPlaying) R.string.widget_action_pause else R.string.widget_action_play),
+        // The cover as tall as the block, but never more than two fifths of its
+        // width, so the words beside it keep a line.
+        val cover = minOf(maxHeight, maxWidth * 0.42f).coerceAtLeast(0.dp)
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(cover).clip(RoundedCornerShape(28.dp))) { BlockCover(song) }
+            Spacer(Modifier.width(16.dp))
+            // The words and the buttons as one group, centred beside the cover.
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column {
+                    Text(stringResource(R.string.blocks_now_playing), style = MaterialTheme.typography.labelLarge, color = ink.copy(alpha = 0.8f))
+                    Text(
+                        song.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = ink,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                androidx.compose.material3.FilledTonalIconButton(
-                    onClick = playing.onNext,
-                    modifier = Modifier.size(44.dp),
-                    colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = androidx.compose.ui.graphics.lerp(ground, ink, 0.16f),
-                        contentColor = ink,
-                    ),
-                ) {
-                    Icon(Icons.Rounded.SkipNext, contentDescription = stringResource(R.string.widget_action_next))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = playing.onToggle,
+                        modifier = Modifier.size(56.dp),
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = ink, contentColor = ground),
+                    ) {
+                        Icon(
+                            if (playing.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = stringResource(if (playing.isPlaying) R.string.widget_action_pause else R.string.widget_action_play),
+                        )
+                    }
+                    androidx.compose.material3.FilledTonalIconButton(
+                        onClick = playing.onNext,
+                        modifier = Modifier.size(48.dp),
+                        colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = androidx.compose.ui.graphics.lerp(ground, ink, 0.16f),
+                            contentColor = ink,
+                        ),
+                    ) {
+                        Icon(Icons.Rounded.SkipNext, contentDescription = stringResource(R.string.widget_action_next))
+                    }
                 }
             }
         }
-    }
     }
 }
 

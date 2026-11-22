@@ -170,6 +170,10 @@ fun SpotlightHomeContent(
     requestedBlock: String? = null,
     /** What is playing, for the Now playing block at the end of the stepped Home. */
     nowPlaying: NowPlaying? = null,
+    /** Where the stepped Home's steps stand, shared with the screen that hosts the bar. */
+    homeSteps: HomeSteps? = null,
+    /** From the screen's foot to where the steps end: the bar's lower edge, or above the system bar with nothing playing. */
+    stepsBottom: androidx.compose.ui.unit.Dp = 0.dp,
     onRequestedBlockHandled: () -> Unit = {},
 ) {
     val isRefreshing by viewModel.isLoading.collectAsState()
@@ -614,7 +618,11 @@ fun SpotlightHomeContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth < WIDE_HOME) {
+            val stepped = maxWidth < WIDE_HOME
+            androidx.compose.runtime.SideEffect {
+                homeSteps?.landing = stepped && !homeSearch.active && openBlock == null
+            }
+            if (stepped) {
                 // A phone: the bar and search stay put, and the blocks under
                 // them turn over in steps (BlockSteps) rather than scrolling.
                 val topBar: @Composable () -> Unit = {
@@ -658,15 +666,18 @@ fun SpotlightHomeContent(
                             recent = recentlyPlayed,
                             onOpen = openBlockPage,
                             onRecent = onRecentClick,
+                            // Down to the bar's lower edge: two blocks and the bar fill
+                            // the screen under the search.
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(top = 4.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp),
+                                .padding(top = 4.dp, bottom = stepsBottom),
                             onBounds = { kind, bounds -> blockBounds[kind] = bounds },
                             djColors = djColors,
                             djTitle = djTitle,
                             faces = blockFaces,
                             stepped = true,
                             nowPlaying = nowPlaying,
+                            steps = homeSteps,
                         )
                     }
                 }

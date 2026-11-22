@@ -40,4 +40,28 @@ class BlockStepsTest {
         assertEquals(1f, stepPosition(page = 3, currentPage = 2, offsetFraction = 0f), 0f)
         assertEquals(-0.25f, stepPosition(page = 2, currentPage = 2, offsetFraction = 0.25f), 1e-6f)
     }
+
+    @Test
+    fun aDragTurnsOneStepAtMost() {
+        assertEquals(3, stepTarget(from = 2, moved = 0.6f, velocity = 0f, last = 4))
+        assertEquals(1, stepTarget(from = 2, moved = -0.3f, velocity = 0f, last = 4))
+        assertEquals(2, stepTarget(from = 2, moved = 0.1f, velocity = 0f, last = 4))
+        // A hard flick still only turns one.
+        assertEquals(3, stepTarget(from = 2, moved = 0.1f, velocity = 5000f, last = 4))
+        assertEquals(4, stepTarget(from = 4, moved = 0.5f, velocity = 0f, last = 4))
+    }
+
+    @Test
+    fun theBarTurnsIntoTheLastBlockOnTheLastStep() {
+        val steps = HomeSteps().apply { count = 6; endsWithBar = true }
+        assertEquals(4, steps.lastStep)
+        kotlinx.coroutines.runBlocking { steps.position.snapTo(3f) }
+        assertEquals(0f, steps.morph, 1e-6f)
+        kotlinx.coroutines.runBlocking { steps.position.snapTo(3.5f) }
+        assertEquals(0.5f, steps.morph, 1e-6f)
+        kotlinx.coroutines.runBlocking { steps.position.snapTo(4f) }
+        assertEquals(1f, steps.morph, 1e-6f)
+        steps.endsWithBar = false
+        assertEquals(0f, steps.morph, 1e-6f)
+    }
 }

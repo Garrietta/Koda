@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.screenshots
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -118,25 +119,45 @@ class BlocksHomeScreenshotTest {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             IvorMusicTheme(darkTheme = dark, colorPalette = RONDO_PALETTE_ID) {
-                val state = androidx.compose.foundation.pager.rememberPagerState { 6 }
-                androidx.compose.runtime.LaunchedEffect(Unit) { state.scrollToPage(page, fraction) }
-                Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    Box(Modifier.fillMaxWidth().height(150.dp).padding(20.dp)) {
-                        Text("Saturday evening", style = MaterialTheme.typography.titleLarge)
+                val steps = androidx.compose.runtime.remember { com.ivor.ivormusic.ui.home.HomeSteps() }
+                androidx.compose.runtime.LaunchedEffect(Unit) { steps.position.snapTo(page + fraction) }
+                // The bar's lower edge, from the screen's foot: what Home passes as stepsBottom.
+                val barBottom = 30.dp
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxWidth().height(150.dp).padding(20.dp)) {
+                            Text("Saturday evening", style = MaterialTheme.typography.titleLarge)
+                        }
+                        BlocksHome(
+                            likedCount = 614,
+                            newEpisodes = List(12, ::song),
+                            recent = List(4, ::song),
+                            onOpen = {},
+                            onRecent = {},
+                            modifier = Modifier.weight(1f).padding(top = 4.dp, bottom = if (playing) barBottom else 24.dp),
+                            djColors = com.ivor.ivormusic.data.djMoodHue("Midnight Drift")?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
+                            djTitle = "Midnight Drift: Smoke & Timberline",
+                            stepped = true,
+                            nowPlaying = if (playing) com.ivor.ivormusic.ui.home.NowPlaying(song(7), true, {}, {}, {}) else null,
+                            steps = steps,
+                        )
                     }
-                    BlocksHome(
-                        likedCount = 614,
-                        newEpisodes = List(12, ::song),
-                        recent = List(4, ::song),
-                        onOpen = {},
-                        onRecent = {},
-                        modifier = Modifier.weight(1f).padding(top = 4.dp, bottom = 96.dp),
-                        djColors = com.ivor.ivormusic.data.djMoodHue("Midnight Drift")?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
-                        djTitle = "Midnight Drift: Smoke & Timberline",
-                        stepped = true,
-                        nowPlaying = if (playing) com.ivor.ivormusic.ui.home.NowPlaying(song(7), true, {}, {}, {}) else null,
-                        stepState = state,
-                    )
+                    // A stand-in for the player's bar, fading as Home's player will.
+                    if (playing) {
+                        Box(
+                            Modifier
+                                .align(androidx.compose.ui.Alignment.BottomCenter)
+                                .padding(start = 16.dp, end = 16.dp, bottom = barBottom)
+                                .fillMaxWidth()
+                                .height(68.dp)
+                                .graphicsLayer { alpha = 1f - steps.morph; translationY = -steps.morph * 24.dp.toPx() }
+                                .background(MaterialTheme.colorScheme.primaryContainer, androidx.compose.foundation.shape.CircleShape)
+                                .padding(horizontal = 24.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.CenterStart,
+                        ) {
+                            Text("Song 7 · Artist 7", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
                 }
             }
         }
@@ -150,6 +171,7 @@ class BlocksHomeScreenshotTest {
     @Test fun steps_2() = steps("steps_2", 2, 0f)
     @Test fun steps_3_half() = steps("steps_3_half", 3, 0.5f)
     @Test fun steps_last() = steps("steps_last", 4, 0f)
+    @Test fun steps_nothing_playing() = steps("steps_nothing_playing", 0, 0f, playing = false)
     @Test fun steps_light() = steps("steps_light", 0, 0f, dark = false)
 
     /**
