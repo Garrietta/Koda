@@ -42,13 +42,37 @@ class BlockStepsTest {
     }
 
     @Test
-    fun aDragTurnsOneStepAtMost() {
-        assertEquals(3, stepTarget(from = 2, moved = 0.6f, velocity = 0f, last = 4))
-        assertEquals(1, stepTarget(from = 2, moved = -0.3f, velocity = 0f, last = 4))
-        assertEquals(2, stepTarget(from = 2, moved = 0.1f, velocity = 0f, last = 4))
-        // A hard flick still only turns one.
-        assertEquals(3, stepTarget(from = 2, moved = 0.1f, velocity = 5000f, last = 4))
-        assertEquals(4, stepTarget(from = 4, moved = 0.5f, velocity = 0f, last = 4))
+    fun aSwipeTurnsAStepOnceItIsLongEnough() {
+        assertEquals(0, swipeTurn(0.05f))
+        assertEquals(0, swipeTurn(-0.11f))
+        assertEquals(1, swipeTurn(0.12f))
+        assertEquals(-1, swipeTurn(-0.3f))
+    }
+
+    @Test
+    fun aShortSwipeTurnsOnlyIfFlicked() {
+        assertEquals(0, flickTurn(1f))
+        assertEquals(1, flickTurn(4f))
+        assertEquals(-1, flickTurn(-2f))
+    }
+
+    @Test
+    fun aTurnIsOneStepWithinTheSteps() {
+        assertEquals(3, stepTarget(from = 2, direction = 1, last = 4))
+        assertEquals(1, stepTarget(from = 2, direction = -1, last = 4))
+        assertEquals(2, stepTarget(from = 2, direction = 0, last = 4))
+        assertEquals(3, stepTarget(from = 2, direction = 5, last = 4))
+        assertEquals(4, stepTarget(from = 4, direction = 1, last = 4))
+        assertEquals(0, stepTarget(from = 0, direction = -1, last = 4))
+    }
+
+    @Test
+    fun stepToStaysWithinTheSteps() {
+        val steps = HomeSteps().apply { count = 6 }
+        steps.stepTo(9)
+        assertEquals(4, steps.target)
+        steps.stepTo(-2)
+        assertEquals(0, steps.target)
     }
 
     @Test

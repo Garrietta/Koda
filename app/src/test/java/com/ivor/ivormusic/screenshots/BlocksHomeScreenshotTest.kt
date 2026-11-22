@@ -120,7 +120,11 @@ class BlocksHomeScreenshotTest {
         compose.setContent {
             IvorMusicTheme(darkTheme = dark, colorPalette = RONDO_PALETTE_ID) {
                 val steps = androidx.compose.runtime.remember { com.ivor.ivormusic.ui.home.HomeSteps() }
-                androidx.compose.runtime.LaunchedEffect(Unit) { steps.position.snapTo(page + fraction) }
+                // After the stepper's first frame, which lands the blocks on their target.
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    steps.position.snapTo(page + fraction)
+                }
                 // The bar's lower edge, from the screen's foot: what Home passes as stepsBottom.
                 val barBottom = 30.dp
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {

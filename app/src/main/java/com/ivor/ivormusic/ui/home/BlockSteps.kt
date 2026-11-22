@@ -1,7 +1,8 @@
 package com.ivor.ivormusic.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -12,16 +13,20 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import com.ivor.ivormusic.util.rememberKodaHaptics
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlin.math.roundToInt
+import kotlin.math.sign
 
 /*
  * Home on a phone moves in steps, like the blocks of a rolling desk clock:
@@ -38,6 +43,12 @@ import kotlin.math.roundToInt
  * so it is the largest block, while the bar fades away into it. The
  * stepper reports how far that has gone ([HomeSteps.morph]) so the bar
  * can follow.
+ *
+ * A step is rigid. The blocks never follow the finger and never rest
+ * between steps: once a swipe has travelled a short way, or is a flick, one
+ * step is turned at once and plays out as a short fixed snap with a haptic
+ * tick, whatever the finger does next. One coroutine owns the animation,
+ * so nothing can stop a step part way.
  *
  * The steps take their own drags rather than scrolling, so a swipe here
  * neither hides the navigation nor closes the bar into its bubble: on
@@ -56,9 +67,14 @@ private const val STEP_SHRINK = 0.12f
 /** How much of a slot's travel an opening block gives up, so it opens in the bottom slot. */
 private const val STEP_HOLD_OPEN = 0.72f
 
-/** A drag past this share of a step, or a flick, turns it. */
-private const val STEP_TURN_AT = 0.2f
-private const val STEP_FLICK = 900f
+/** A swipe turns a step once it has moved this share of a step... */
+private const val STEP_TURN_AT = 0.12f
+
+/** ...or when it ends faster than this, in steps a second. */
+private const val STEP_FLICK = 2f
+
+/** A step: a short snap with no lingering tail. */
+private const val STEP_MILLIS = 220
 
 /**
  * Where Home's steps stand, shared with the screen that hosts the bar:
@@ -67,8 +83,17 @@ private const val STEP_FLICK = 900f
  */
 @Stable
 class HomeSteps {
-    /** The step the blocks stand at: 0 is the first two; fractional while one turns. */
+    /** The step the blocks stand at: 0 is the first two; fractional only while one turns. */
     val position = Animatable(0f)
+
+    /** The step the blocks are at or snapping to. */
+    var target by mutableIntStateOf(0)
+        private set
+
+    /** Snaps the blocks to [step]; the stepper plays the turn. */
+    fun stepTo(step: Int) {
+        target = step.coerceIn(0, lastStep)
+    }
 
     /** How many blocks there are. */
     var count by mutableIntStateOf(0)
@@ -128,15 +153,32 @@ internal fun stepLayer(position: Float): Float = when {
     else -> 1f
 }
 
-/** The step a drag that began at [from] settles on, after moving [moved] steps at [velocity] (steps per second, positive onward). */
-internal fun stepTarget(from: Int, moved: Float, velocity: Float, last: Int): Int {
-    val onward = moved > STEP_TURN_AT || velocity > STEP_FLICK
-    val back = moved < -STEP_TURN_AT || velocity < -STEP_FLICK
-    return when {
-        onward && !back -> from + 1
-        back && !onward -> from - 1
-        else -> from
-    }.coerceIn(0, last)
+/**
+ * Whether a swipe that has moved [moved] steps (positive onward) turns a
+ * step yet: +1 onward, -1 back, 0 not yet. Checked as the finger moves, so
+ * the step turns the moment the swipe is long enough.
+ */
+internal fun swipeTurn(moved: Float): Int = when {
+    moved >= STEP_TURN_AT -> 1
+    moved <= -STEP_TURN_AT -> -1
+    else -> 0
+}
+
+/** Whether a swipe that ended without turning a step was a flick at [velocity] steps a second (positive onward). */
+internal fun flickTurn(velocity: Float): Int = when {
+    velocity >= STEP_FLICK -> 1
+    velocity <= -STEP_FLICK -> -1
+    else -> 0
+}
+
+/** The step a turn of [direction] from [from] lands on, one step at most and within the steps. */
+internal fun stepTarget(from: Int, direction: Int, last: Int): Int =
+    (from + direction.sign).coerceIn(0, last)
+
+/** The swipe in progress: how far it has moved, in steps, and whether it has turned its step. */
+private class StepSwipe {
+    var moved = 0f
+    var turned = false
 }
 
 /**
@@ -154,17 +196,40 @@ internal fun BlockSteps(
     modifier: Modifier = Modifier,
     block: @Composable (index: Int, morph: () -> Float) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
+    val haptics = rememberKodaHaptics()
     LaunchedEffect(count, endsWithBar) {
         steps.count = count
         steps.endsWithBar = endsWithBar
-        if (steps.position.value > steps.lastStep) steps.position.snapTo(steps.lastStep.toFloat())
+        if (steps.target > steps.lastStep) steps.stepTo(steps.lastStep)
     }
-    var stepPx by androidx.compose.runtime.remember { mutableStateOf(1f) }
-    var dragFrom by androidx.compose.runtime.remember { mutableIntStateOf(0) }
+    // The one owner of the position. A step cut short when Home last left
+    // the screen lands first; after that each new target plays as one
+    // snap, and a target that changes mid-snap takes over from where the
+    // blocks are.
+    LaunchedEffect(steps) {
+        if (steps.position.value != steps.target.toFloat()) steps.position.snapTo(steps.target.toFloat())
+        snapshotFlow { steps.target }.drop(1).collectLatest { target ->
+            steps.position.animateTo(target.toFloat(), tween(STEP_MILLIS, easing = FastOutSlowInEasing))
+        }
+    }
+    var stepPx by remember { mutableStateOf(1f) }
+    val swipe = remember { StepSwipe() }
+    fun turn(direction: Int) {
+        val next = stepTarget(steps.target, direction, steps.lastStep)
+        if (next != steps.target) {
+            steps.stepTo(next)
+            haptics.tick()
+        }
+    }
+    // The finger never moves the blocks: it only decides when a step turns.
     val drag = rememberDraggableState { delta ->
-        scope.launch {
-            steps.position.snapTo((steps.position.value - delta / stepPx).coerceIn(0f, steps.lastStep.toFloat()))
+        if (!swipe.turned) {
+            swipe.moved -= delta / stepPx
+            val direction = swipeTurn(swipe.moved)
+            if (direction != 0) {
+                swipe.turned = true
+                turn(direction)
+            }
         }
     }
     Layout(
@@ -174,10 +239,12 @@ internal fun BlockSteps(
             .draggable(
                 drag,
                 Orientation.Vertical,
-                onDragStarted = { dragFrom = steps.position.value.roundToInt() },
+                onDragStarted = {
+                    swipe.moved = 0f
+                    swipe.turned = false
+                },
                 onDragStopped = { velocity ->
-                    val target = stepTarget(dragFrom, steps.position.value - dragFrom, -velocity / stepPx, steps.lastStep)
-                    steps.position.animateTo(target.toFloat(), spring(dampingRatio = 1f, stiffness = 520f))
+                    if (!swipe.turned) turn(flickTurn(-velocity / stepPx))
                 },
             ),
     ) { measurables, constraints ->
@@ -221,6 +288,6 @@ internal fun BlockSteps(
 }
 
 /** Sends the steps back to the first, as a tap on Home's tab does. */
-suspend fun HomeSteps.toFirst() {
-    position.animateTo(0f, spring(dampingRatio = 1f, stiffness = 380f))
+fun HomeSteps.toFirst() {
+    stepTo(0)
 }
