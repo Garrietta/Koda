@@ -168,6 +168,8 @@ fun SpotlightHomeContent(
     onFilterChange: (SpotlightFilter) -> Unit,
     /** A block to open as if tapped, by its widget key, asked for from outside Home (a widget's tile). */
     requestedBlock: String? = null,
+    /** What is playing, for the Now playing block at the end of the stepped Home. */
+    nowPlaying: NowPlaying? = null,
     onRequestedBlockHandled: () -> Unit = {},
 ) {
     val isRefreshing by viewModel.isLoading.collectAsState()
@@ -611,14 +613,11 @@ fun SpotlightHomeContent(
             },
             modifier = Modifier.fillMaxSize(),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-                contentPadding = contentPadding,
-            ) {
-                item(key = "topbar") {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth < WIDE_HOME) {
+                // A phone: the bar and search stay put, and the blocks under
+                // them turn over in steps (BlockSteps) rather than scrolling.
+                val topBar: @Composable () -> Unit = {
                     TopBarSection(
                         onProfileClick = onProfileClick,
                         onSettingsClick = onSettingsClick,
@@ -631,35 +630,98 @@ fun SpotlightHomeContent(
                         modeToggleState = modeToggleState,
                     )
                 }
-
-                // Search at the top of Home, searching as it is typed into:
-                // while there is a query, its results take the tiles' place.
-                item(key = "search") {
+                androidx.compose.foundation.layout.Column(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(top = contentPadding.calculateTopPadding()),
+                ) {
+                    topBar()
                     HomeSearchField(homeSearch, Modifier.padding(top = 4.dp, bottom = 6.dp))
+                    if (homeSearch.active) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                        ) {
+                            homeSearchResults(
+                                homeSearch,
+                                onPlaySongs = onPlaySongs,
+                                onSongLongPress = onSongLongPress,
+                                onOpenPage = { page -> onOpenPage(page, null) },
+                            )
+                        }
+                    } else {
+                        BlocksHome(
+                            likedCount = likedSongs.size,
+                            newEpisodes = newEpisodes,
+                            recent = recentlyPlayed,
+                            onOpen = openBlockPage,
+                            onRecent = onRecentClick,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = 4.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp),
+                            onBounds = { kind, bounds -> blockBounds[kind] = bounds },
+                            djColors = djColors,
+                            djTitle = djTitle,
+                            faces = blockFaces,
+                            stepped = true,
+                            nowPlaying = nowPlaying,
+                        )
+                    }
                 }
-                if (homeSearch.active) {
-                    homeSearchResults(
-                        homeSearch,
-                        onPlaySongs = onPlaySongs,
-                        onSongLongPress = onSongLongPress,
-                        onOpenPage = { page -> onOpenPage(page, null) },
-                    )
-                } else item(key = "blocks") {
-                    BlocksHome(
-                        likedCount = likedSongs.size,
-                        newEpisodes = newEpisodes,
-                        recent = recentlyPlayed,
-                        onOpen = openBlockPage,
-                        onRecent = onRecentClick,
-                        modifier = Modifier.padding(top = 4.dp),
-                        onBounds = { kind, bounds -> blockBounds[kind] = bounds },
-                        djColors = djColors,
-                        djTitle = djTitle,
-                        faces = blockFaces,
-                    )
-                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                    contentPadding = contentPadding,
+                ) {
+                    item(key = "topbar") {
+                        TopBarSection(
+                            onProfileClick = onProfileClick,
+                            onSettingsClick = onSettingsClick,
+                            onDownloadsClick = onDownloadsClick,
+                            isDarkMode = isDarkMode,
+                            viewModel = viewModel,
+                            videoMode = videoMode,
+                            onVideoModeToggle = onVideoModeToggle,
+                            showModeToggle = showModeToggle,
+                            modeToggleState = modeToggleState,
+                        )
+                    }
 
-                item(key = "tail") { Spacer(Modifier.height(24.dp)) }
+                    // Search at the top of Home, searching as it is typed into:
+                    // while there is a query, its results take the tiles' place.
+                    item(key = "search") {
+                        HomeSearchField(homeSearch, Modifier.padding(top = 4.dp, bottom = 6.dp))
+                    }
+                    if (homeSearch.active) {
+                        homeSearchResults(
+                            homeSearch,
+                            onPlaySongs = onPlaySongs,
+                            onSongLongPress = onSongLongPress,
+                            onOpenPage = { page -> onOpenPage(page, null) },
+                        )
+                    } else item(key = "blocks") {
+                        BlocksHome(
+                            likedCount = likedSongs.size,
+                            newEpisodes = newEpisodes,
+                            recent = recentlyPlayed,
+                            onOpen = openBlockPage,
+                            onRecent = onRecentClick,
+                            modifier = Modifier.padding(top = 4.dp),
+                            onBounds = { kind, bounds -> blockBounds[kind] = bounds },
+                            djColors = djColors,
+                            djTitle = djTitle,
+                            faces = blockFaces,
+                        )
+                    }
+
+                    item(key = "tail") { Spacer(Modifier.height(24.dp)) }
+                }
+            }
             }
         }
 

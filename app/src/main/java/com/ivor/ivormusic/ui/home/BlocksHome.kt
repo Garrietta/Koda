@@ -1,5 +1,10 @@
 package com.ivor.ivormusic.ui.home
 
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.Pause
 import com.ivor.ivormusic.ui.theme.vividNeighbor
 import com.ivor.ivormusic.ui.theme.grainGlow
 import androidx.compose.ui.draw.drawWithContent
@@ -158,6 +163,15 @@ internal fun BlocksHome(
     djColors: com.ivor.ivormusic.ui.theme.VividBlock? = null,
     /** The current mix's name, shown on the DJ tile. Null shows what the DJ does. */
     djTitle: String? = null,
+    /**
+     * Lay the blocks out as steps ([BlockSteps]) where the screen is a phone's
+     * width: two in view, a swipe turning one over. Needs a bounded height.
+     */
+    stepped: Boolean = false,
+    /** What is playing, for the Now playing block that ends the steps; null leaves it out. */
+    nowPlaying: NowPlaying? = null,
+    /** The steps' pager, for a caller that drives it (a test, a jump back to the top); null keeps one here. */
+    stepState: androidx.compose.foundation.pager.PagerState? = null,
     /** Where the tiles record their faces for the pages that open from them; null records none. */
     faces: BlockFaces? = null,
 ) {
@@ -333,15 +347,17 @@ internal fun BlocksHome(
     }
 
         // The last few things played, as covers in four different shapes. A tap plays one.
-    val recentPanel: @Composable (Dp) -> Unit = { coverHeight ->
+    val recentPanel: @Composable (Dp, Boolean) -> Unit = { coverHeight, fill ->
         if (recent.isNotEmpty()) {
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .then(if (fill) Modifier.fillMaxHeight() else Modifier)
                     .onGloballyPositioned { onBounds(BlockKind.Recent, it.boundsInRoot()) }
                     .clip(RoundedCornerShape(32.dp))
                     .background(scheme.surfaceContainer)
                     .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 16.dp),
+                verticalArrangement = if (fill) Arrangement.SpaceBetween else Arrangement.Top,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -373,15 +389,15 @@ internal fun BlocksHome(
     }
 
     // For going deeper: each a badge in the color its page will be, on a plain tile.
-    val smallTiles: @Composable () -> Unit = {
-        for (pair in SMALL_BLOCKS.chunked(2)) {
+    val smallTiles: @Composable (List<SmallBlock>, Dp) -> Unit = { blocks, rowHeight ->
+        for (pair in blocks.chunked(2)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (small in pair) {
                     val (badge, onBadge) = small.kind.colors(scheme)
                     Row(
                         Modifier
                             .weight(1f)
-                            .height(72.dp)
+                            .height(rowHeight)
                             .block(small.kind, RoundedCornerShape(28.dp), scheme.surfaceContainer)
                             .padding(horizontal = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -406,33 +422,138 @@ internal fun BlocksHome(
         }
     }
 
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(if (stepped) modifier.fillMaxSize() else modifier.fillMaxWidth()) {
         if (maxWidth >= WIDE_HOME) {
-            // Unfolded: the tiles that play on the left, the ways in on the
-            // right, the recent covers grown to fill their half.
+            // Unfolded: two columns side by side, so the whole width is used
+            // rather than one column stretched across it.
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     djTile(Modifier.fillMaxWidth().height(200.dp))
                     pairTiles(300.dp)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    recentPanel(128.dp)
-                    smallTiles()
+                    recentPanel(128.dp, false)
+                    smallTiles(SMALL_BLOCKS, 72.dp)
                 }
             }
+        } else if (stepped && constraints.hasBoundedHeight) {
+            // A phone: the blocks as steps, two in view, each half the room.
+            val steps = buildList<@Composable (Dp) -> Unit> {
+                add { slot -> djTile(Modifier.fillMaxWidth().height(slot)) }
+                add { slot -> pairTiles(slot) }
+                // Jump back in fills its slot: larger covers, the row at its foot.
+                if (recent.isNotEmpty()) add { slot -> recentPanel((slot - 76.dp).coerceIn(56.dp, 132.dp), true) }
+                add { slot ->
+                    Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                        smallTiles(SMALL_BLOCKS.take(4), (slot - STEP_GAP) / 2)
+                    }
+                }
+                add { slot ->
+                    Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                        smallTiles(SMALL_BLOCKS.drop(4), (slot - STEP_GAP) / 2)
+                    }
+                }
+                nowPlaying?.let { playing -> add { slot -> NowPlayingBlock(playing, slot) } }
+            }
+            val latest by androidx.compose.runtime.rememberUpdatedState(steps)
+            val own = androidx.compose.foundation.pager.rememberPagerState { latest.size }
+            val pager = stepState ?: own
+            BlockSteps(
+                state = pager,
+                height = maxHeight,
+                modifier = Modifier.padding(horizontal = 14.dp),
+            ) { index, slot -> latest.getOrNull(index)?.invoke(slot) }
         } else {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 djTile(Modifier.fillMaxWidth().height(172.dp))
                 pairTiles(230.dp)
-                recentPanel(72.dp)
-                smallTiles()
+                recentPanel(72.dp, false)
+                smallTiles(SMALL_BLOCKS, 72.dp)
             }
         }
     }
 }
 
-/** From this width Home sets its tiles in two columns. */
-private val WIDE_HOME = 600.dp
+/** The song playing, for the Now playing block that ends Home's steps. */
+class NowPlaying(
+    val song: Song,
+    val isPlaying: Boolean,
+    val onToggle: () -> Unit,
+    val onNext: () -> Unit,
+    val onOpen: () -> Unit,
+)
+
+/**
+ * What is playing, as the last of Home's steps: the cover large, in the
+ * cover's own vivid color, with the title, the artist, and play and next.
+ * A tap anywhere else opens the player.
+ */
+@Composable
+private fun NowPlayingBlock(playing: NowPlaying, height: Dp) {
+    val scheme = MaterialTheme.colorScheme
+    val song = playing.song
+    val art = song.albumArtUri?.toString() ?: song.highResThumbnailUrl ?: song.thumbnailUrl
+    val seed = com.ivor.ivormusic.ui.player.rememberArtworkSeed(enabled = art != null, albumArtUri = art)
+    val block = seed?.let { com.ivor.ivormusic.ui.theme.vividBlockOf(it) }
+    val ground = block?.container ?: scheme.surfaceContainerHigh
+    val ink = block?.onContainer ?: scheme.onSurface
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tile, bottomStart = Tight))
+            .background(ground)
+            .clickable(onClickLabel = song.title, role = Role.Button, onClick = playing.onOpen)
+            .padding(14.dp),
+    ) {
+    // The cover as tall as the block, but never more than two fifths of its
+    // width, so the words beside it keep a line.
+    val cover = minOf(maxHeight, maxWidth * 0.42f)
+    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(cover).clip(RoundedCornerShape(28.dp))) { BlockCover(song) }
+        Spacer(Modifier.width(16.dp))
+        // The words and the buttons as one group, centred beside the cover.
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column {
+                Text(stringResource(R.string.blocks_now_playing), style = MaterialTheme.typography.labelLarge, color = ink.copy(alpha = 0.8f))
+                Text(
+                    song.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.FilledIconButton(
+                    onClick = playing.onToggle,
+                    modifier = Modifier.size(52.dp),
+                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = ink, contentColor = ground),
+                ) {
+                    Icon(
+                        if (playing.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = stringResource(if (playing.isPlaying) R.string.widget_action_pause else R.string.widget_action_play),
+                    )
+                }
+                androidx.compose.material3.FilledTonalIconButton(
+                    onClick = playing.onNext,
+                    modifier = Modifier.size(44.dp),
+                    colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = androidx.compose.ui.graphics.lerp(ground, ink, 0.16f),
+                        contentColor = ink,
+                    ),
+                ) {
+                    Icon(Icons.Rounded.SkipNext, contentDescription = stringResource(R.string.widget_action_next))
+                }
+            }
+        }
+    }
+    }
+}
+
+/** From this width Home is two columns side by side, and never steps. */
+internal val WIDE_HOME = 600.dp
 
 private val COVER_SHAPES: List<Shape> = listOf(
     RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 8.dp),

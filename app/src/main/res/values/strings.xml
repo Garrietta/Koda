@@ -150,6 +150,7 @@
     <string name="home_section_on_repeat_caption">Songs you keep coming back to</string>
     <string name="home_section_new_episodes">New episodes</string>
     <string name="blocks_dj">DJ</string>
+    <string name="blocks_now_playing">Now playing</string>
     <string name="blocks_dj_caption">A set from what you played this week</string>
     <string name="blocks_liked_count">%1$d songs</string>
     <string name="blocks_liked_empty">No songs yet</string>

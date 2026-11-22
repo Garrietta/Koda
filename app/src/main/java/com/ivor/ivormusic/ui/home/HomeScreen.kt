@@ -1428,6 +1428,15 @@ fun HomeScreen(
                                                 filter = spotlightFilter,
                                                 onFilterChange = { spotlightFilter = it },
                                                 requestedBlock = com.ivor.ivormusic.MainActivity.pendingHomePage.value,
+                                                nowPlaying = currentSong?.let { song ->
+                                                    NowPlaying(
+                                                        song = song,
+                                                        isPlaying = isPlaying,
+                                                        onToggle = { playerViewModel.togglePlayPause() },
+                                                        onNext = { playerViewModel.skipToNext() },
+                                                        onOpen = { showPlayerSheet = true },
+                                                    )
+                                                },
                                                 onRequestedBlockHandled = { com.ivor.ivormusic.MainActivity.pendingHomePage.value = null },
                                             )
                                             BlockReveal(

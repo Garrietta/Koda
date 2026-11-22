@@ -1,5 +1,6 @@
 package com.ivor.ivormusic.screenshots
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -105,6 +106,51 @@ class BlocksHomeScreenshotTest {
         compose.mainClock.advanceTimeBy(2_000)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
+
+    /**
+     * Home on a phone as steps: the bar and search fixed (stood in for here
+     * by a band of the right height), two blocks under them, the pager on
+     * [page] and [fraction] of the way into the next step - 0 settled,
+     * 0.5 halfway through a turn, where the top block is falling back and
+     * the next is opening into the bottom slot.
+     */
+    private fun steps(name: String, page: Int, fraction: Float, dark: Boolean = true, playing: Boolean = true) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = dark, colorPalette = RONDO_PALETTE_ID) {
+                val state = androidx.compose.foundation.pager.rememberPagerState { 6 }
+                androidx.compose.runtime.LaunchedEffect(Unit) { state.scrollToPage(page, fraction) }
+                Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Box(Modifier.fillMaxWidth().height(150.dp).padding(20.dp)) {
+                        Text("Saturday evening", style = MaterialTheme.typography.titleLarge)
+                    }
+                    BlocksHome(
+                        likedCount = 614,
+                        newEpisodes = List(12, ::song),
+                        recent = List(4, ::song),
+                        onOpen = {},
+                        onRecent = {},
+                        modifier = Modifier.weight(1f).padding(top = 4.dp, bottom = 96.dp),
+                        djColors = com.ivor.ivormusic.data.djMoodHue("Midnight Drift")?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
+                        djTitle = "Midnight Drift: Smoke & Timberline",
+                        stepped = true,
+                        nowPlaying = if (playing) com.ivor.ivormusic.ui.home.NowPlaying(song(7), true, {}, {}, {}) else null,
+                        stepState = state,
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test fun steps_0() = steps("steps_0", 0, 0f)
+    @Test fun steps_0_half() = steps("steps_0_half", 0, 0.5f)
+    @Test fun steps_1() = steps("steps_1", 1, 0f)
+    @Test fun steps_2() = steps("steps_2", 2, 0f)
+    @Test fun steps_3_half() = steps("steps_3_half", 3, 0.5f)
+    @Test fun steps_last() = steps("steps_last", 4, 0f)
+    @Test fun steps_light() = steps("steps_light", 0, 0f, dark = false)
 
     /**
      * The player's colors for covers of nine colors: the pill and the
