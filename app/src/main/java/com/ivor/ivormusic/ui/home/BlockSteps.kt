@@ -1,8 +1,8 @@
 package com.ivor.ivormusic.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,7 +19,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -37,34 +37,40 @@ import kotlin.math.roundToInt
 import kotlin.math.sign
 
 /*
- * Home on a phone moves in steps, like the blocks of a rolling desk clock:
- * the header and search stay put, and under them two blocks are always in
- * view, each half the room above the now-playing bar. A swipe moves
- * exactly one step. As it does, the top block falls back where it stands -
- * it shrinks a little and fades - while the block under it rises into its
- * place, and the next one opens into the bottom slot out of a pinched,
- * faded state.
+ * Home moves in steps, like the blocks of a rolling desk clock: the header
+ * and search stay put, and under them two blocks are always in view, each
+ * half the room. The motion follows three patterns that are known to work:
  *
- * The last step is different when something is playing: the bar itself
- * turns into the last block. The Now playing block grows up out of the
- * bar's own rectangle into the bottom slot and the bar's space below it,
- * so it is the largest block, while the bar fades away into it. The
- * stepper reports how far that has gone ([HomeSteps.morph]) so the bar
- * can follow.
+ *  - Masking, as Material 3's carousel does at its edges. A block never
+ *    shrinks or stretches; a rounded window over it does. As a step turns,
+ *    the top block's window closes up into the top edge, its content kept
+ *    centred in what is left, and it fades back; the lower block slides up
+ *    whole into the top slot; and the next block's window opens up from the
+ *    foot into the room the others leave. The three windows tile the space
+ *    with the same gap between them at every moment, so nothing overlaps
+ *    and nothing jumps (stepWindow).
  *
- * A step is rigid. The blocks never follow the finger and never rest
- * between steps: once a swipe has travelled a short way, or is a flick, one
- * step turns at once and plays out as a short fixed snap that lands with a
- * haptic tick. However long the swipe, it turns one step. Only a finger
- * still held down after that step has landed keeps going: a moment after
- * each landing the next step turns, for as long as the finger stays down,
- * so the bottom is one swipe and a hold away and lifting stops on the step
- * in view. One coroutine owns the animation, so nothing can stop a step
- * part way.
+ *  - Paging. A swipe turns exactly one step, however long it is, and the
+ *    step is finished by a stiff spring with no visible overshoot (the
+ *    standard scheme's fast spatial spring), landing with a haptic tick. A
+ *    finger still held down after a step lands keeps turning steps, one
+ *    after another, until it lifts.
  *
- * The steps take their own drags rather than scrolling, so a swipe here
- * neither hides the navigation nor closes the bar into its bubble: on
- * Home the bar stays a bar.
+ *  - Resistance. Before a swipe is long enough to turn a step, the blocks
+ *    give a little under the finger, as a list does at its end, so the touch
+ *    is felt; the step then carries on from there. Let go short and they
+ *    spring back. They can give only a few percent, so they never rest part
+ *    way between steps.
+ *
+ * The last step is different when something is playing on a phone: the
+ * bar itself turns into the last block. The Now playing block grows up out
+ * of the bar's own rectangle into the bottom slot and the bar's space
+ * below it, while the bar fades away into it. The stepper reports how far
+ * that has gone ([HomeSteps.morph]) so the bar can follow.
+ *
+ * One coroutine owns the position, so nothing can stop a step part way,
+ * and the steps take their own drags rather than scrolling, so a swipe
+ * here neither hides the navigation nor closes the bar into its bubble.
  */
 
 /** The gap between blocks, and between the lower block and the bar. */
@@ -73,11 +79,16 @@ internal val STEP_GAP = 10.dp
 /** The now-playing bar's height, which the last block grows out of and over. */
 internal val STEP_BAR = 68.dp
 
-/** How far a block shrinks as it falls back or before it opens: 12%. */
-private const val STEP_SHRINK = 0.12f
+/** The rounding of a window's moving edge, where it cuts across a block. */
+private val STEP_MASK_RADIUS = 28.dp
 
-/** How much of a slot's travel an opening block gives up, so it opens in the bottom slot. */
-private const val STEP_HOLD_OPEN = 0.72f
+/** How much a block closing into the top fades back by the time it is gone, and how faint one opening at the foot begins. */
+private const val STEP_FADE_OUT = 0.6f
+private const val STEP_FADE_IN = 0.45f
+
+/** Before a step turns, the blocks follow the finger at this share of its travel, at most this share of a step. */
+private const val STEP_NUDGE = 0.4f
+private const val STEP_NUDGE_MOST = 0.06f
 
 /** A swipe turns a step once it has moved this share of a step... */
 private const val STEP_TURN_AT = 0.12f
@@ -96,9 +107,15 @@ private const val STEP_FLICK = 2f
 /** The share of the last step over which the Now playing block fades in out of the bar. */
 private const val BAR_BLOCK_FADE_IN = 0.15f
 
-/** A step: a short snap with no lingering tail. Steps on the way to a later one are a little quicker. */
-private const val STEP_MILLIS = 220
-private const val STEP_RUN_MILLIS = 150
+/**
+ * A step's spring: Material's standard fast spatial spring, stiff and all
+ * but critically damped, so a step lands firmly with no bounce to see.
+ */
+private const val STEP_STIFFNESS = 1400f
+private const val STEP_DAMPING = 0.9f
+
+/** Letting go short: the blocks spring back from their nudge. */
+private const val STEP_RETURN_STIFFNESS = 700f
 
 /**
  * Where Home's steps stand, shared with the screen that hosts the bar:
@@ -113,6 +130,12 @@ class HomeSteps {
     /** The step the blocks are at or snapping to. */
     var target by mutableIntStateOf(0)
         private set
+
+    /** How far a swipe not yet long enough to turn a step has nudged the blocks, in steps. */
+    var nudge by mutableFloatStateOf(0f)
+
+    /** Where the blocks are drawn: the position and any nudge. */
+    val shown: Float get() = position.value + nudge
 
     /** Snaps the blocks to [step]; the stepper plays the turn. */
     fun stepTo(step: Int) {
@@ -145,45 +168,68 @@ class HomeSteps {
 
     /** How far the bar has turned into the Now playing block, 0 to 1. */
     val morph: Float
-        get() = if (!endsWithBar || count < 2) 0f else (position.value - (count - 3)).coerceIn(0f, 1f)
+        get() = if (!endsWithBar || count < 2) 0f else (shown - (count - 3)).coerceIn(0f, 1f)
 
     /** The bar is a bar here, never a bubble, and follows [morph]. */
     val stepping: Boolean get() = landing && !overlayOpen
 }
 
-/**
- * Where a block is relative to the step: 0 is the top slot, 1 the bottom,
- * -1 just gone above, 2 still to come. Fractional while a step turns.
- */
-internal fun stepPosition(page: Int, currentPage: Int, offsetFraction: Float): Float =
-    (page - currentPage) - offsetFraction
-
-/** How a block is drawn at a [position]: its scale, opacity, and the share of a slot it is held back by. */
-internal data class StepLook(val scale: Float, val alpha: Float, val hold: Float)
-
-internal fun stepLook(position: Float): StepLook = when {
-    // Falling back out of the top slot, where it stands.
-    position < 0f -> {
-        val t = (-position).coerceIn(0f, 1f)
-        StepLook(scale = 1f - STEP_SHRINK * t, alpha = 1f - t, hold = t)
-    }
-    // Opening into the bottom slot.
-    position > 1f -> {
-        val t = (position - 1f).coerceIn(0f, 1f)
-        StepLook(scale = 1f - STEP_SHRINK * t, alpha = 1f - t, hold = -STEP_HOLD_OPEN * t)
-    }
-    else -> StepLook(1f, 1f, 0f)
+/** The part of the steps' box a block is seen through, top and bottom in pixels from the box's top. */
+internal data class StepWindow(val top: Float, val bottom: Float) {
+    val height: Float get() = bottom - top
 }
 
 /**
- * Which block is drawn over which: the one rising through the slots on
- * top, the one opening at the bottom under it (it is uncovered as the
- * other moves up), and the one falling back under both.
+ * The window of a block at [at] steps from the top slot (0 the top slot,
+ * 1 the bottom, -1 gone above, 2 still to come), for slots [slot] tall
+ * with [gap] between them; null when none of it shows.
+ *
+ * Going up out of the top slot its window closes into the top edge; between
+ * the slots it is whole and moves; coming into the bottom slot its window
+ * opens up from the foot, its top edge following the block above at one
+ * gap's distance. At every position the windows in view tile the box.
  */
-internal fun stepLayer(position: Float): Float = when {
-    position < 0f -> 0f
-    position > 1f -> 0.5f
+internal fun stepWindow(at: Float, slot: Float, gap: Float): StepWindow? {
+    val pitch = slot + gap
+    val window = when {
+        at <= -1f || at >= 2f -> return null
+        // Its foot stays one gap above the block rising into the top slot.
+        at < 0f -> StepWindow(0f, (1f + at) * pitch - gap)
+        at <= 1f -> StepWindow(at * pitch, at * pitch + slot)
+        else -> StepWindow((at - 1f) * pitch + pitch, slot + pitch)
+    }
+    return window.takeIf { it.height > 0.5f }
+}
+
+/** How opaque a block at [at] is: fading back as it closes into the top, faint as it opens at the foot. */
+internal fun stepFade(at: Float): Float = when {
+    at < 0f -> 1f - STEP_FADE_OUT * (-at).coerceIn(0f, 1f)
+    at > 1f -> 1f - (1f - STEP_FADE_IN) * (at - 1f).coerceIn(0f, 1f)
     else -> 1f
+}
+
+/** How far a swipe that has moved [moved] steps nudges the blocks before it turns one. */
+internal fun stepNudge(moved: Float): Float = (moved * STEP_NUDGE).coerceIn(-STEP_NUDGE_MOST, STEP_NUDGE_MOST)
+
+/** A rounded window cut across a block, in the block's own coordinates, rounded only on the edges that cut it. */
+private class StepWindowShape(
+    private val top: Float,
+    private val bottom: Float,
+    private val radius: Float,
+    private val roundTop: Boolean,
+    private val roundBottom: Boolean,
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val t = if (roundTop) androidx.compose.ui.geometry.CornerRadius(radius) else androidx.compose.ui.geometry.CornerRadius.Zero
+        val b = if (roundBottom) androidx.compose.ui.geometry.CornerRadius(radius) else androidx.compose.ui.geometry.CornerRadius.Zero
+        return androidx.compose.ui.graphics.Outline.Rounded(
+            androidx.compose.ui.geometry.RoundRect(0f, top, size.width, bottom, t, t, b, b),
+        )
+    }
 }
 
 /**
@@ -236,6 +282,7 @@ private class StepSwipe {
     var held = 0
     var landedAt = 0L
     var hold: Job? = null
+    var settle: Job? = null
 }
 
 /**
@@ -267,13 +314,17 @@ internal fun BlockSteps(
     LaunchedEffect(steps) {
         if (steps.position.value != steps.target.toFloat()) steps.position.snapTo(steps.target.toFloat())
         snapshotFlow { steps.target }.drop(1).collectLatest {
+            // The step carries on from where the finger nudged the blocks.
+            if (steps.nudge != 0f) {
+                steps.position.snapTo(steps.position.value + steps.nudge)
+                steps.nudge = 0f
+            }
             while (true) {
                 val target = steps.target
                 val position = steps.position.value
                 if (position == target.toFloat()) break
                 val next = nextStepToward(position, target)
-                val millis = if (abs(target - position) > 1.01f) STEP_RUN_MILLIS else STEP_MILLIS
-                steps.position.animateTo(next, tween(millis, easing = FastOutSlowInEasing))
+                steps.position.animateTo(next, spring(dampingRatio = STEP_DAMPING, stiffness = STEP_STIFFNESS))
                 haptics.tick()
             }
         }
@@ -282,18 +333,19 @@ internal fun BlockSteps(
     val swipe = remember { StepSwipe() }
     // The finger never moves the blocks: a swipe turns one step, and a
     // finger held down after it has landed turns the next ones.
-    fun turn(direction: Int) {
+    fun turn(direction: Int): Boolean {
         val next = stepTarget(steps.target, direction, steps.lastStep)
-        if (next != steps.target) steps.stepTo(next)
+        if (next == steps.target) return false
+        steps.stepTo(next)
+        return true
     }
     val drag = rememberDraggableState { delta ->
         swipe.moved -= delta / stepPx
         if (!swipe.turned) {
             val direction = swipeTurn(swipe.moved)
-            if (direction != 0) {
-                swipe.turned = true
-                turn(direction)
-            }
+            // Long enough: the step turns. Not yet, or at either end: the
+            // blocks give a little under the finger.
+            if (direction != 0 && turn(direction)) swipe.turned = true else steps.nudge = stepNudge(swipe.moved)
         }
     }
     Layout(
@@ -304,6 +356,7 @@ internal fun BlockSteps(
                 drag,
                 Orientation.Vertical,
                 onDragStarted = {
+                    swipe.settle?.cancel()
                     swipe.moved = 0f
                     swipe.turned = false
                     swipe.held = 0
@@ -333,7 +386,15 @@ internal fun BlockSteps(
                 },
                 onDragStopped = { velocity ->
                     swipe.hold?.cancel()
-                    if (!swipe.turned) turn(flickTurn(-velocity / stepPx))
+                    if (!swipe.turned && turn(flickTurn(-velocity / stepPx))) swipe.turned = true
+                    // Let go short: the blocks spring back from their nudge.
+                    if (!swipe.turned && steps.nudge != 0f) {
+                        swipe.settle = scope.launch {
+                            animate(steps.nudge, 0f, animationSpec = spring(dampingRatio = 1f, stiffness = STEP_RETURN_STIFFNESS)) { value, _ ->
+                                steps.nudge = value
+                            }
+                        }
+                    }
                 },
             ),
     ) { measurables, constraints ->
@@ -343,14 +404,15 @@ internal fun BlockSteps(
         val width = constraints.maxWidth
         val slot = ((height - bar - gap) / 2).coerceAtLeast(1)
         stepPx = (slot + gap).toFloat()
-        val position = steps.position.value
+        val position = steps.shown
         val barHeight = STEP_BAR.roundToPx()
+        val maskRadius = STEP_MASK_RADIUS.toPx()
         layout(width, height) {
             measurables.forEachIndexed { index, measurable ->
                 val at = index - position
-                if (at < -1f || at > 2f) return@forEachIndexed
                 val isBarBlock = endsWithBar && index == count - 1
                 if (isBarBlock) {
+                    if (at < -1f || at > 2f) return@forEachIndexed
                     // Grown out of the bar: from its rectangle at the foot of
                     // the box to the bottom slot and the bar's room below it.
                     // Until the last step begins it is not drawn at all, and
@@ -366,15 +428,26 @@ internal fun BlockSteps(
                         alpha = (m / BAR_BLOCK_FADE_IN).coerceIn(0f, 1f)
                     }
                 } else {
-                    val look = stepLook(at)
+                    val window = stepWindow(at, slot.toFloat(), gap.toFloat()) ?: return@forEachIndexed
+                    // Laid out whole, its content centred in its window, and
+                    // cut to the window when the window is less than whole.
                     val placeable = measurable.measure(Constraints.fixed(width, slot))
-                    val y = (at.coerceIn(0f, 1f) * (slot + gap)).roundToInt() +
-                        (if (at > 1f) ((at - 1f) * (slot + gap) * (1f - STEP_HOLD_OPEN)).roundToInt() else 0)
-                    placeable.placeWithLayer(0, y, zIndex = stepLayer(at)) {
-                        scaleX = look.scale
-                        scaleY = look.scale
-                        alpha = look.alpha
-                        transformOrigin = TransformOrigin(0.5f, 0f)
+                    val y = (window.top + window.bottom) / 2f - slot / 2f
+                    val whole = window.height >= slot - 0.5f
+                    val fade = stepFade(at)
+                    placeable.placeWithLayer(0, y.roundToInt()) {
+                        alpha = fade
+                        if (!whole) {
+                            val top = window.top - y.roundToInt()
+                            shape = StepWindowShape(
+                                top = top,
+                                bottom = top + window.height,
+                                radius = minOf(maskRadius, window.height / 2f),
+                                roundTop = at > 1f,
+                                roundBottom = at < 0f,
+                            )
+                            clip = true
+                        }
                     }
                 }
             }

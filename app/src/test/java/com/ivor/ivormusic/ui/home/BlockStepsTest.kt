@@ -6,39 +6,61 @@ import org.junit.Test
 
 class BlockStepsTest {
 
+    private val slot = 300f
+    private val gap = 10f
+
     @Test
-    fun theTwoBlocksInViewAreDrawnWhole() {
-        for (position in listOf(0f, 0.5f, 1f)) {
-            assertEquals(StepLook(1f, 1f, 0f), stepLook(position))
+    fun theTwoBlocksInViewAreWhole() {
+        assertEquals(StepWindow(0f, 300f), stepWindow(0f, slot, gap))
+        assertEquals(StepWindow(310f, 610f), stepWindow(1f, slot, gap))
+        assertEquals(null, stepWindow(-1f, slot, gap))
+        assertEquals(null, stepWindow(2f, slot, gap))
+    }
+
+    @Test
+    fun theTopBlockClosesIntoTheTopEdge() {
+        val half = stepWindow(-0.5f, slot, gap)!!
+        assertEquals(0f, half.top, 0f)
+        // One gap above the block rising into the top slot.
+        assertEquals(145f, half.bottom, 1e-3f)
+        assertTrue(stepWindow(-0.999f, slot, gap) == null)
+    }
+
+    @Test
+    fun theNextBlockOpensUpFromTheFoot() {
+        val half = stepWindow(1.5f, slot, gap)!!
+        assertEquals(610f, half.bottom, 1e-3f)
+        assertEquals(465f, half.top, 1e-3f)
+    }
+
+    @Test
+    fun theWindowsTileTheBoxWithOneGapBetweenThem() {
+        var shown = 0f
+        while (shown <= 1f) {
+            // Blocks 0, 1 and 2 as the steps go from 0 to 1.
+            val windows = (0..2).mapNotNull { stepWindow(it - shown, slot, gap) }
+            for (k in 0 until windows.size - 1) {
+                assertEquals("at $shown", gap, windows[k + 1].top - windows[k].bottom, 1e-3f)
+            }
+            assertEquals(0f, windows.first().top, 0.5f)
+            assertEquals(2 * slot + gap, windows.last().bottom, 1e-3f)
+            shown += 0.05f
         }
     }
 
     @Test
-    fun aBlockFallsBackWhereItStandsAndFades() {
-        val half = stepLook(-0.5f)
-        assertTrue(half.scale < 1f && half.alpha < 1f)
-        // Held back by exactly the travel it is given, so it does not move up.
-        assertEquals(0.5f, half.hold, 1e-6f)
-        assertEquals(0f, stepLook(-1f).alpha, 1e-6f)
+    fun aClosingBlockFadesBackAndAnOpeningOneComesUpFaint() {
+        assertEquals(1f, stepFade(0f), 0f)
+        assertEquals(1f, stepFade(1f), 0f)
+        assertTrue(stepFade(-0.5f) < 1f)
+        assertTrue(stepFade(1.9f) < stepFade(1.2f))
     }
 
     @Test
-    fun theNextBlockOpensIntoTheBottomSlot() {
-        val half = stepLook(1.5f)
-        assertTrue(half.scale < 1f && half.alpha < 1f && half.hold < 0f)
-        assertEquals(0f, stepLook(2f).alpha, 1e-6f)
-    }
-
-    @Test
-    fun theRisingBlockIsDrawnOverTheOthers() {
-        assertTrue(stepLayer(0.4f) > stepLayer(1.6f))
-        assertTrue(stepLayer(1.6f) > stepLayer(-0.4f))
-    }
-
-    @Test
-    fun positionIsCountedFromTheTopSlot() {
-        assertEquals(1f, stepPosition(page = 3, currentPage = 2, offsetFraction = 0f), 0f)
-        assertEquals(-0.25f, stepPosition(page = 2, currentPage = 2, offsetFraction = 0.25f), 1e-6f)
+    fun theFingerNudgesTheBlocksOnlyALittle() {
+        assertEquals(0.04f, stepNudge(0.1f), 1e-6f)
+        assertEquals(0.06f, stepNudge(2f), 1e-6f)
+        assertEquals(-0.06f, stepNudge(-0.5f), 1e-6f)
     }
 
     @Test

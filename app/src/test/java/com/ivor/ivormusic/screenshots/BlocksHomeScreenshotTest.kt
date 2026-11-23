@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.ivor.ivormusic.data.Song
 import com.ivor.ivormusic.ui.home.BlockKind
@@ -583,5 +585,43 @@ class BlocksHomeScreenshotTest {
 
     @Config(qualifiers = "w830dp-h690dp-xhdpi")
     @Test fun unfolded_nothing_playing() = unfolded("unfolded_nothing_playing", 0, playing = false)
-}
 
+    /** One turn from the first step to the second, frame by frame, to judge the masks. */
+    @Test fun steps_turn_frames() {
+        compose.mainClock.autoAdvance = false
+        var shown by androidx.compose.runtime.mutableFloatStateOf(0f)
+        compose.setContent {
+            IvorMusicTheme(darkTheme = true, colorPalette = RONDO_PALETTE_ID) {
+                val steps = androidx.compose.runtime.remember { com.ivor.ivormusic.ui.home.HomeSteps() }
+                androidx.compose.runtime.LaunchedEffect(shown) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    steps.position.snapTo(shown)
+                }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxWidth().height(150.dp).padding(20.dp)) {
+                            Text("Saturday evening", style = MaterialTheme.typography.titleLarge)
+                        }
+                        BlocksHome(
+                            likedCount = 614,
+                            newEpisodes = List(12, ::song),
+                            recent = List(4, ::song),
+                            onOpen = {},
+                            onRecent = {},
+                            modifier = Modifier.weight(1f).padding(top = 4.dp, bottom = 24.dp),
+                            djColors = com.ivor.ivormusic.data.djMoodHue("Midnight Drift")?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
+                            djTitle = "Midnight Drift: Smoke & Timberline",
+                            stepped = true,
+                            steps = steps,
+                        )
+                    }
+                }
+            }
+        }
+        for (f in listOf(0f, 0.2f, 0.4f, 0.6f, 0.8f, 1f)) {
+            shown = f
+            compose.mainClock.advanceTimeBy(200)
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/steps_turn_${(f * 100).toInt()}.png")
+        }
+    }
+}
