@@ -700,6 +700,7 @@ fun SpotlightHomeContent(
                                 wideSteps = true,
                                 forYou = discoverySongs.take(6),
                                 liked = likedSongs.take(8),
+                                onPlay = { list, song -> onPlaySongs(list, song) },
                             )
                         }
                     }

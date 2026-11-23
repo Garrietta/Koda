@@ -583,6 +583,10 @@ class BlocksHomeScreenshotTest {
     @Config(qualifiers = "w830dp-h690dp-xhdpi")
     @Test fun unfolded_last() = unfolded("unfolded_last", 2)
 
+    /** A shorter unfolded window: the covers on For you and Liked shrink to keep their names in. */
+    @Config(qualifiers = "w830dp-h560dp-xhdpi")
+    @Test fun unfolded_short() = unfolded("unfolded_short", 0)
+
     @Config(qualifiers = "w830dp-h690dp-xhdpi")
     @Test fun unfolded_nothing_playing() = unfolded("unfolded_nothing_playing", 0, playing = false)
 

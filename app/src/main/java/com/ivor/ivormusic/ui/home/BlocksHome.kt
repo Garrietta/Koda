@@ -189,6 +189,8 @@ internal fun BlocksHome(
     forYou: List<Song> = emptyList(),
     /** The latest liked songs, shown on the Liked tile when the blocks step unfolded. */
     liked: List<Song> = emptyList(),
+    /** Plays a song shown on a tile, from the list it is shown in: a cover on For you or Liked, a row of New episodes. */
+    onPlay: (List<Song>, Song) -> Unit = { _, song -> onRecent(song) },
 ) {
     val scheme = MaterialTheme.colorScheme
     val djFill = djColors?.container ?: scheme.primaryContainer
@@ -458,18 +460,24 @@ internal fun BlocksHome(
 
     // ---- Unfolded steps: the same blocks, wider, each showing more ----
 
-    // A row of covers across a tile, as many as fit at [minCover], at most [most].
+    // A row of covers across a tile, as many as fit at [minCover], at most
+    // [most], each as large as the room left allows, named under it when
+    // [ink] is given, and a tap playing it from [songs].
     val coverRow: @Composable (List<Song>, Int, Dp, Color?) -> Unit = { songs, most, minCover, ink ->
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomStart) {
             val fit = ((maxWidth + 10.dp) / (minCover + 10.dp)).toInt().coerceIn(1, most)
-            val shown = songs.take(fit)
+            val label = if (ink != null) 26.dp else 0.dp
+            val cover = minOf((maxWidth - 10.dp * (fit - 1)) / fit, maxHeight - label).coerceAtLeast(0.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                shown.forEachIndexed { index, song ->
-                    Column(Modifier.weight(1f)) {
+                songs.take(fit).forEachIndexed { index, song ->
+                    Column(
+                        Modifier
+                            .width(cover)
+                            .clickable(onClickLabel = song.title, role = Role.Button) { onPlay(songs, song) },
+                    ) {
                         Box(
                             Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
+                                .size(cover)
                                 .clip(COVER_SHAPES[index % COVER_SHAPES.size]),
                         ) { BlockCover(song) }
                         if (ink != null) {
@@ -484,7 +492,6 @@ internal fun BlocksHome(
                         }
                     }
                 }
-                repeat(fit - shown.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -499,7 +506,7 @@ internal fun BlocksHome(
                     scheme.tertiaryContainer,
                 )
                 .padding(18.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.Top,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = scheme.onTertiaryContainer, modifier = Modifier.size(40.dp))
@@ -509,7 +516,11 @@ internal fun BlocksHome(
                     scheme.onTertiaryContainer,
                 )
             }
-            if (forYou.isNotEmpty()) coverRow(forYou, 3, 72.dp, scheme.onTertiaryContainer)
+            if (forYou.isNotEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp)) {
+                    coverRow(forYou, 3, 72.dp, scheme.onTertiaryContainer)
+                }
+            }
         }
     }
 
@@ -519,7 +530,7 @@ internal fun BlocksHome(
             size
                 .block(BlockKind.Liked, RoundedCornerShape(Tile), scheme.inverseSurface)
                 .padding(18.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.Top,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Rounded.Favorite, contentDescription = null, tint = scheme.inverseOnSurface, modifier = Modifier.size(32.dp))
@@ -533,7 +544,11 @@ internal fun BlocksHome(
                     scheme.inverseOnSurface,
                 )
             }
-            if (liked.isNotEmpty()) coverRow(liked, 4, 64.dp, null)
+            if (liked.isNotEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp)) {
+                    coverRow(liked, 4, 64.dp, null)
+                }
+            }
         }
     }
 
@@ -561,7 +576,14 @@ internal fun BlocksHome(
                     )
                 }
                 for (episode in newEpisodes.take(rows)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(onClickLabel = episode.title, role = Role.Button) { onPlay(newEpisodes, episode) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp))) { BlockCover(episode) }
                         Column(Modifier.weight(1f)) {
                             Text(
@@ -615,7 +637,6 @@ internal fun BlocksHome(
                         Column(
                             Modifier
                                 .width(cover)
-                                .clip(RoundedCornerShape(16.dp))
                                 .clickable(onClickLabel = song.title, role = Role.Button) { onRecent(song) },
                         ) {
                             Box(Modifier.size(cover).clip(COVER_SHAPES[index % COVER_SHAPES.size])) { BlockCover(song) }

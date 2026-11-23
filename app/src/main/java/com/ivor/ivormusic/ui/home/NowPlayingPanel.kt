@@ -150,9 +150,9 @@ internal fun NowPlayingPanel(
         if (song == null) {
             NothingPlaying(ink, ground, onStartDj, onOpenLiked)
         } else {
-            // The cover as wide as the panel, but never more than a third of
-            // its height, so the queue keeps its room.
-            val cover = minOf(maxWidth - 32.dp, maxHeight * 0.34f).coerceAtLeast(0.dp)
+            // The cover as wide as the panel but under a fifth of its height,
+            // and the words and buttons compact, so the queue has the room.
+            val cover = minOf(maxWidth - 32.dp, maxHeight * 0.19f).coerceAtLeast(0.dp)
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Box(
                     Modifier
@@ -163,41 +163,41 @@ internal fun NowPlayingPanel(
                 ) {
                     BlockCover(song)
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 Column(Modifier.clickable(onClickLabel = song.title, role = Role.Button, onClick = onOpenPlayer)) {
                     Text(
                         stringResource(R.string.blocks_now_playing),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         color = ink.copy(alpha = 0.8f),
                     )
                     Text(
                         song.title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         color = ink,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         song.artist,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = ink.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 // How far along, drawn rather than composed.
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(5.dp)
+                        .height(4.dp)
                         .drawBehind {
                             val radius = CornerRadius(size.height / 2f)
                             drawRoundRect(ink.copy(alpha = 0.22f), cornerRadius = radius)
                             drawRoundRect(ink, size = Size(size.width * progress(), size.height), cornerRadius = radius)
                         },
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
@@ -207,31 +207,31 @@ internal fun NowPlayingPanel(
                         containerColor = lerp(ground, ink, 0.16f),
                         contentColor = ink,
                     )
-                    FilledTonalIconButton(onClick = onPrevious, modifier = Modifier.size(48.dp), colors = tonal) {
+                    FilledTonalIconButton(onClick = onPrevious, modifier = Modifier.size(40.dp), colors = tonal) {
                         Icon(Icons.Rounded.SkipPrevious, contentDescription = stringResource(R.string.widget_action_previous))
                     }
                     FilledIconButton(
                         onClick = onToggle,
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier.size(52.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = ink, contentColor = ground),
                     ) {
                         Icon(
                             if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = stringResource(if (isPlaying) R.string.widget_action_pause else R.string.widget_action_play),
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(26.dp),
                         )
                     }
-                    FilledTonalIconButton(onClick = onNext, modifier = Modifier.size(48.dp), colors = tonal) {
+                    FilledTonalIconButton(onClick = onNext, modifier = Modifier.size(40.dp), colors = tonal) {
                         Icon(Icons.Rounded.SkipNext, contentDescription = stringResource(R.string.widget_action_next))
                     }
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     stringResource(R.string.widget_up_next),
                     style = MaterialTheme.typography.titleSmall,
                     color = ink,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 if (upNext.isEmpty()) {
                     Text(
                         stringResource(R.string.ps_queue_empty),
@@ -257,10 +257,10 @@ private fun QueueRow(song: Song, ink: Color, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClickLabel = song.title, role = Role.Button, onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .padding(vertical = 4.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))) { BlockCover(song) }
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))) { BlockCover(song) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
