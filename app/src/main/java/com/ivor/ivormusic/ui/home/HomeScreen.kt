@@ -971,8 +971,12 @@ fun HomeScreen(
     // Home (the DJ, Liked, a tile's page) keep the usual choice.
     val steppingHome = homeSteps.stepping && !homePages.anyOpen && selectedTab == TAB_HOME && !videoMode
     val steppingHomeNow by rememberUpdatedState(steppingHome)
+    // On the unfolded Home the Now playing panel takes the bar's place, so
+    // the bar is hidden there until a page opens over Home.
+    val panelHome = homeSteps.panelShowing && !homePages.anyOpen && selectedTab == TAB_HOME && !videoMode
+    val panelHomeNow by rememberUpdatedState(panelHome)
     val miniBubbleWanted = when {
-        steppingHome -> false
+        steppingHome || panelHome -> false
         miniShrink == com.ivor.ivormusic.data.MiniPlayerShrink.NEVER -> false
         miniShrink == com.ivor.ivormusic.data.MiniPlayerShrink.ALWAYS -> true
         else -> miniBubble
@@ -1446,6 +1450,18 @@ fun HomeScreen(
                                                 } else {
                                                     WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
                                                         (if (barShown) navigationOverlayInset else 0.dp) + 12.dp
+                                                },
+                                                // Unfolded: no bar, so the steps end above the system bar.
+                                                wideStepsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                                    (if (barShown) navigationOverlayInset else 0.dp) + 12.dp,
+                                                nowPlayingPanel = { panelModifier, startDj, openLiked ->
+                                                    NowPlayingPanelFor(
+                                                        viewModel = playerViewModel,
+                                                        onOpenPlayer = { showPlayerSheet = true },
+                                                        onStartDj = startDj,
+                                                        onOpenLiked = openLiked,
+                                                        modifier = panelModifier,
+                                                    )
                                                 },
                                                 nowPlaying = currentSong?.let { song ->
                                                     NowPlaying(
@@ -2295,7 +2311,13 @@ fun HomeScreen(
             // this screen.
             collapsedBubbleFraction = { miniBubbleFraction.value.coerceIn(0f, 1f) },
             // On Home's last step the bar turns into the Now playing block.
-            collapsedHiddenFraction = { if (steppingHomeNow) homeSteps.morph else 0f },
+            collapsedHiddenFraction = {
+                when {
+                    panelHomeNow -> 1f
+                    steppingHomeNow -> homeSteps.morph
+                    else -> 0f
+                }
+            },
             collapsedStartInset = contentStartInset,
             collapsedEndInset = contentEndInset,
             collapsedMaxWidth = if (useRail) MINI_PLAYER_MAX_WIDE_WIDTH else androidx.compose.ui.unit.Dp.Unspecified,

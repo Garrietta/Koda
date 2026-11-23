@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -174,6 +177,15 @@ fun SpotlightHomeContent(
     homeSteps: HomeSteps? = null,
     /** From the screen's foot to where the steps end: the bar's lower edge, or above the system bar with nothing playing. */
     stepsBottom: androidx.compose.ui.unit.Dp = 0.dp,
+    /**
+     * The unfolded Home's Now playing panel, drawn down the right quarter of
+     * the screen, given its size and what its empty state's buttons do
+     * (start the DJ, open Liked). With it the unfolded Home steps like the
+     * phone's and shows no bar; null keeps the unfolded Home scrolling.
+     */
+    nowPlayingPanel: (@Composable (modifier: Modifier, onStartDj: () -> Unit, onOpenLiked: () -> Unit) -> Unit)? = null,
+    /** From the screen's foot to where the unfolded Home ends, with no bar there. */
+    wideStepsBottom: androidx.compose.ui.unit.Dp = 0.dp,
     onRequestedBlockHandled: () -> Unit = {},
 ) {
     val isRefreshing by viewModel.isLoading.collectAsState()
@@ -619,25 +631,87 @@ fun SpotlightHomeContent(
         ) {
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
             val stepped = maxWidth < WIDE_HOME
+            val withPanel = !stepped && nowPlayingPanel != null && homeSteps != null
             androidx.compose.runtime.SideEffect {
                 homeSteps?.landing = stepped && !homeSearch.active && openBlock == null
+                homeSteps?.wideLanding = withPanel && openBlock == null
             }
-            if (stepped) {
-                // A phone: the bar and search stay put, and the blocks under
-                // them turn over in steps (BlockSteps) rather than scrolling.
-                val topBar: @Composable () -> Unit = {
-                    TopBarSection(
-                        onProfileClick = onProfileClick,
-                        onSettingsClick = onSettingsClick,
-                        onDownloadsClick = onDownloadsClick,
-                        isDarkMode = isDarkMode,
-                        viewModel = viewModel,
-                        videoMode = videoMode,
-                        onVideoModeToggle = onVideoModeToggle,
-                        showModeToggle = showModeToggle,
-                        modeToggleState = modeToggleState,
+            val topBar: @Composable () -> Unit = {
+                TopBarSection(
+                    onProfileClick = onProfileClick,
+                    onSettingsClick = onSettingsClick,
+                    onDownloadsClick = onDownloadsClick,
+                    isDarkMode = isDarkMode,
+                    viewModel = viewModel,
+                    videoMode = videoMode,
+                    onVideoModeToggle = onVideoModeToggle,
+                    showModeToggle = showModeToggle,
+                    modeToggleState = modeToggleState,
+                )
+            }
+            if (withPanel && nowPlayingPanel != null) {
+                // Unfolded: the blocks step on the left three quarters, under
+                // the bar and the search, exactly as on a phone but wider, and
+                // the Now playing panel stands down the right quarter in the
+                // bar's place.
+                val panelWidth = maxOf(maxWidth / 4, 260.dp)
+                val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+                Row(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(
+                            start = contentPadding.calculateStartPadding(layoutDirection),
+                            end = contentPadding.calculateEndPadding(layoutDirection) + 14.dp,
+                            top = contentPadding.calculateTopPadding() + 8.dp,
+                            bottom = wideStepsBottom,
+                        ),
+                ) {
+                    androidx.compose.foundation.layout.Column(Modifier.weight(1f).fillMaxHeight()) {
+                        topBar()
+                        HomeSearchField(homeSearch, Modifier.padding(top = 4.dp, bottom = 6.dp))
+                        if (homeSearch.active) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                            ) {
+                                homeSearchResults(
+                                    homeSearch,
+                                    onPlaySongs = onPlaySongs,
+                                    onSongLongPress = onSongLongPress,
+                                    onOpenPage = { page -> onOpenPage(page, null) },
+                                )
+                            }
+                        } else {
+                            BlocksHome(
+                                likedCount = likedSongs.size,
+                                newEpisodes = newEpisodes,
+                                recent = recentlyPlayed,
+                                onOpen = openBlockPage,
+                                onRecent = onRecentClick,
+                                modifier = Modifier.weight(1f).padding(top = 4.dp),
+                                onBounds = { kind, bounds -> blockBounds[kind] = bounds },
+                                djColors = djColors,
+                                djTitle = djTitle,
+                                faces = blockFaces,
+                                stepped = true,
+                                steps = homeSteps,
+                                wideSteps = true,
+                                forYou = discoverySongs.take(6),
+                                liked = likedSongs.take(8),
+                            )
+                        }
+                    }
+                    nowPlayingPanel(
+                        Modifier.width(panelWidth).fillMaxHeight(),
+                        { openBlockPage(BlockKind.Dj) },
+                        { openBlockPage(BlockKind.Liked) },
                     )
                 }
+            } else if (stepped) {
+                // A phone: the bar and search stay put, and the blocks under
+                // them turn over in steps (BlockSteps) rather than scrolling.
                 androidx.compose.foundation.layout.Column(
                     Modifier
                         .fillMaxSize()

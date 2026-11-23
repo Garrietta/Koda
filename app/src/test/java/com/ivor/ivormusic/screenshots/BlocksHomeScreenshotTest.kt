@@ -2,6 +2,8 @@ package com.ivor.ivormusic.screenshots
 
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -504,4 +506,82 @@ class BlocksHomeScreenshotTest {
 
     @Test
     fun block_page_light() = shoot("block_page_light", dark = false, page = BlockKind.Episodes)
+
+    // ---- Unfolded: the steps on the left, the Now playing panel on the right ----
+
+    /**
+     * The unfolded Home at the Fold's inner screen: the blocks stepping on
+     * the left three quarters (stood in for above them by a band for the bar
+     * and search) and the Now playing panel down the right quarter. No cover
+     * art on the JVM, so the panel keeps the scheme's container.
+     */
+    private fun unfolded(name: String, page: Int, fraction: Float = 0f, playing: Boolean = true) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            IvorMusicTheme(darkTheme = true, colorPalette = RONDO_PALETTE_ID) {
+                val steps = androidx.compose.runtime.remember { com.ivor.ivormusic.ui.home.HomeSteps() }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    steps.position.snapTo(page + fraction)
+                }
+                androidx.compose.foundation.layout.Row(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(start = 0.dp, end = 14.dp, top = 24.dp, bottom = 24.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth().height(120.dp).padding(20.dp)) {
+                            Text("Sunday evening", style = MaterialTheme.typography.titleLarge)
+                        }
+                        BlocksHome(
+                            likedCount = 614,
+                            newEpisodes = List(12, ::song),
+                            recent = List(6, ::song),
+                            onOpen = {},
+                            onRecent = {},
+                            modifier = Modifier.weight(1f).padding(top = 4.dp),
+                            djColors = com.ivor.ivormusic.data.djMoodHue("Midnight Drift")?.let { com.ivor.ivormusic.ui.theme.vividBlock(it) },
+                            djTitle = "Midnight Drift: Smoke & Timberline",
+                            stepped = true,
+                            steps = steps,
+                            wideSteps = true,
+                            forYou = List(6) { song(it + 20) },
+                            liked = List(8) { song(it + 40) },
+                        )
+                    }
+                    val queue = List(9) { com.ivor.ivormusic.data.MusicQueueItem(id = "q$it", song = song(it + 60)) }
+                    com.ivor.ivormusic.ui.home.NowPlayingPanel(
+                        song = if (playing) song(7) else null,
+                        isPlaying = true,
+                        upNext = com.ivor.ivormusic.ui.home.upNextOf(queue, "q0"),
+                        progress = { 0.35f },
+                        onToggle = {},
+                        onNext = {},
+                        onPrevious = {},
+                        onPlayQueueItem = {},
+                        onOpenPlayer = {},
+                        onStartDj = {},
+                        onOpenLiked = {},
+                        modifier = Modifier.width(260.dp).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Config(qualifiers = "w830dp-h690dp-xhdpi")
+    @Test fun unfolded_0() = unfolded("unfolded_0", 0)
+
+    @Config(qualifiers = "w830dp-h690dp-xhdpi")
+    @Test fun unfolded_0_half() = unfolded("unfolded_0_half", 0, 0.5f)
+
+    @Config(qualifiers = "w830dp-h690dp-xhdpi")
+    @Test fun unfolded_last() = unfolded("unfolded_last", 2)
+
+    @Config(qualifiers = "w830dp-h690dp-xhdpi")
+    @Test fun unfolded_nothing_playing() = unfolded("unfolded_nothing_playing", 0, playing = false)
 }
+

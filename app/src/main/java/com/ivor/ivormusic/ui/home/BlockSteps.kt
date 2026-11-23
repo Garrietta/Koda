@@ -131,6 +131,15 @@ class HomeSteps {
     /** Something is open over Home (the DJ, a page grown from a tile); the bar keeps its usual ways there. */
     var overlayOpen by mutableStateOf(false)
 
+    /**
+     * The unfolded Home is on screen with its Now playing panel, which takes
+     * the bar's place: the bar stays hidden there until a page opens over it.
+     */
+    var wideLanding by mutableStateOf(false)
+
+    /** The bar is hidden behind the unfolded Home's panel. */
+    val panelShowing: Boolean get() = wideLanding && !overlayOpen
+
     /** The last step: the final two blocks in view. */
     val lastStep: Int get() = (count - 2).coerceAtLeast(0)
 

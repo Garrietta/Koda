@@ -178,6 +178,17 @@ internal fun BlocksHome(
     barReserve: Dp = STEP_BAR + STEP_GAP,
     /** Where the tiles record their faces for the pages that open from them; null records none. */
     faces: BlockFaces? = null,
+    /**
+     * Step the blocks in their unfolded form: wider blocks that show more of
+     * what each holds (For you and Liked show covers, New episodes lists the
+     * newest, Jump back in names each cover), with no Now playing block,
+     * since the unfolded Home has its panel for that.
+     */
+    wideSteps: Boolean = false,
+    /** A few songs For you, shown on its tile when the blocks step unfolded. */
+    forYou: List<Song> = emptyList(),
+    /** The latest liked songs, shown on the Liked tile when the blocks step unfolded. */
+    liked: List<Song> = emptyList(),
 ) {
     val scheme = MaterialTheme.colorScheme
     val djFill = djColors?.container ?: scheme.primaryContainer
@@ -393,26 +404,20 @@ internal fun BlocksHome(
     }
 
     // For going deeper: each a badge in the color its page will be, on a plain tile.
-    val smallTiles: @Composable (List<SmallBlock>, Dp) -> Unit = { blocks, rowHeight ->
-        for (pair in blocks.chunked(2)) {
+    val smallTiles: @Composable (List<SmallBlock>, Dp, Int) -> Unit = { blocks, rowHeight, perRow ->
+        for (pair in blocks.chunked(perRow)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (small in pair) {
                     val (badge, onBadge) = small.kind.colors(scheme)
-                    Row(
-                        Modifier
-                            .weight(1f)
-                            .height(rowHeight)
-                            .block(small.kind, RoundedCornerShape(28.dp), scheme.surfaceContainer)
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
+                    val badgeBox: @Composable () -> Unit = {
                         Box(
                             Modifier.size(44.dp).clip(small.badgeShape).background(badge),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(small.icon, contentDescription = null, tint = onBadge, modifier = Modifier.size(24.dp))
                         }
+                    }
+                    val label: @Composable () -> Unit = {
                         Text(
                             stringResource(small.label),
                             style = MaterialTheme.typography.titleSmall,
@@ -421,13 +426,257 @@ internal fun BlocksHome(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    val tile = Modifier
+                        .weight(1f)
+                        .height(rowHeight)
+                        .block(small.kind, RoundedCornerShape(28.dp), scheme.surfaceContainer)
+                    if (perRow > 2) {
+                        // Four to a row: too narrow for the name beside the
+                        // badge, so it sits under it.
+                        Column(
+                            tile.padding(16.dp),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            badgeBox()
+                            label()
+                        }
+                    } else {
+                        Row(
+                            tile.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            badgeBox()
+                            label()
+                        }
+                    }
                 }
             }
         }
     }
 
+
+    // ---- Unfolded steps: the same blocks, wider, each showing more ----
+
+    // A row of covers across a tile, as many as fit at [minCover], at most [most].
+    val coverRow: @Composable (List<Song>, Int, Dp, Color?) -> Unit = { songs, most, minCover, ink ->
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val fit = ((maxWidth + 10.dp) / (minCover + 10.dp)).toInt().coerceIn(1, most)
+            val shown = songs.take(fit)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                shown.forEachIndexed { index, song ->
+                    Column(Modifier.weight(1f)) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .clip(COVER_SHAPES[index % COVER_SHAPES.size]),
+                        ) { BlockCover(song) }
+                        if (ink != null) {
+                            Text(
+                                song.title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                    }
+                }
+                repeat(fit - shown.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+
+    // For you, with a few of its songs.
+    val forYouWide: @Composable (Modifier) -> Unit = { size ->
+        Column(
+            size
+                .block(
+                    BlockKind.ForYou,
+                    RoundedCornerShape(topStart = Tile, topEnd = Tile, bottomEnd = Tight, bottomStart = Tile),
+                    scheme.tertiaryContainer,
+                )
+                .padding(18.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = scheme.onTertiaryContainer, modifier = Modifier.size(40.dp))
+                BlockLabel(
+                    stringResource(R.string.filter_recommended),
+                    stringResource(R.string.blocks_for_you_caption),
+                    scheme.onTertiaryContainer,
+                )
+            }
+            if (forYou.isNotEmpty()) coverRow(forYou, 3, 72.dp, scheme.onTertiaryContainer)
+        }
+    }
+
+    // Liked, with the latest songs liked.
+    val likedWide: @Composable (Modifier) -> Unit = { size ->
+        Column(
+            size
+                .block(BlockKind.Liked, RoundedCornerShape(Tile), scheme.inverseSurface)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Rounded.Favorite, contentDescription = null, tint = scheme.inverseOnSurface, modifier = Modifier.size(32.dp))
+                BlockLabel(
+                    stringResource(R.string.filter_liked),
+                    if (likedCount > 0) {
+                        stringResource(R.string.blocks_liked_count, likedCount)
+                    } else {
+                        stringResource(R.string.blocks_liked_empty)
+                    },
+                    scheme.inverseOnSurface,
+                )
+            }
+            if (liked.isNotEmpty()) coverRow(liked, 4, 64.dp, null)
+        }
+    }
+
+    // New episodes, listing the newest as many as fit.
+    val episodesWide: @Composable (Modifier) -> Unit = { size ->
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            size.block(
+                BlockKind.Episodes,
+                RoundedCornerShape(topStart = Tight, topEnd = Tile, bottomEnd = Tile, bottomStart = Tile),
+                scheme.secondaryContainer,
+            ),
+        ) {
+            val rows = ((maxHeight - 96.dp) / 56.dp).toInt().coerceIn(0, 4)
+            Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Icons.Rounded.Podcasts, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(32.dp))
+                    BlockLabel(
+                        stringResource(R.string.home_section_new_episodes),
+                        if (newEpisodes.isNotEmpty()) {
+                            stringResource(R.string.blocks_episodes_count, newEpisodes.size)
+                        } else {
+                            stringResource(R.string.blocks_episodes_empty)
+                        },
+                        scheme.onSecondaryContainer,
+                    )
+                }
+                for (episode in newEpisodes.take(rows)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp))) { BlockCover(episode) }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                episode.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = scheme.onSecondaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                episode.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSecondaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Jump back in across the width, each cover named, a tap playing it.
+    val recentWide: @Composable () -> Unit = {
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { onBounds(BlockKind.Recent, it.boundsInRoot()) }
+                .clip(RoundedCornerShape(32.dp))
+                .background(scheme.surfaceContainer),
+        ) {
+            // As many covers as fit, square, with room for the header and two lines under them.
+            val inner = maxWidth - 32.dp
+            val byHeight = maxHeight - 56.dp - 52.dp
+            val count = ((inner + 12.dp) / (100.dp + 12.dp)).toInt().coerceIn(3, 6)
+            val cover = minOf((inner - 12.dp * (count - 1)) / count, byHeight).coerceAtLeast(0.dp)
+            Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.home_section_jump_back_in),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = scheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onOpen(BlockKind.Recent) }) { Text(stringResource(R.string.action_see_all)) }
+                }
+                Spacer(Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    recent.take(count).forEachIndexed { index, song ->
+                        Column(
+                            Modifier
+                                .width(cover)
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable(onClickLabel = song.title, role = Role.Button) { onRecent(song) },
+                        ) {
+                            Box(Modifier.size(cover).clip(COVER_SHAPES[index % COVER_SHAPES.size])) { BlockCover(song) }
+                            Text(
+                                song.title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                            Text(
+                                song.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
     androidx.compose.foundation.layout.BoxWithConstraints(if (stepped) modifier.fillMaxSize() else modifier.fillMaxWidth()) {
-        if (maxWidth >= WIDE_HOME) {
+        if (wideSteps && stepped && steps != null && constraints.hasBoundedHeight) {
+            // Unfolded: the same steps, two blocks in view, each block a
+            // wider row that shows more of what its tiles hold.
+            val wideBlocks = buildList<@Composable () -> Unit> {
+                add {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                        djTile(Modifier.weight(1.3f).fillMaxHeight())
+                        forYouWide(Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+                add {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                        likedWide(Modifier.weight(1f).fillMaxHeight())
+                        episodesWide(Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+                if (recent.isNotEmpty()) add { recentWide() }
+                add {
+                    androidx.compose.foundation.layout.BoxWithConstraints {
+                        val row = (maxHeight - STEP_GAP) / 2
+                        Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
+                            smallTiles(SMALL_BLOCKS, row, 4)
+                        }
+                    }
+                }
+            }
+            BlockSteps(
+                steps = steps,
+                count = wideBlocks.size,
+                endsWithBar = false,
+                barReserve = 0.dp,
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp),
+            ) { index, _ -> wideBlocks.getOrNull(index)?.invoke() }
+        } else if (maxWidth >= WIDE_HOME) {
             // Unfolded: two columns side by side, so the whole width is used
             // rather than one column stretched across it.
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -437,7 +686,7 @@ internal fun BlocksHome(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     recentPanel(128.dp, false)
-                    smallTiles(SMALL_BLOCKS, 72.dp)
+                    smallTiles(SMALL_BLOCKS, 72.dp, 2)
                 }
             }
         } else if (stepped && steps != null && constraints.hasBoundedHeight) {
@@ -454,7 +703,7 @@ internal fun BlocksHome(
                     androidx.compose.foundation.layout.BoxWithConstraints {
                         val row = (maxHeight - STEP_GAP) / 2
                         Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
-                            smallTiles(SMALL_BLOCKS.take(4), row)
+                            smallTiles(SMALL_BLOCKS.take(4), row, 2)
                         }
                     }
                 }
@@ -462,7 +711,7 @@ internal fun BlocksHome(
                     androidx.compose.foundation.layout.BoxWithConstraints {
                         val row = (maxHeight - STEP_GAP) / 2
                         Column(verticalArrangement = Arrangement.spacedBy(STEP_GAP)) {
-                            smallTiles(SMALL_BLOCKS.drop(4), row)
+                            smallTiles(SMALL_BLOCKS.drop(4), row, 2)
                         }
                     }
                 }
@@ -480,7 +729,7 @@ internal fun BlocksHome(
                 djTile(Modifier.fillMaxWidth().height(172.dp))
                 pairTiles(230.dp)
                 recentPanel(72.dp, false)
-                smallTiles(SMALL_BLOCKS, 72.dp)
+                smallTiles(SMALL_BLOCKS, 72.dp, 2)
             }
         }
     }
@@ -610,7 +859,7 @@ private fun BlockLabel(title: String, caption: String, color: Color) {
 }
 
 @Composable
-private fun BlockCover(song: Song) {
+internal fun BlockCover(song: Song) {
     com.ivor.ivormusic.ui.components.VideoThumbnail(
         thumbnailUrl = song.albumArtUri?.toString() ?: song.thumbnailUrl,
         contentDescription = null,
